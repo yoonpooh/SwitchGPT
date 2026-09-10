@@ -1,3 +1,3 @@
 // swift-tools-version: 6.0
 import PackageDescription
-let package = Package(name: "CodexAccountSwitch", defaultLocalization: "en", platforms: [.macOS(.v14)], products: [.executable(name: "CodexAccountSwitch", targets: ["CodexAccountSwitch"])], targets: [.executableTarget(name: "CodexAccountSwitch", resources: [.process("Resources")]), .testTarget(name: "CodexAccountSwitchTests", dependencies: ["CodexAccountSwitch"])])
+let package = Package(name: "SwitchGPT", defaultLocalization: "en", platforms: [.macOS(.v14)], products: [.executable(name: "SwitchGPT", targets: ["SwitchGPT"])], targets: [.executableTarget(name: "SwitchGPT", resources: [.process("Resources")]), .testTarget(name: "SwitchGPTTests", dependencies: ["SwitchGPT"])])

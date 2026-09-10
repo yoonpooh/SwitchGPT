@@ -1,5 +1,5 @@
 import XCTest
-@testable import CodexAccountSwitch
+@testable import SwitchGPT
 
 final class DaemonCommandTests: XCTestCase {
     @MainActor func testPreservesFailureAndExplicitHome() async throws {

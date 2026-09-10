@@ -36,7 +36,7 @@ SwitchGPT targets the current ChatGPT desktop app, which brings Chat, Work, and 
 
 ## Install
 
-1. Download `SwitchGPT-v0.1.2-macos-arm64.zip` from [Releases](https://github.com/yoonpooh/SwitchGPT/releases).
+1. Download `SwitchGPT-v0.1.3-macos-arm64.zip` from [Releases](https://github.com/yoonpooh/SwitchGPT/releases).
 2. Extract the ZIP and move **SwitchGPT.app** into **Applications**.
 3. Open the app. Its double-arrow icon appears in the menu bar; it has no regular window or Dock icon.
 4. Click the menu bar icon, choose **Add account**, and finish signing in in your browser.
@@ -107,23 +107,23 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.1.2 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.1.3 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.2-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.2-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.3-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.3-macos-arm64.zip > SHA256SUMS.txt)
 ```
-
-The Swift package and executable target retain the internal name `CodexAccountSwitch`; the app bundle and UI use `SwitchGPT`.
 
 ## Data and compatibility
 
 | Data | Location |
 | --- | --- |
-| Saved sign-in credentials | macOS Keychain, service `local.codex-account-switch.credentials` |
-| Account index and ordering | `~/Library/Application Support/CodexAccountSwitch/accounts.json` |
+| Saved sign-in credentials | macOS Keychain (managed by SwitchGPT) |
+| Account index and ordering | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | Active desktop credentials | `~/.codex/auth.json` |
+
+Version 0.1.3 copies the account index from the previous storage location on first launch if the new index does not exist. The original file and existing Keychain entries are preserved.
 
 Before switching, the app saves the current credentials and replaces the active credential file using a temporary file with `0600` permissions. If restarting ChatGPT fails, it attempts to restore the previous credentials and reports recovery failures.
 
@@ -143,14 +143,14 @@ Do not include credentials, the account index, or personal account screenshots i
 
 ```text
 Assets/                         App and menu bar icons
-Sources/CodexAccountSwitch/
+Sources/SwitchGPT/
   App/                          Menu bar app entry point
   Models/                       Accounts, usage models, localization helper
   Resources/                    English, Korean, Chinese, Japanese strings
   Services/                     Login, Keychain, usage, and desktop session handling
   Stores/                       Account state and ordering
   Views/                        Account panel and usage display
-Tests/CodexAccountSwitchTests/   Credential, login, server, ordering, and localization tests
+Tests/SwitchGPTTests/   Credential, login, server, ordering, and localization tests
 script/build_and_run.sh          Build and app packaging entry point
 ```
 

@@ -12,8 +12,8 @@ APP='dist/SwitchGPT.app'
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Assets/SwitchGPTMenu@2x.png "$APP/Contents/Resources/"
 cp Assets/SwitchGPT.icns "$APP/Contents/Resources/"
-cp -R "$BUILD_DIR/CodexAccountSwitch_CodexAccountSwitch.bundle" "$APP/Contents/Resources/"
-cp "$BUILD_DIR/CodexAccountSwitch" "$APP/Contents/MacOS/SwitchGPT"
+cp -R "$BUILD_DIR/SwitchGPT_SwitchGPT.bundle" "$APP/Contents/Resources/"
+cp "$BUILD_DIR/SwitchGPT" "$APP/Contents/MacOS/SwitchGPT"
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -26,8 +26,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleLocalizations</key><array><string>en</string><string>ko</string><string>zh-Hans</string><string>ja</string></array>
 <key>CFBundleIconFile</key><string>SwitchGPT.icns</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.1.2</string>
-<key>CFBundleVersion</key><string>12</string>
+<key>CFBundleShortVersionString</key><string>0.1.3</string>
+<key>CFBundleVersion</key><string>13</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>LSUIElement</key><true/>
 <key>NSPrincipalClass</key><string>NSApplication</string>

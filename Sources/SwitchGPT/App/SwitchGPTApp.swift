@@ -8,7 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 @main
-struct CodexAccountSwitchApp: App {
+struct SwitchGPTApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @State private var store = AccountStore()
     private static let menuIcon: NSImage = {

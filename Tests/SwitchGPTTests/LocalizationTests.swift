@@ -1,5 +1,5 @@
 import XCTest
-@testable import CodexAccountSwitch
+@testable import SwitchGPT
 
 final class LocalizationTests: XCTestCase {
     func testSystemLanguageAndEnglishFallback() {
@@ -11,7 +11,7 @@ final class LocalizationTests: XCTestCase {
 
     func testEveryTranslationAndFormatPlaceholderIsPresent() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Sources/CodexAccountSwitch/Resources")
+            .appendingPathComponent("Sources/SwitchGPT/Resources")
         func strings(_ language: String) throws -> [String: String] {
             let data = try Data(contentsOf: root.appendingPathComponent("\(language).lproj/Localizable.strings"))
             return try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String])

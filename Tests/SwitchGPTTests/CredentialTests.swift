@@ -1,5 +1,5 @@
 import XCTest
-@testable import CodexAccountSwitch
+@testable import SwitchGPT
 
 final class CredentialTests: XCTestCase {
     private func fixture(subject: String = "user-a", account: String = "workspace") throws -> Data {

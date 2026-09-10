@@ -36,7 +36,7 @@ SwitchGPT は Chat、Work、Codex を統合した現在の ChatGPT デスクト�
 
 ## インストール
 
-1. [リリース](https://github.com/yoonpooh/SwitchGPT/releases)から `SwitchGPT-v0.1.2-macos-arm64.zip` をダウンロードします。
+1. [リリース](https://github.com/yoonpooh/SwitchGPT/releases)から `SwitchGPT-v0.1.3-macos-arm64.zip` をダウンロードします。
 2. ZIP を展開し、**SwitchGPT.app** を **アプリケーション** フォルダに移動します。
 3. アプリを開きます。メニューバーに双方向の矢印アイコンが表示されます。通常のウインドウや Dock アイコンはありません。
 4. メニューバーアイコンをクリックし、**アカウントを追加**を選んでブラウザでのログインを完了します。
@@ -107,23 +107,23 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### リリースのパッケージ化
 
-スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.1.2 は Apple シリコン向けです。
+スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.1.3 は Apple シリコン向けです。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.2-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.2-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.3-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.3-macos-arm64.zip > SHA256SUMS.txt)
 ```
-
-Swift パッケージと実行ターゲットの内部名は `CodexAccountSwitch` のままです。アプリバンドルと画面では `SwitchGPT` を使用します。
 
 ## データと互換性
 
 | データ | 保存先 |
 | --- | --- |
-| 保存済みのログイン情報 | macOS キーチェーン、サービス `local.codex-account-switch.credentials` |
-| アカウント一覧と順序 | `~/Library/Application Support/CodexAccountSwitch/accounts.json` |
+| 保存済みのログイン情報 | macOS キーチェーン（SwitchGPT が管理） |
+| アカウント一覧と順序 | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | 現在のデスクトップ認証情報 | `~/.codex/auth.json` |
+
+0.1.3 では、新しいアカウント一覧が存在しない場合、初回起動時に以前の保存先から一覧をコピーします。元のファイルと既存のキーチェーン項目は保持します。
 
 切り替え前に現在の認証情報を保存し、権限 `0600` の一時ファイルを使用して有効な認証ファイルを置き換えます。ChatGPT の再起動に失敗すると、以前の認証情報の復元を試み、復元の失敗も表示します。
 
@@ -143,14 +143,14 @@ Issue やコミットには、認証情報、アカウント一覧、個人の�
 
 ```text
 Assets/                         アプリとメニューバーのアイコン
-Sources/CodexAccountSwitch/
+Sources/SwitchGPT/
   App/                          メニューバーアプリのエントリーポイント
   Models/                       アカウント・使用量モデルと多言語処理
   Resources/                    英語・韓国語・中国語・日本語の文字列
   Services/                     ログイン・キーチェーン・使用量・セッション処理
   Stores/                       アカウントの状態と順序
   Views/                        アカウントパネルと使用量表示
-Tests/CodexAccountSwitchTests/   認証・ログイン・サーバー・順序・多言語テスト
+Tests/SwitchGPTTests/   認証・ログイン・サーバー・順序・多言語テスト
 script/build_and_run.sh          ビルドとアプリのパッケージ化
 ```
 

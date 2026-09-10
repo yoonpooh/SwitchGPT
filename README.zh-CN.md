@@ -36,7 +36,7 @@ SwitchGPT 面向整合了 Chat、Work 和 Codex 的当前 ChatGPT 桌面应用�
 
 ## 安装
 
-1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)下载 `SwitchGPT-v0.1.2-macos-arm64.zip`。
+1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)下载 `SwitchGPT-v0.1.3-macos-arm64.zip`。
 2. 解压 ZIP，将 **SwitchGPT.app** 移到**应用程序**文件夹。
 3. 打开应用。菜单栏会出现双向箭头图标；应用没有常规窗口或 Dock 图标。
 4. 点击菜单栏图标，选择**添加账户**，然后在浏览器中完成登录。
@@ -107,23 +107,23 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 打包发布版本
 
-脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.1.2 文件是 Apple 芯片构建。
+脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.1.3 文件是 Apple 芯片构建。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.2-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.2-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.3-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.3-macos-arm64.zip > SHA256SUMS.txt)
 ```
-
-Swift 包和可执行目标保留内部名称 `CodexAccountSwitch`；应用包和界面使用 `SwitchGPT`。
 
 ## 数据与兼容性
 
 | 数据 | 存储位置 |
 | --- | --- |
-| 已保存的登录凭据 | macOS 钥匙串，服务 `local.codex-account-switch.credentials` |
-| 账户列表和顺序 | `~/Library/Application Support/CodexAccountSwitch/accounts.json` |
+| 已保存的登录凭据 | macOS 钥匙串（由 SwitchGPT 管理） |
+| 账户列表和顺序 | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | 当前桌面登录凭据 | `~/.codex/auth.json` |
+
+0.1.3 会在新账户列表不存在时，于首次启动时从旧存储位置复制列表。原始文件和现有钥匙串项目均予以保留。
 
 切换前，应用会保存当前凭据，并通过权限为 `0600` 的临时文件替换当前认证文件。如果 ChatGPT 重启失败，应用会尝试恢复之前的凭据，并报告恢复失败的情况。
 
@@ -143,14 +143,14 @@ Swift 包和可执行目标保留内部名称 `CodexAccountSwitch`；应用包�
 
 ```text
 Assets/                         应用和菜单栏图标
-Sources/CodexAccountSwitch/
+Sources/SwitchGPT/
   App/                          菜单栏应用入口
   Models/                       账户、用量模型及本地化辅助逻辑
   Resources/                    英语、韩语、中文和日语文本
   Services/                     登录、钥匙串、用量及桌面会话处理
   Stores/                       账户状态和排序
   Views/                        账户面板和用量显示
-Tests/CodexAccountSwitchTests/   凭据、登录、服务器、排序及本地化测试
+Tests/SwitchGPTTests/   凭据、登录、服务器、排序及本地化测试
 script/build_and_run.sh          构建和应用打包入口
 ```
 

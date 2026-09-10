@@ -18,14 +18,27 @@ final class AccountStore {
     private let session = CodexSession()
     private let index: URL
 
-    init(index: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("CodexAccountSwitch/accounts.json")) {
-        self.index = index
+    init(index: URL? = nil) {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        self.index = index ?? support.appendingPathComponent("SwitchGPT/accounts.json")
         do {
-            if FileManager.default.fileExists(atPath: index.path) {
-                accounts = try JSONDecoder().decode([Account].self, from: Data(contentsOf: index))
+            if index == nil { try Self.migrateAccountIndex(in: support) }
+            if FileManager.default.fileExists(atPath: self.index.path) {
+                accounts = try JSONDecoder().decode([Account].self, from: Data(contentsOf: self.index))
             }
             refresh()
         } catch { message = L10n.text("list_read") }
+    }
+    static func migrateAccountIndex(in support: URL) throws {
+        let destination = support.appendingPathComponent("SwitchGPT/accounts.json")
+        // Read the pre-rename location once; retain the original as a recovery copy.
+        let previous = support.appendingPathComponent("CodexAccountSwitch/accounts.json")
+        let files = FileManager.default
+        guard !files.fileExists(atPath: destination.path), files.fileExists(atPath: previous.path) else { return }
+        let data = try Data(contentsOf: previous)
+        _ = try JSONDecoder().decode([Account].self, from: data)
+        try files.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try files.copyItem(at: previous, to: destination)
     }
     func refresh() { currentID = try? session.read().id }
     func displayName(_ account: Account) -> String { emails[account.id] ?? L10n.text("email_loading") }

@@ -36,7 +36,7 @@ SwitchGPT는 Chat·Work·Codex를 함께 제공하는 현재 ChatGPT 데스크�
 
 ## 설치
 
-1. [릴리스](https://github.com/yoonpooh/SwitchGPT/releases)에서 `SwitchGPT-v0.1.2-macos-arm64.zip`을 다운로드합니다.
+1. [릴리스](https://github.com/yoonpooh/SwitchGPT/releases)에서 `SwitchGPT-v0.1.3-macos-arm64.zip`을 다운로드합니다.
 2. ZIP 압축을 풀고 **SwitchGPT.app**을 **응용 프로그램** 폴더로 옮깁니다.
 3. 앱을 실행합니다. 메뉴 막대에 양방향 화살표 아이콘이 나타나며, 일반 창이나 Dock 아이콘은 표시하지 않습니다.
 4. 메뉴 막대 아이콘을 클릭하고 **계정 추가**를 선택한 뒤 브라우저 로그인을 완료합니다.
@@ -107,23 +107,23 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 릴리스 패키징
 
-스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.1.2 파일은 Apple silicon 빌드입니다.
+스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.1.3 파일은 Apple silicon 빌드입니다.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.2-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.2-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.3-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.3-macos-arm64.zip > SHA256SUMS.txt)
 ```
-
-Swift 패키지와 실행 타깃의 내부 이름은 `CodexAccountSwitch`로 유지하며, 앱 번들과 화면에는 `SwitchGPT`를 사용합니다.
 
 ## 데이터와 호환성
 
 | 데이터 | 저장 위치 |
 | --- | --- |
-| 저장된 로그인 정보 | macOS 키체인, 서비스 `local.codex-account-switch.credentials` |
-| 계정 목록과 순서 | `~/Library/Application Support/CodexAccountSwitch/accounts.json` |
+| 저장된 로그인 정보 | macOS 키체인 (SwitchGPT에서 관리) |
+| 계정 목록과 순서 | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | 현재 데스크톱 인증 정보 | `~/.codex/auth.json` |
+
+0.1.3은 새 계정 목록이 없는 경우 첫 실행 시 이전 저장 위치의 목록을 복사합니다. 원본 파일과 기존 키체인 항목은 그대로 보존합니다.
 
 전환 전에 현재 로그인 정보를 저장하고, `0600` 권한의 임시 파일을 사용해 활성 인증 파일을 교체합니다. ChatGPT 재시작에 실패하면 이전 인증 정보 복구를 시도하고, 복구 실패도 표시합니다.
 
@@ -143,14 +143,14 @@ Swift 패키지와 실행 타깃의 내부 이름은 `CodexAccountSwitch`로 유
 
 ```text
 Assets/                         앱 및 메뉴 막대 아이콘
-Sources/CodexAccountSwitch/
+Sources/SwitchGPT/
   App/                          메뉴 막대 앱 진입점
   Models/                       계정·사용량 모델과 다국어 처리
   Resources/                    영어·한국어·중국어·일본어 문구
   Services/                     로그인·키체인·사용량·데스크톱 세션 처리
   Stores/                       계정 상태와 순서
   Views/                        계정 패널과 사용량 표시
-Tests/CodexAccountSwitchTests/   인증·로그인·서버·순서·다국어 테스트
+Tests/SwitchGPTTests/   인증·로그인·서버·순서·다국어 테스트
 script/build_and_run.sh          빌드 및 앱 패키징 진입점
 ```
 

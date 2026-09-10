@@ -1,5 +1,5 @@
 import XCTest
-@testable import CodexAccountSwitch
+@testable import SwitchGPT
 
 final class AccountLoginTests: XCTestCase {
     @MainActor func testLoginUsesIsolatedHomeAndCleansItUp() async throws {
