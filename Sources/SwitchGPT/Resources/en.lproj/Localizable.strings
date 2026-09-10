@@ -65,3 +65,7 @@
 "server_stop_error" = "Could not stop the Codex server (exit code %d). %@ The account file was not changed.";
 "keychain_error" = "Keychain access failed (%d). Check the access prompt.";
 "usage_error" = "Usage request failed (HTTP %d)";
+"edit_name" = "Edit name";
+"edit_name_hint" = "Leave the name empty to show the email address.";
+"save" = "Save";
+"rename_failed" = "Could not save the account name.";

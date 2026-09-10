@@ -65,3 +65,7 @@
 "server_stop_error" = "Codex 서버 종료 실패 (종료 코드 %d). %@ 계정 파일은 변경하지 않았습니다.";
 "keychain_error" = "키체인 접근에 실패했습니다 (%d). 접근 요청을 확인해 주세요.";
 "usage_error" = "사용량 조회 실패 (HTTP %d)";
+"edit_name" = "이름 편집";
+"edit_name_hint" = "이름을 비우면 이메일 주소로 표시합니다.";
+"save" = "저장";
+"rename_failed" = "계정 이름을 저장하지 못했습니다.";

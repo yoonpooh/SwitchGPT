@@ -36,7 +36,7 @@ SwitchGPT 面向整合了 Chat、Work 和 Codex 的当前 ChatGPT 桌面应用�
 
 ## 安装
 
-1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)下载 `SwitchGPT-v0.1.4-macos-arm64.zip`。
+1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)下载 `SwitchGPT-v0.1.5-macos-arm64.zip`。
 2. 解压 ZIP，将 **SwitchGPT.app** 移到**应用程序**文件夹。
 3. 打开应用。菜单栏会出现双向箭头图标；应用没有常规窗口或 Dock 图标。
 4. 点击菜单栏图标，选择**添加账户**，然后在浏览器中完成登录。
@@ -73,6 +73,8 @@ shasum -a 256 -c SHA256SUMS.txt
 4. **排序：** 将一张账户卡片拖到另一张卡片上，以更改保存顺序。
 5. **移除：** 点击垃圾桶图标并确认从保存列表中移除。这不会删除 OpenAI 账户本身。
 
+账户卡片会显示可用的头像。点击铅笔图标修改显示名称，留空保存即可恢复邮箱。顶部提供刷新、**+**（添加账户）和电源（退出）图标。应用运行期间，即使面板关闭，也会在每次刷新完成60秒后自动刷新；登录、切换账户或正在刷新时会跳过。
+
 额度重置区域**仅供查看**。SwitchGPT 不会执行或消耗重置次数。
 
 语言变更会在重新打开应用后生效。应用内不提供语言选择菜单。
@@ -107,12 +109,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 打包发布版本
 
-脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.1.4 文件是 Apple 芯片构建。
+脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.1.5 文件是 Apple 芯片构建。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.5-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.5-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 数据与兼容性

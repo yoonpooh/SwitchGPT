@@ -9,6 +9,7 @@ struct Account: Codable, Identifiable {
     let id: String
     var name: String
     var savedAt: Date
+    var nickname: String?
 }
 
 struct Credential {

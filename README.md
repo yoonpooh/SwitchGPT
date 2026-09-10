@@ -36,7 +36,7 @@ SwitchGPT targets the current ChatGPT desktop app, which brings Chat, Work, and 
 
 ## Install
 
-1. Download `SwitchGPT-v0.1.4-macos-arm64.zip` from [Releases](https://github.com/yoonpooh/SwitchGPT/releases).
+1. Download `SwitchGPT-v0.1.5-macos-arm64.zip` from [Releases](https://github.com/yoonpooh/SwitchGPT/releases).
 2. Extract the ZIP and move **SwitchGPT.app** into **Applications**.
 3. Open the app. Its double-arrow icon appears in the menu bar; it has no regular window or Dock icon.
 4. Click the menu bar icon, choose **Add account**, and finish signing in in your browser.
@@ -73,6 +73,8 @@ Quit SwitchGPT from its menu bar panel, replace the app in Applications with the
 4. **Reorder:** drag one account card onto another to change the saved order.
 5. **Remove:** click the trash icon and confirm removal from SwitchGPT's saved list. This does not delete the OpenAI account.
 
+Account cards show profile photos when available. Use the pencil icon to set a display name; save an empty name to restore the email. The top bar contains refresh, **+** (add account), and power (quit). While the app runs, usage refreshes automatically 60 seconds after each refresh completes, even with the panel closed; login, switching, and overlapping refreshes are skipped.
+
 The usage reset section is **display-only**. SwitchGPT does not redeem or consume resets.
 
 Language changes take effect when the app is reopened. No in-app language selector is provided.
@@ -107,12 +109,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.1.4 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.1.5 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.5-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.5-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## Data and compatibility

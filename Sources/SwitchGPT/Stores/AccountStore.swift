@@ -13,6 +13,7 @@ final class AccountStore {
     var usageErrors: [String: String] = [:]
     var usageUpdatedAt: [String: Date] = [:]
     var loadingUsage = false
+    var profileImages: [String: NSImage] = [:]
     var emails: [String: String] = [:]
     private let vault = Vault()
     private let session = CodexSession()
@@ -41,7 +42,17 @@ final class AccountStore {
         try files.copyItem(at: previous, to: destination)
     }
     func refresh() { currentID = try? session.read().id }
-    func displayName(_ account: Account) -> String { emails[account.id] ?? L10n.text("email_loading") }
+    func email(_ account: Account) -> String { emails[account.id] ?? account.name }
+    func displayName(_ account: Account) -> String { account.nickname ?? email(account) }
+    @discardableResult
+    func rename(_ account: Account, to name: String) -> Bool {
+        guard !busy, let position = accounts.firstIndex(where: { $0.id == account.id }) else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = accounts[position].nickname
+        accounts[position].nickname = trimmed.isEmpty ? nil : trimmed
+        do { try persist(); return true }
+        catch { accounts[position].nickname = previous; message = L10n.text("rename_failed"); return false }
+    }
     func refreshUsage() async {
         guard !loadingUsage, !busy else { return }
         loadingUsage = true
@@ -54,6 +65,9 @@ final class AccountStore {
                 if let current, current.id == account.id { credential = current }
                 else { credential = try Credential(data: vault.read(account.id)) }
                 emails[account.id] = credential.email ?? L10n.text("email_missing")
+                if let photoData = try? await UsageClient().fetchProfileImage(credential) {
+                    profileImages[account.id] = NSImage(data: photoData)
+                } else { profileImages[account.id] = nil }
                 usages[account.id] = try await UsageClient().fetch(credential)
                 if (usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 {
                     resetDetails[account.id] = try? await UsageClient().fetchResetCredits(credential)
@@ -85,8 +99,9 @@ final class AccountStore {
         emails[credential.id] = label
         try vault.save(credential.data, id: credential.id)
         let previous = accounts
+        let nickname = accounts.first { $0.id == credential.id || $0.id == credential.id.components(separatedBy: "|")[0] }?.nickname
         accounts.removeAll { $0.id == credential.id || $0.id == credential.id.components(separatedBy: "|")[0] }
-        accounts.append(Account(id: credential.id, name: label, savedAt: .now))
+        accounts.append(Account(id: credential.id, name: label, savedAt: .now, nickname: nickname))
         do { try persist() } catch { accounts = previous; throw error }
         refresh()
     }

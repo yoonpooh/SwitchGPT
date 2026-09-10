@@ -65,3 +65,7 @@
 "server_stop_error" = "无法停止 Codex 服务器（退出代码 %d）。%@ 账户文件未更改。";
 "keychain_error" = "钥匙串访问失败（%d）。请检查访问提示。";
 "usage_error" = "用量查询失败（HTTP %d）";
+"edit_name" = "编辑名称";
+"edit_name_hint" = "名称留空时显示邮箱地址。";
+"save" = "保存";
+"rename_failed" = "无法保存账户名称。";

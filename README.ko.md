@@ -36,7 +36,7 @@ SwitchGPT는 Chat·Work·Codex를 함께 제공하는 현재 ChatGPT 데스크�
 
 ## 설치
 
-1. [릴리스](https://github.com/yoonpooh/SwitchGPT/releases)에서 `SwitchGPT-v0.1.4-macos-arm64.zip`을 다운로드합니다.
+1. [릴리스](https://github.com/yoonpooh/SwitchGPT/releases)에서 `SwitchGPT-v0.1.5-macos-arm64.zip`을 다운로드합니다.
 2. ZIP 압축을 풀고 **SwitchGPT.app**을 **응용 프로그램** 폴더로 옮깁니다.
 3. 앱을 실행합니다. 메뉴 막대에 양방향 화살표 아이콘이 나타나며, 일반 창이나 Dock 아이콘은 표시하지 않습니다.
 4. 메뉴 막대 아이콘을 클릭하고 **계정 추가**를 선택한 뒤 브라우저 로그인을 완료합니다.
@@ -73,6 +73,8 @@ shasum -a 256 -c SHA256SUMS.txt
 4. **순서 변경:** 계정 카드를 다른 카드 위로 드래그해 저장 순서를 바꿉니다.
 5. **삭제:** 휴지통 아이콘을 누르고 저장 목록에서 삭제를 확인합니다. OpenAI 계정 자체를 삭제하는 기능은 아닙니다.
 
+계정 카드에는 사용 가능한 프로필 사진이 표시됩니다. 연필 아이콘으로 표시 이름을 바꾸고, 빈칸으로 저장하면 이메일로 돌아갑니다. 상단에는 새로 고침, **+**(계정 추가), 전원(종료) 아이콘이 있습니다. 앱 실행 중에는 패널을 닫아도 조회 완료 후 60초마다 자동으로 갱신하며, 로그인·계정 전환 중이거나 조회가 진행 중이면 건너뜁니다.
+
 사용 한도 초기화 영역은 **조회 전용**입니다. SwitchGPT에서 초기화를 사용하거나 소모하지 않습니다.
 
 언어 변경은 앱을 다시 열면 적용됩니다. 앱 내부의 언어 선택 메뉴는 제공하지 않습니다.
@@ -107,12 +109,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 릴리스 패키징
 
-스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.1.4 파일은 Apple silicon 빌드입니다.
+스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.1.5 파일은 Apple silicon 빌드입니다.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.5-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.5-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 데이터와 호환성

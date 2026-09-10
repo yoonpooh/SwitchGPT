@@ -8,14 +8,20 @@ struct AccountPanel: View {
     @State private var dropTarget: String?
     @State private var listHeight: CGFloat = 1
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
                 Text(L10n.text("accounts")).font(.headline)
                 Spacer()
                 Button { Task { await store.refreshUsage() } } label: {
                     if store.loadingUsage { ProgressView().controlSize(.small) }
                     else { Image(systemName: "arrow.clockwise") }
-                }.buttonStyle(.plain).disabled(store.loadingUsage || store.busy).help(L10n.text("refresh"))
+                }.frame(width: 24, height: 24).buttonStyle(.plain).disabled(store.loadingUsage || store.busy).help(L10n.text("refresh"))
+                Button { Task { await store.addAccount(); await store.refreshUsage() } } label: {
+                    Image(systemName: "plus").frame(width: 24, height: 24)
+                }.buttonStyle(.plain).disabled(store.busy).help(L10n.text("add")).accessibilityLabel(L10n.text("add"))
+                Button { NSApp.terminate(nil) } label: {
+                    Image(systemName: "power").frame(width: 24, height: 24)
+                }.buttonStyle(.plain).disabled(store.busy).help(L10n.text("quit")).accessibilityLabel(L10n.text("quit"))
             }
             if store.accounts.isEmpty {
                 Text(L10n.text("empty")).foregroundStyle(.secondary)
@@ -25,12 +31,15 @@ struct AccountPanel: View {
                         ForEach(store.accounts) { account in
                             cardButton(account)
                             .overlay(alignment: .topTrailing) {
-                                Button { deleting = account } label: { Image(systemName: "trash") }
-                                    .buttonStyle(.plain).disabled(store.busy).help(L10n.text("delete_help"))
-                                    .padding(12)
+                                HStack(spacing: 4) {
+                                    Button { editName(account) } label: { Image(systemName: "pencil").frame(width: 24, height: 24) }
+                                        .help(L10n.text("edit_name"))
+                                    Button { deleting = account } label: { Image(systemName: "trash").frame(width: 24, height: 24) }
+                                        .help(L10n.text("delete_help"))
+                                }.buttonStyle(.plain).disabled(store.busy).padding(12)
                             }
                             .overlay {
-                                RoundedRectangle(cornerRadius: 12)
+                                cardShape
                                     .strokeBorder(account.id == store.currentID ? Color.accentColor : Color.clear, lineWidth: 2)
                                     .allowsHitTesting(false)
                             }
@@ -56,7 +65,7 @@ struct AccountPanel: View {
                     } action: { height in
                         listHeight = height
                     }
-                }.frame(height: min(400, max(1, listHeight)))
+                }.frame(height: min(maximumListHeight, max(1, listHeight)))
             }
             if let account = deleting {
                 VStack(alignment: .leading, spacing: 8) {
@@ -71,18 +80,18 @@ struct AccountPanel: View {
                 Text(store.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if store.addingAccount { Button(L10n.text("cancel_login")) { store.cancelLogin() } }
-            Divider()
-            HStack {
-                Button(L10n.text("add")) { Task { await store.addAccount() } }
-                    .disabled(store.busy).buttonStyle(.borderedProminent)
-                Spacer()
-                Button(L10n.text("quit")) { NSApp.terminate(nil) }.buttonStyle(.plain).disabled(store.busy)
-            }
+
         }.padding(16).frame(width: 400)
         .task { await store.refreshUsage() }
         .onDisappear { NSCursor.arrow.set() }
         .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
         .onChange(of: store.currentID) { _, _ in NSCursor.arrow.set() }
+    }
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+    }
+    private var maximumListHeight: CGFloat {
+        min(620, max(240, (NSScreen.main?.visibleFrame.height ?? 800) - 160))
     }
     private func cardButton(_ account: Account) -> some View {
         let button = Button { confirmSwitch(account) } label: {
@@ -90,9 +99,9 @@ struct AccountPanel: View {
                             }.buttonStyle(.plain).disabled(store.busy)
 
         return button
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                            .background(.quaternary, in: cardShape)
                             .background {
-                                RoundedRectangle(cornerRadius: 12)
+                                cardShape
                                     .fill(hoveredAccount == account.id && account.id != store.currentID && !store.busy ? Color.accentColor.opacity(0.14) : Color.clear)
                             }
                             .onHover { hovered in
@@ -111,12 +120,19 @@ struct AccountPanel: View {
                             .animation(.easeOut(duration: 0.12), value: hoveredAccount)
     }
     private func cardContent(_ account: Account) -> some View {
-                            VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 12) {
                                 HStack(alignment: .center, spacing: 8) {
+                                    Group {
+                                        if let photo = store.profileImages[account.id] {
+                                            Image(nsImage: photo).resizable().scaledToFill()
+                                        } else {
+                                            Image(systemName: "person.crop.circle.fill").resizable().foregroundStyle(.secondary)
+                                        }
+                                    }.frame(width: 24, height: 24).clipShape(Circle()).accessibilityHidden(true)
                                     Text(store.displayName(account))
                                         .fontWeight(.semibold)
                                         .lineLimit(1).truncationMode(.tail)
-                                        .help(store.displayName(account))
+                                        .help(store.email(account))
                                     if let plan = store.usages[account.id]?.planType {
                                         Text(plan.uppercased())
                                             .font(.system(size: 10, weight: .semibold))
@@ -128,7 +144,7 @@ struct AccountPanel: View {
                                             .layoutPriority(1)
                                     }
                                     Spacer(minLength: 0)
-                                }.padding(.trailing, 26)
+                                }.padding(.trailing, 60)
                                 if let usage = store.usages[account.id] {
                                     if let window = usage.rateLimit?.primaryWindow { UsageWindowView(window: window) }
                                     if let window = usage.rateLimit?.secondaryWindow { UsageWindowView(window: window) }
@@ -157,7 +173,25 @@ struct AccountPanel: View {
                                 }
                             }.padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(RoundedRectangle(cornerRadius: 12))
+                                .contentShape(cardShape)
+    }
+    private func editName(_ account: Account) {
+        guard !store.busy else { return }
+        NSCursor.arrow.set()
+        let alert = NSAlert()
+        alert.messageText = L10n.text("edit_name")
+        alert.informativeText = L10n.text("edit_name_hint")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.stringValue = account.nickname ?? ""
+        field.placeholderString = store.email(account)
+        alert.accessoryView = field
+        alert.addButton(withTitle: L10n.text("save"))
+        alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
+        alert.window.initialFirstResponder = field
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            store.rename(account, to: field.stringValue)
+        }
     }
     private func confirmSwitch(_ account: Account) {
         guard !store.busy, account.id != store.currentID else { return }

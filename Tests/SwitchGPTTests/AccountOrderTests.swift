@@ -2,6 +2,25 @@ import XCTest
 @testable import SwitchGPT
 
 final class AccountOrderTests: XCTestCase {
+    @MainActor func testNicknamePersistsAndEmptyNameRestoresEmail() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let index = directory.appendingPathComponent("accounts.json")
+        let original = Account(id: "example", name: "user@example.com", savedAt: .now)
+        let store = AccountStore(index: index)
+        store.accounts = [original]
+        XCTAssertEqual(store.displayName(original), "user@example.com")
+        XCTAssertTrue(store.rename(original, to: "  Work  "))
+        let loaded = AccountStore(index: index)
+        XCTAssertEqual(loaded.displayName(loaded.accounts[0]), "Work")
+        XCTAssertEqual(loaded.email(loaded.accounts[0]), "user@example.com")
+        XCTAssertEqual(loaded.accounts[0].id, original.id)
+        XCTAssertTrue(loaded.rename(loaded.accounts[0], to: " \n "))
+        XCTAssertEqual(AccountStore(index: index).accounts[0].nickname, nil)
+        loaded.busy = true
+        XCTAssertFalse(loaded.rename(original, to: "Blocked"))
+    }
+
     @MainActor func testRenamePreservesLegacyIndexAndNeverOverwritesNewIndex() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
