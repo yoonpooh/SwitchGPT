@@ -113,6 +113,10 @@ struct AccountPanel: View {
     private func cardContent(_ account: Account) -> some View {
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack(spacing: 8) {
+                                    Text(store.displayName(account))
+                                        .fontWeight(.semibold)
+                                        .lineLimit(1).truncationMode(.tail)
+                                        .help(store.displayName(account))
                                     if let plan = store.usages[account.id]?.planType {
                                         Text(plan.uppercased())
                                             .font(.caption2.weight(.bold))
@@ -121,12 +125,9 @@ struct AccountPanel: View {
                                             .padding(.vertical, 3)
                                             .background(Color.accentColor.opacity(0.12), in: Capsule())
                                             .fixedSize()
+                                            .layoutPriority(1)
                                     }
-                                    Text(store.displayName(account))
-                                        .fontWeight(.semibold)
-                                        .lineLimit(1).truncationMode(.tail)
-                                        .help(store.displayName(account))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    Spacer(minLength: 0)
                                 }.padding(.trailing, 26)
                                 if let usage = store.usages[account.id] {
                                     if let window = usage.rateLimit?.primaryWindow { UsageWindowView(window: window) }

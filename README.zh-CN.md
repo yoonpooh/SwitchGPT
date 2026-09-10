@@ -36,7 +36,7 @@ SwitchGPT 面向整合了 Chat、Work 和 Codex 的当前 ChatGPT 桌面应用�
 
 ## 安装
 
-1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)下载 `SwitchGPT-v0.1.3-macos-arm64.zip`。
+1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)下载 `SwitchGPT-v0.1.4-macos-arm64.zip`。
 2. 解压 ZIP，将 **SwitchGPT.app** 移到**应用程序**文件夹。
 3. 打开应用。菜单栏会出现双向箭头图标；应用没有常规窗口或 Dock 图标。
 4. 点击菜单栏图标，选择**添加账户**，然后在浏览器中完成登录。
@@ -107,12 +107,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 打包发布版本
 
-脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.1.3 文件是 Apple 芯片构建。
+脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.1.4 文件是 Apple 芯片构建。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 数据与兼容性

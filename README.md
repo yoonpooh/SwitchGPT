@@ -36,7 +36,7 @@ SwitchGPT targets the current ChatGPT desktop app, which brings Chat, Work, and 
 
 ## Install
 
-1. Download `SwitchGPT-v0.1.3-macos-arm64.zip` from [Releases](https://github.com/yoonpooh/SwitchGPT/releases).
+1. Download `SwitchGPT-v0.1.4-macos-arm64.zip` from [Releases](https://github.com/yoonpooh/SwitchGPT/releases).
 2. Extract the ZIP and move **SwitchGPT.app** into **Applications**.
 3. Open the app. Its double-arrow icon appears in the menu bar; it has no regular window or Dock icon.
 4. Click the menu bar icon, choose **Add account**, and finish signing in in your browser.
@@ -107,12 +107,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.1.3 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.1.4 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## Data and compatibility

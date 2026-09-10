@@ -36,7 +36,7 @@ SwitchGPT は Chat、Work、Codex を統合した現在の ChatGPT デスクト�
 
 ## インストール
 
-1. [リリース](https://github.com/yoonpooh/SwitchGPT/releases)から `SwitchGPT-v0.1.3-macos-arm64.zip` をダウンロードします。
+1. [リリース](https://github.com/yoonpooh/SwitchGPT/releases)から `SwitchGPT-v0.1.4-macos-arm64.zip` をダウンロードします。
 2. ZIP を展開し、**SwitchGPT.app** を **アプリケーション** フォルダに移動します。
 3. アプリを開きます。メニューバーに双方向の矢印アイコンが表示されます。通常のウインドウや Dock アイコンはありません。
 4. メニューバーアイコンをクリックし、**アカウントを追加**を選んでブラウザでのログインを完了します。
@@ -107,12 +107,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### リリースのパッケージ化
 
-スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.1.3 は Apple シリコン向けです。
+スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.1.4 は Apple シリコン向けです。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## データと互換性

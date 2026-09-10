@@ -36,7 +36,7 @@ SwitchGPT는 Chat·Work·Codex를 함께 제공하는 현재 ChatGPT 데스크�
 
 ## 설치
 
-1. [릴리스](https://github.com/yoonpooh/SwitchGPT/releases)에서 `SwitchGPT-v0.1.3-macos-arm64.zip`을 다운로드합니다.
+1. [릴리스](https://github.com/yoonpooh/SwitchGPT/releases)에서 `SwitchGPT-v0.1.4-macos-arm64.zip`을 다운로드합니다.
 2. ZIP 압축을 풀고 **SwitchGPT.app**을 **응용 프로그램** 폴더로 옮깁니다.
 3. 앱을 실행합니다. 메뉴 막대에 양방향 화살표 아이콘이 나타나며, 일반 창이나 Dock 아이콘은 표시하지 않습니다.
 4. 메뉴 막대 아이콘을 클릭하고 **계정 추가**를 선택한 뒤 브라우저 로그인을 완료합니다.
@@ -107,12 +107,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 릴리스 패키징
 
-스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.1.3 파일은 Apple silicon 빌드입니다.
+스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.1.4 파일은 Apple silicon 빌드입니다.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.1.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.1.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.1.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 데이터와 호환성
