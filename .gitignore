@@ -1,0 +1,9 @@
+.DS_Store
+.build/
+.swiftpm/
+dist/
+work/
+.env
+.env.*
+# Old, unused third-party template images are not distributed.
+Assets/ChatGPTMenuTemplate*.png
