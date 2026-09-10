@@ -44,14 +44,7 @@ SwitchGPT targets the current ChatGPT desktop app, which brings Chat, Work, and 
 In a ChatGPT session with access to local files and terminal tools, paste this prompt:
 
 ```text
-Install the latest SwitchGPT release from https://github.com/yoonpooh/SwitchGPT on this Mac.
-
-Check that the release supports my Mac, download the app ZIP and its published
-SHA256SUMS.txt, and verify the checksum before installing. Quit any running
-SwitchGPT instance, install the app in /Applications, and open it. Preserve all
-existing saved accounts and Keychain entries. Do not sign in or switch accounts
-for me. If macOS blocks the first launch, guide me through Apple's per-app
-Open Anyway steps without disabling system security settings.
+Install the latest SwitchGPT release from https://github.com/yoonpooh/SwitchGPT on this Mac. Check that the release supports my Mac, download the app ZIP and its published SHA256SUMS.txt, and verify the checksum before installing. Quit any running SwitchGPT instance, install the app in /Applications, and open it. Preserve all existing saved accounts and Keychain entries. Do not sign in or switch accounts for me. If macOS blocks the first launch, guide me through Apple's per-app Open Anyway steps without disabling system security settings.
 ```
 
 If local tools are unavailable, use the manual installation steps above.
