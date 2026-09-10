@@ -4,6 +4,8 @@
 
 # SwitchGPT
 
+**English** · [한국어](README.ko.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+
 A lightweight macOS menu bar app for switching between accounts in the **ChatGPT desktop app**.
 
 Save accounts, check remaining usage, and switch from one compact panel. SwitchGPT is an independent utility and is not affiliated with or endorsed by OpenAI.
