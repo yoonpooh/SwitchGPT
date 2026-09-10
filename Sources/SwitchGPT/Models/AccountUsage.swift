@@ -9,8 +9,19 @@ struct AccountUsage: Decodable {
         let applicableAvailableCount: Int?
     }
     struct Limit: Decodable {
+        let allowed: Bool?
+        let limitReached: Bool?
         let primaryWindow: Window?
         let secondaryWindow: Window?
+    }
+    func availability(at now: Date = .now) -> AccountAvailability {
+        guard let limit = rateLimit else { return .unknown }
+        let windows = [limit.primaryWindow, limit.secondaryWindow].compactMap { $0 }
+        if windows.contains(where: { $0.usedPercent >= 100 && $0.resetDate > now }) { return .exhausted }
+        // A window that has rolled over needs a fresh query; don't reuse its old zero.
+        if windows.contains(where: { $0.resetDate <= now || !$0.usedPercent.isFinite }) { return .unknown }
+        if limit.limitReached == true || limit.allowed == false { return .exhausted }
+        return windows.isEmpty ? .unknown : .available
     }
     struct Window: Decodable {
         let usedPercent: Double

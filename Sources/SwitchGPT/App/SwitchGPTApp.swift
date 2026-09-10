@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         refreshTask = Task { [store] in
+            await store.restoreRouting()
             while !Task.isCancelled {
                 await store.refreshUsage()
                 do { try await Task.sleep(for: .seconds(60)) }

@@ -7,63 +7,20 @@ struct AccountPanel: View {
     @State private var deleting: Account?
     @State private var dropTarget: String?
     @State private var listHeight: CGFloat = 1
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text(L10n.text("accounts")).font(.headline)
-                Spacer()
-                Button { Task { await store.refreshUsage() } } label: {
-                    if store.loadingUsage { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "arrow.clockwise") }
-                }.frame(width: 24, height: 24).buttonStyle(.plain).disabled(store.loadingUsage || store.busy).help(L10n.text("refresh"))
-                Button { Task { await store.addAccount(); await store.refreshUsage() } } label: {
-                    Image(systemName: "plus").frame(width: 24, height: 24)
-                }.buttonStyle(.plain).disabled(store.busy).help(L10n.text("add")).accessibilityLabel(L10n.text("add"))
-                Button { NSApp.terminate(nil) } label: {
-                    Image(systemName: "power").frame(width: 24, height: 24)
-                }.buttonStyle(.plain).disabled(store.busy).help(L10n.text("quit")).accessibilityLabel(L10n.text("quit"))
-            }
+            header
+            RoutingStatusView(store: store, restart: confirmRestart)
             if store.accounts.isEmpty {
-                Text(L10n.text("empty")).foregroundStyle(.secondary)
+                Text(L10n.text("empty")).font(.callout).foregroundStyle(.secondary).padding(.vertical, 12)
             } else {
                 ScrollView {
-                    VStack(spacing: 12) {
-                        ForEach(store.accounts) { account in
-                            cardButton(account)
-                            .overlay(alignment: .topTrailing) {
-                                HStack(spacing: 4) {
-                                    Button { editName(account) } label: { Image(systemName: "pencil").frame(width: 24, height: 24) }
-                                        .help(L10n.text("edit_name"))
-                                    Button { deleting = account } label: { Image(systemName: "trash").frame(width: 24, height: 24) }
-                                        .help(L10n.text("delete_help"))
-                                }.buttonStyle(.plain).disabled(store.busy).padding(12)
-                            }
-                            .overlay {
-                                cardShape
-                                    .strokeBorder(account.id == store.currentID ? Color.accentColor : Color.clear, lineWidth: 2)
-                                    .allowsHitTesting(false)
-                            }
-                            .overlay(alignment: .top) {
-                                if dropTarget == account.id {
-                                    Capsule().fill(Color.accentColor).frame(height: 3).allowsHitTesting(false)
-                                }
-                            }
-                            .accessibilityValue(account.id == store.currentID ? L10n.text("current") : L10n.text("saved"))
-                            .dropDestination(for: String.self) { items, _ in
-                                guard items.count == 1, let source = items.first else { return false }
-                                return store.reorder(source, onto: account.id)
-                            } isTargeted: { targeted in
-                                dropTarget = targeted ? account.id : (dropTarget == account.id ? nil : dropTarget)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .onGeometryChange(for: CGFloat.self) { geometry in
-                        geometry.size.height
-                    } action: { height in
-                        listHeight = height
-                    }
+                    VStack(spacing: 9) {
+                        ForEach(store.accounts) { account in accountButton(account) }
+                    }.frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
                 }.frame(height: min(maximumListHeight, max(1, listHeight)))
             }
             if let account = deleting {
@@ -76,103 +33,93 @@ struct AccountPanel: View {
                 }.disabled(store.busy)
             }
             if !store.message.isEmpty {
-                Text(store.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Label(store.message, systemImage: store.addingAccount ? "person.crop.circle" : "exclamationmark.circle")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if store.addingAccount { Button(L10n.text("cancel_login")) { store.cancelLogin() } }
-
+            Divider()
+            HStack(spacing: 12) {
+                Label(L10n.text("routing_desktop_label"), systemImage: "desktopcomputer")
+                    .foregroundStyle(.secondary).help(L10n.text("routing_desktop_help"))
+                Spacer(minLength: 8)
+                Text(store.desktopName).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
+            }.font(.caption).padding(.vertical, 4)
         }.padding(16).frame(width: 400)
-        .task { await store.refreshUsage() }
-        .onDisappear { NSCursor.arrow.set() }
-        .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
-        .onChange(of: store.currentID) { _, _ in NSCursor.arrow.set() }
+            .task { await store.refreshUsage() }
+            .onDisappear { NSCursor.arrow.set() }
+            .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
+            .onChange(of: store.currentID) { _, _ in NSCursor.arrow.set() }
     }
-    private var cardShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-    }
-    private var maximumListHeight: CGFloat {
-        min(620, max(240, (NSScreen.main?.visibleFrame.height ?? 800) - 160))
-    }
-    private func cardButton(_ account: Account) -> some View {
-        let button = Button { confirmSwitch(account) } label: {
-                                cardContent(account)
-                                    // Attach dragging to the label so the button does not consume the drag gesture.
-                                    .draggable(account.id)
-                            }.buttonStyle(.plain).disabled(store.busy)
 
-        return button
-                            .background(.quaternary, in: cardShape)
-                            .background {
-                                cardShape
-                                    .fill(hoveredAccount == account.id && account.id != store.currentID && !store.busy ? Color.accentColor.opacity(0.14) : Color.clear)
-                            }
-                            .onHover { hovered in
-                                hoveredAccount = hovered ? account.id : (hoveredAccount == account.id ? nil : hoveredAccount)
-                            }
-                            .onContinuousHover { phase in
-                                switch phase {
-                                case .active:
-                                    if !store.busy && account.id != store.currentID {
-                                        NSCursor.pointingHand.set()
-                                    } else { NSCursor.arrow.set() }
-                                case .ended:
-                                    NSCursor.arrow.set()
-                                }
-                            }
-                            .animation(.easeOut(duration: 0.12), value: hoveredAccount)
+    private var header: some View {
+        HStack(spacing: 6) {
+            Text("SwitchGPT").font(.system(size: 17, weight: .semibold))
+            Spacer()
+            Button { Task { await store.refreshUsage() } } label: {
+                Group {
+                    if store.loadingUsage { ProgressView().controlSize(.small) }
+                    else { Image(systemName: "arrow.clockwise") }
+                }.frame(width: 24, height: 24)
+            }.buttonStyle(.plain).disabled(store.loadingUsage || store.busy).help(L10n.text("refresh"))
+            Button { Task { await store.addAccount(); await store.refreshUsage() } } label: {
+                Image(systemName: "plus").frame(width: 24, height: 24)
+            }.buttonStyle(.plain).disabled(store.busy).help(L10n.text("add")).accessibilityLabel(L10n.text("add"))
+            Menu {
+                Toggle(L10n.text("routing_auto_toggle"), isOn: Binding(
+                    get: { store.routingPreferences.automatic }, set: { store.setAutomatic($0) }))
+                Divider()
+                ForEach(store.accounts) { account in
+                    Menu(store.displayName(account)) { accountActions(account) }
+                }
+                Divider()
+                Button(L10n.text("quit"), action: quit)
+            } label: {
+                Image(systemName: "ellipsis").frame(width: 24, height: 24)
+            }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .disabled(store.busy).help(L10n.text("routing_more"))
+        }
     }
-    private func cardContent(_ account: Account) -> some View {
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack(alignment: .center, spacing: 8) {
-                                    Group {
-                                        if let photo = store.profileImages[account.id] {
-                                            Image(nsImage: photo).resizable().scaledToFill()
-                                        } else {
-                                            Image(systemName: "person.crop.circle.fill").resizable().foregroundStyle(.secondary)
-                                        }
-                                    }.frame(width: 24, height: 24).clipShape(Circle()).accessibilityHidden(true)
-                                    Text(store.displayName(account))
-                                        .fontWeight(.semibold)
-                                        .lineLimit(1).truncationMode(.tail)
-                                        .help(store.email(account))
-                                    if let plan = store.usages[account.id]?.planType {
-                                        PlanBadge(plan: plan)
-                                            .layoutPriority(1)
-                                    }
-                                    Spacer(minLength: 0)
-                                }.padding(.trailing, 60)
-                                if let usage = store.usages[account.id] {
-                                    if let window = usage.rateLimit?.primaryWindow { UsageWindowView(window: window) }
-                                    if let window = usage.rateLimit?.secondaryWindow { UsageWindowView(window: window) }
-                                    if usage.rateLimit?.primaryWindow == nil && usage.rateLimit?.secondaryWindow == nil {
-                                        Text(L10n.text("no_limits")).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                } else if store.usageErrors[account.id] == nil {
-                                    Text(store.loadingUsage ? L10n.text("loading") : L10n.text("refresh_hint")).font(.caption).foregroundStyle(.secondary)
-                                }
-                                if let error = store.usageErrors[account.id] {
-                                    Text(error).font(.caption).foregroundStyle(.orange)
-                                }
-                                if let credits = store.usages[account.id]?.rateLimitResetCredits, credits.availableCount > 0 {
-                                    let available = store.resetDetails[account.id]?.availableCredits ?? []
-                                    HStack(spacing: 8) {
-                                        Label(L10n.format("resets", credits.availableCount), systemImage: "arrow.counterclockwise.circle")
-                                        Spacer(minLength: 0)
-                                        if let expiration = available.first?.expiration {
-                                            Text(L10n.format("expires", L10n.date(expiration, includeTime: false)))
-                                                .foregroundStyle(.secondary)
-                                                .help(L10n.format("expires", L10n.date(expiration)))
-                                        } else {
-                                            Text(L10n.text("expiry_unknown")).foregroundStyle(.secondary)
-                                        }
-                                    }.font(.caption).lineLimit(1)
-                                }
-                            }.padding(12)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(cardShape)
+
+    private var maximumListHeight: CGFloat {
+        min(460, max(130, (NSScreen.main?.visibleFrame.height ?? 800) - (store.needsRestart ? 360 : 290)))
     }
+
+    private func accountButton(_ account: Account) -> some View {
+        let selected = account.id == store.currentID
+        let tint: Color = selected && store.needsRestart ? .orange : .accentColor
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return Button { Task { await store.switchTo(account) } } label: {
+            AccountCard(store: store, account: account)
+                .contentShape(shape).draggable(account.id)
+        }.buttonStyle(.plain).disabled(store.busy)
+            .background(selected ? tint.opacity(0.065) : hoveredAccount == account.id ? Color.primary.opacity(0.045) : Color.primary.opacity(0.015), in: shape)
+            .overlay { shape.strokeBorder(selected ? tint.opacity(0.4) : Color.primary.opacity(0.08), lineWidth: selected ? 1 : 0.7).allowsHitTesting(false) }
+            .overlay(alignment: .top) {
+                if dropTarget == account.id { Capsule().fill(Color.accentColor).frame(height: 3).allowsHitTesting(false) }
+            }
+            .contextMenu { accountActions(account) }
+            .accessibilityValue(selected ? L10n.text(store.needsRestart ? "routing_pending" : "routing_next") : L10n.text("saved"))
+            .dropDestination(for: String.self) { items, _ in
+                guard items.count == 1, let source = items.first else { return false }
+                return store.reorder(source, onto: account.id)
+            } isTargeted: { targeted in dropTarget = targeted ? account.id : (dropTarget == account.id ? nil : dropTarget) }
+            .onHover { hovered in hoveredAccount = hovered ? account.id : (hoveredAccount == account.id ? nil : hoveredAccount) }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active: if !store.busy && !selected { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+                case .ended: NSCursor.arrow.set()
+                }
+            }.animation(.easeOut(duration: 0.12), value: hoveredAccount)
+    }
+
+    @ViewBuilder private func accountActions(_ account: Account) -> some View {
+        Button(L10n.text("edit_name")) { editName(account) }
+        Button(L10n.text("delete"), role: .destructive) { deleting = account }
+            .disabled(account.id == store.currentID)
+    }
+
     private func editName(_ account: Account) {
         guard !store.busy else { return }
-        NSCursor.arrow.set()
         let alert = NSAlert()
         alert.messageText = L10n.text("edit_name")
         alert.informativeText = L10n.text("edit_name_hint")
@@ -184,40 +131,27 @@ struct AccountPanel: View {
         alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
         alert.window.initialFirstResponder = field
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
-            store.rename(account, to: field.stringValue)
-        }
+        if alert.runModal() == .alertFirstButtonReturn { store.rename(account, to: field.stringValue) }
     }
-    private func confirmSwitch(_ account: Account) {
-        guard !store.busy, account.id != store.currentID else { return }
-        NSCursor.arrow.set()
+
+    private func confirmRestart() {
         let alert = NSAlert()
-        alert.messageText = L10n.text("switch_confirm")
-        alert.informativeText = L10n.format("switch_detail", store.displayName(account))
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: L10n.text("switch"))
+        alert.messageText = L10n.text("routing_restart_confirm")
+        alert.informativeText = L10n.text("routing_restart_warning")
+        alert.addButton(withTitle: L10n.text("routing_restart_action"))
         alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
-            Task { await store.switchTo(account) }
-        }
+        if alert.runModal() == .alertFirstButtonReturn { Task { await store.restartDesktop() } }
     }
 
-}
-
-private struct UsageWindowView: View {
-    let window: AccountUsage.Window
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(window.label).font(.caption)
-                Spacer()
-                Text(L10n.format("remaining", Int(window.remaining))).font(.caption.bold()).monospacedDigit()
-            }
-            ProgressView(value: window.remaining, total: 100)
-                .tint(window.remaining <= 10 ? .orange : .accentColor)
-            Text(L10n.format("resets_at", L10n.date(window.resetDate)))
-                .font(.caption2).foregroundStyle(.secondary)
-        }
+    private func quit() {
+        guard store.routingActive else { NSApp.terminate(nil); return }
+        let alert = NSAlert()
+        alert.messageText = L10n.text("routing_quit_title")
+        alert.informativeText = L10n.text("routing_quit_detail")
+        alert.addButton(withTitle: L10n.text("quit"))
+        alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { NSApp.terminate(nil) }
     }
 }
