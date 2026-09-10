@@ -49,7 +49,6 @@ struct AccountPanel: View {
                                 }
                             }
                             .accessibilityValue(account.id == store.currentID ? L10n.text("current") : L10n.text("saved"))
-                            .draggable(account.id)
                             .dropDestination(for: String.self) { items, _ in
                                 guard items.count == 1, let source = items.first else { return false }
                                 return store.reorder(source, onto: account.id)
@@ -96,6 +95,8 @@ struct AccountPanel: View {
     private func cardButton(_ account: Account) -> some View {
         let button = Button { confirmSwitch(account) } label: {
                                 cardContent(account)
+                                    // Attach dragging to the label so the button does not consume the drag gesture.
+                                    .draggable(account.id)
                             }.buttonStyle(.plain).disabled(store.busy)
 
         return button
@@ -134,13 +135,7 @@ struct AccountPanel: View {
                                         .lineLimit(1).truncationMode(.tail)
                                         .help(store.email(account))
                                     if let plan = store.usages[account.id]?.planType {
-                                        Text(plan.uppercased())
-                                            .font(.system(size: 10, weight: .semibold))
-                                            .foregroundStyle(Color.accentColor)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(Color.accentColor.opacity(0.12), in: Capsule())
-                                            .fixedSize()
+                                        PlanBadge(plan: plan)
                                             .layoutPriority(1)
                                     }
                                     Spacer(minLength: 0)
