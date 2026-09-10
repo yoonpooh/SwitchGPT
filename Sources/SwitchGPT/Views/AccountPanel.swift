@@ -112,17 +112,17 @@ struct AccountPanel: View {
     }
     private func cardContent(_ account: Account) -> some View {
                             VStack(alignment: .leading, spacing: 10) {
-                                HStack(spacing: 8) {
+                                HStack(alignment: .center, spacing: 8) {
                                     Text(store.displayName(account))
                                         .fontWeight(.semibold)
                                         .lineLimit(1).truncationMode(.tail)
                                         .help(store.displayName(account))
                                     if let plan = store.usages[account.id]?.planType {
                                         Text(plan.uppercased())
-                                            .font(.caption2.weight(.bold))
+                                            .font(.system(size: 10, weight: .semibold))
                                             .foregroundStyle(Color.accentColor)
                                             .padding(.horizontal, 6)
-                                            .padding(.vertical, 3)
+                                            .padding(.vertical, 2)
                                             .background(Color.accentColor.opacity(0.12), in: Capsule())
                                             .fixedSize()
                                             .layoutPriority(1)
