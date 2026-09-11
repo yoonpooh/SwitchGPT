@@ -41,5 +41,6 @@ struct SwitchGPTApp: App {
                 .frame(width: 18, height: 18)
                 .accessibilityLabel("SwitchGPT")
         }.menuBarExtraStyle(.window)
+            .windowResizability(.contentSize)
     }
 }

@@ -69,13 +69,16 @@ final class AccountRouter: @unchecked Sendable {
             $0.credentials.fingerprint == previous.fingerprint && $0.availability == .exhausted
                 && now.timeIntervalSince($0.observedAt) <= 120
         }
-        if !knownExhausted && !excluding.contains(previous.fingerprint) {
-            lock.unlock(); return previous
-        }
+        // Re-evaluate priority even while the current account still has quota.
+        // A recovered earlier account is used by the next request, not an active stream.
         let next = candidates.first {
             $0.availability == .available && now.timeIntervalSince($0.observedAt) <= 120
                 && exhaustedAt[$0.credentials.fingerprint] == nil && !excluding.contains($0.credentials.fingerprint)
         }?.credentials
+        // A failed or delayed quota refresh alone must not stop a working account.
+        if next == nil && !knownExhausted && !excluding.contains(previous.fingerprint) {
+            lock.unlock(); return previous
+        }
         if let next { current = next }
         lock.unlock()
         if let next, next.fingerprint != previous.fingerprint { didSwitch(next) }

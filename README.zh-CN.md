@@ -12,9 +12,15 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 你可以手动选择账户，也可以在额度用尽时自动切换到其他可用账户。
 
-[下载 v0.2.0](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.0) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[下载 v0.2.1](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.0 的主要更新
+## 0.2.1 的主要更新
+
+- **自动切回优先账户：** 自动模式优先使用列表中近期查询确认可用的第一个账户。前序账户额度恢复后，从下一个请求起切回。
+- **在卡片中使用重置次数：** 确认目标账户及消耗1次重置机会后即可重置。响应中断时保留原请求编号以确认结果，不会自动消耗重置次数。
+- **优化面板：** 改善重置信息和滚动边缘显示，删除已保存账户时使用 macOS 确认对话框，并让弹出窗口高度随内容调整。
+
+## 0.2.0 引入的核心功能
 
 - **保留桌面登录：** 切换模型账户时，保留现有插件连接和远程访问所用的桌面认证。
 - **切换无需重启：** 首次连接后，新的模型请求使用所选账户。已经正常处理中的响应由原账户完成。
@@ -40,7 +46,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 需要 **Apple 芯片 Mac、macOS 14 或更新版本**，以及已安装并登录的当前 ChatGPT 桌面应用。须使用默认文件式认证路径 `~/.codex/auth.json`。SwitchGPT 使用应用自带的 CLI，无需单独安装 CLI。
 
-1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.0)下载 `SwitchGPT-v0.2.0-macos-arm64.zip` 和 `SHA256SUMS.txt`。
+1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1)下载 `SwitchGPT-v0.2.1-macos-arm64.zip` 和 `SHA256SUMS.txt`。
 2. 使用下方命令验证校验和，解压 ZIP，将 **SwitchGPT.app** 移至**应用程序**。
 3. 打开 SwitchGPT 并点击菜单栏图标。选择 **+**，通过浏览器登录添加账户。对每个要保存的账户重复操作。
 4. 点击账户卡片。首次设置如提示重启 ChatGPT，请先完成正在进行的工作，再使用重启按钮。此步骤将已打开的任务连接到中继；之后切换账户无需重启。
@@ -79,17 +85,19 @@ SwitchGPT 没有普通窗口或 Dock 图标。使用模型中继时，请保持�
 - **刷新：** 获取用量和可用重置次数。面板关闭时仍会在每次刷新完成 60 秒后自动刷新；登录、切换账户或正在刷新时会跳过。
 - **账户管理：** 拖动卡片设置顺序；通过 `⋯` 或右键重命名、从保存列表移除账户。显示名称留空会恢复邮箱。移除保存记录不会删除 OpenAI 账户本身。
 
-重置次数及到期日期**仅供查看**，SwitchGPT 不会使用它们。日期采用 Mac 的时区和界面语言。更改 Mac 首选语言后请重新打开应用。不支持的语言回退为英语，其他中文地区或文字变体使用简体中文。
+点击账户卡片的 **重置**，确认目标账户及消耗1次重置机会后使用。当前不可用或查询信息过期时，按钮会禁用。使用后会重新查询限额和剩余次数，自动模式会重新应用账户优先级。若响应中断或后续刷新失败，可点击 **确认结果** 继续此前的请求。未确认的请求编号会在重启应用后保留，重置次数不会自动消耗。
+
+日期采用 Mac 的时区和界面语言。更改 Mac 首选语言后请重新打开应用。不支持的语言回退为英语，其他中文地区或文字变体使用简体中文。
 
 ## 自动切换
 
-1. 所选账户的任一额度周期用尽时，按列表顺序选择近期查询确认仍有额度的第一个账户。
+1. 自动模式优先使用列表中近期查询确认可用的第一个账户。使用第 3 个账户时，若第 1 个账户额度恢复，会在查询确认恢复后的下一个模型请求中使用第 1 个账户。仅到达预计重置时间不会触发切回。
 2. 如果服务器以 `usage_limit_reached` 拒绝模型请求，会在转发响应前换用可用账户重试。每个请求对每个账户最多尝试一次。
 3. 已正常开始的流式响应由原账户完成，不会重新执行。
 4. 临时速率限制和认证错误直接返回，不触发切换。用量查询失败或信息过期的账户不会被选为自动切换的备选账户。
 5. 如果所选账户已用尽且无法确认可用备选账户，请求会停止。需要等待额度重置，或选择、添加可用账户。重置次数不会被自动消耗。
 
-在 `⋯` 中关闭自动切换后，将继续使用所选账户并直接返回其额度错误。卡片顺序决定选择优先级；各账户额度仍各自独立。
+在 `⋯` 中关闭自动切换后，将继续使用所选账户并直接返回其额度错误。自动模式下，卡片顺序优先于手动选择，调整顺序会从下一个请求起生效。各账户额度仍各自独立。
 
 ## 问题排查
 
@@ -108,6 +116,7 @@ SwitchGPT 没有普通窗口或 Dock 图标。使用模型中继时，请保持�
 | 账户列表和顺序 | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | 所选模型账户 | `~/Library/Application Support/SwitchGPT/routing-selection.json` |
 | 自动切换和连接状态 | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
+| 未确认的重置请求编号 | `~/Library/Application Support/SwitchGPT/reset-credit-attempts.json`（含用于并发保存控制的 `.lock` 文件） |
 | 请求元数据 | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
 | 原有桌面认证 | `~/.codex/auth.json` — 保留 |
 
@@ -157,12 +166,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 打包发布版本
 
-脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.2.0 文件是 Apple 芯片构建。
+脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.2.1 文件是 Apple 芯片构建。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.0-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.0-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.1-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.1-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 源码结构

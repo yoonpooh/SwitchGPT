@@ -12,9 +12,15 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 
 Choose an account yourself, or let SwitchGPT move to another available account when a usage limit is reached.
 
-[Download v0.2.0](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.0) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[Download v0.2.1](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## What's new in 0.2.0
+## What's new in 0.2.1
+
+- **Return to your preferred account:** Automatic mode uses the first account in your list whose recently fetched quota is available. It returns to a recovered earlier account on the next request.
+- **Use reset credits from a card:** Confirm the account and one-credit consumption before resetting. Interrupted requests retain their request ID for a safe result check; credits are never used automatically.
+- **Clearer, better-sized panel:** Improved reset details and scroll fades, a native account-removal confirmation, and a popup that follows its content size.
+
+## Core features introduced in 0.2.0
 
 - **Keep desktop sign-in:** choosing a model account preserves the desktop credentials used for existing plugin connections and Remote access.
 - **Switch without restarting:** after initial setup, account changes apply to new model requests. A successful response already in progress finishes with its original account.
@@ -40,7 +46,7 @@ This applies to Codex requests using the built-in `openai` provider on this Mac,
 
 Requirements: **Apple silicon, macOS 14 or later**, and the current ChatGPT desktop app installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate CLI installation is required.
 
-1. Download `SwitchGPT-v0.2.0-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.0).
+1. Download `SwitchGPT-v0.2.1-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1).
 2. Verify the checksum below, extract the ZIP, and move **SwitchGPT.app** into **Applications**.
 3. Open SwitchGPT and click its menu bar icon. Choose **+** to add an account through browser sign-in. Repeat for each account you want to save.
 4. Click an account card. If initial setup asks you to restart ChatGPT, finish active work before using the restart button. This connects already-open tasks to the relay; later account changes do not require a restart.
@@ -79,17 +85,19 @@ If local tools are unavailable, use the manual steps above.
 - **Refresh:** retrieve usage and reset availability. Usage also refreshes 60 seconds after each refresh completes, even with the panel closed; login, switching, and overlapping refreshes are skipped.
 - **Manage accounts:** drag cards to set their order; use `⋯` or right-click to rename or remove a saved account. An empty display name restores its email. Removing it from the list does not delete the OpenAI account itself.
 
-Reset credits and expiration dates are **display-only**; SwitchGPT never redeems them. Dates follow the Mac's time zone and interface language. Reopen the app after changing the Mac's preferred language. Unsupported languages fall back to English; Chinese language variants use Simplified Chinese.
+Select **Reset** on an account card and confirm the account and consumption of one credit. The button is disabled when a reset cannot currently be used or usage data is stale. Afterward, usage and credit counts are fetched again, and automatic mode reapplies account priority. If a response or follow-up refresh fails, **Check result** continues the same request. Pending request IDs survive app restarts, and credits are never consumed automatically.
+
+Dates follow the Mac's time zone and interface language. Reopen the app after changing the Mac's preferred language. Unsupported languages fall back to English; Chinese language variants use Simplified Chinese.
 
 ## Automatic switching
 
-1. If the selected account exhausts either quota window, choose the first account in list order with recently confirmed remaining quota.
+1. In automatic mode, prefer the first account in list order with recently confirmed available quota. If account 1 recovers while account 3 is in use, use account 1 from the next model request after a quota check confirms recovery. A scheduled reset time passing is not enough to return to an account.
 2. If the server rejects a model request with `usage_limit_reached`, retry on an available account before forwarding a response, at most once per account for that request.
 3. Successful responses already streaming finish with their original account and are not replayed.
 4. Temporary rate limits and authentication errors are returned without switching. Failed or stale usage checks make an account ineligible as an automatic alternative.
 5. If the selected account is exhausted and no available alternative can be confirmed, stop the request. Wait for quota to reset or select/add an available account. Reset credits are never consumed automatically.
 
-Turn automatic switching off in `⋯` to keep using the selected account and receive its limit errors directly. Card order sets selection priority; quotas remain separate for each account.
+Turn automatic switching off in `⋯` to keep using the selected account and receive its limit errors directly. In automatic mode, card order takes precedence over manual selection, and reordering applies to the next request. Quotas remain separate for each account.
 
 ## Troubleshooting
 
@@ -108,6 +116,7 @@ Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth
 | Account list and order | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | Selected model account | `~/Library/Application Support/SwitchGPT/routing-selection.json` |
 | Automatic switching and connection status | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
+| Pending reset request IDs | `~/Library/Application Support/SwitchGPT/reset-credit-attempts.json` (with a `.lock` file for concurrent saves) |
 | Request metadata | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
 | Existing desktop credentials | `~/.codex/auth.json` — preserved |
 
@@ -157,12 +166,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.2.0 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.2.1 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.0-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.0-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.1-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.1-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## Source layout

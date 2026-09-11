@@ -91,6 +91,53 @@ final class ModelRoutingTests: XCTestCase {
         XCTAssertEqual(upstream.requests.count, 2)
     }
 
+    @MainActor func testPriorityRecoveryAppliesToNextRequestWhileOriginalStreamCompletes() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let desktop = try credential("desktop")
+        let auth = root.appendingPathComponent("auth.json")
+        try desktop.data.write(to: auth)
+        let upstream = StubModelServer(pauseFirstResponse: true)
+        let upstreamPort = try await upstream.start()
+        defer { upstream.stop() }
+        let first = try RelayCredentials(credential("first")), third = try RelayCredentials(credential("third"))
+        let router = AccountRouter()
+        router.select(third)
+        router.update([
+            RoutingCandidate(credentials: first, availability: .exhausted, observedAt: .now),
+            RoutingCandidate(credentials: third, availability: .available, observedAt: .now)
+        ], automatic: true)
+        let relay = ModelRelay(desktopAuth: auth, upstreamBaseURL: URL(string: "http://127.0.0.1:\(upstreamPort)")!, router: router)
+        let port = try await relay.start(port: 0)
+        defer { relay.stop() }
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/backend-api/codex/responses")!)
+        request.httpMethod = "POST"
+        request.httpBody = Data("{\"model\":\"gpt-6-astra\"}".utf8)
+        request.setValue("Bearer desktop-token", forHTTPHeaderField: "Authorization")
+        let (stream, originalResponse) = try await session.bytes(for: request)
+        var lines = stream.lines.makeAsyncIterator()
+        let firstEvent = try await lines.next()
+        XCTAssertTrue(try XCTUnwrap(firstEvent).contains("response.output_text.delta"))
+
+        router.update([first, third].map { RoutingCandidate(credentials: $0, availability: .available, observedAt: .now) }, automatic: true)
+        XCTAssertEqual(router.resolve()?.fingerprint, first.fingerprint)
+        let (nextBody, nextResponse) = try await session.data(for: request)
+        XCTAssertEqual((nextResponse as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(String(decoding: nextBody, as: UTF8.self).contains("response.completed"))
+
+        upstream.finishFirstResponse()
+        var completed = false
+        while let line = try await lines.next() {
+            if line.contains("response.completed") { completed = true }
+        }
+        XCTAssertEqual((originalResponse as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(completed)
+        XCTAssertEqual(upstream.requests.map { $0.headers["authorization"] }, ["Bearer third-token", "Bearer first-token"])
+        XCTAssertEqual(try Data(contentsOf: auth), desktop.data)
+    }
+
     @MainActor func testHardQuotaRetriesSameRequestOnAvailableAccountBeforeReturningResponse() async throws {
         let root = try directory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -175,9 +222,12 @@ private final class StubModelServer: @unchecked Sendable {
     private var listener: NWListener?
     private let limitedBody: String
     private let limitedStatus: Int
-    init(limitedBody: String = "quota exhausted", limitedStatus: Int = 429) {
+    private let pauseFirstResponse: Bool
+    private var resumeFirstResponse: (@Sendable () -> Void)?
+    init(limitedBody: String = "quota exhausted", limitedStatus: Int = 429, pauseFirstResponse: Bool = false) {
         self.limitedBody = limitedBody
         self.limitedStatus = limitedStatus
+        self.pauseFirstResponse = pauseFirstResponse
     }
     var requests: [RelayRequest] { lock.lock(); defer { lock.unlock() }; return captured }
 
@@ -198,14 +248,30 @@ private final class StubModelServer: @unchecked Sendable {
 
     func stop() { listener?.cancel() }
 
+    func finishFirstResponse() {
+        queue.async { [self] in
+            resumeFirstResponse?()
+            resumeFirstResponse = nil
+        }
+    }
+
     private func read(_ connection: NWConnection, previous: Data) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [self] data, _, _, _ in
             var all = previous
             if let data { all.append(data) }
             guard let request = try? RelayRequest.parse(all) else { read(connection, previous: all); return }
-            lock.lock(); captured.append(request); lock.unlock()
+            lock.lock(); captured.append(request); let isFirst = captured.count == 1; lock.unlock()
             let limited = request.headers["authorization"] == "Bearer second-token"
             let body = limited ? limitedBody : "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":3,\"output_tokens\":1}}}\n\n"
+            if pauseFirstResponse && isFirst && !limited {
+                let delta = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"still streaming\"}\n\n"
+                let head = "HTTP/1.1 200 Response\r\nContent-Type: text/event-stream\r\nContent-Length: \(delta.utf8.count + body.utf8.count)\r\nConnection: close\r\n\r\n\(delta)"
+                resumeFirstResponse = {
+                    connection.send(content: Data(body.utf8), completion: .contentProcessed { _ in connection.cancel() })
+                }
+                connection.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
+                return
+            }
             let response = "HTTP/1.1 \(limited ? limitedStatus : 200) Response\r\nContent-Type: text/event-stream\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
             queue.asyncAfter(deadline: .now() + 0.1) {
                 connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })

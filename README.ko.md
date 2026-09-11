@@ -12,9 +12,15 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 직접 실행 계정을 선택하거나, 한도가 소진되면 사용 가능한 다음 계정으로 자동 전환하세요.
 
-[v0.2.0 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.0) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.1 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.0의 주요 변경
+## 0.2.1의 주요 변경
+
+- **앞순위 계정으로 자동 복귀:** 자동 모드는 최근 조회에서 사용 가능하다고 확인된 첫 계정을 우선합니다. 앞 계정의 한도가 회복되면 다음 요청부터 돌아갑니다.
+- **카드에서 리셋권 사용:** 대상 계정과 리셋권 1장 소모를 확인한 뒤 초기화합니다. 응답이 끊겨도 같은 요청 번호로 결과를 확인하며 자동 소모하지 않습니다.
+- **팝업 개선:** 초기화 정보와 스크롤 가장자리 표시를 다듬고, 계정 삭제에 macOS 확인 창을 사용하며, 내용 높이에 맞춰 팝업 크기를 조절합니다.
+
+## 0.2.0에서 도입한 핵심 기능
 
 - **데스크톱 로그인 유지:** 모델 실행 계정을 바꿔도 기존 플러그인 연결과 원격 접속에 사용하는 데스크톱 인증을 유지합니다.
 - **재시작 없는 계정 전환:** 최초 연결 이후에는 다음 모델 요청부터 선택한 계정을 사용합니다. 이미 진행 중인 정상 응답은 원래 계정으로 완료합니다.
@@ -40,7 +46,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 **Apple silicon Mac, macOS 14 이상**, 설치 및 로그인이 완료된 현재 ChatGPT 데스크톱 앱이 필요합니다. 기본 파일 기반 인증 저장 경로인 `~/.codex/auth.json`을 사용해야 합니다. 데스크톱 앱에 포함된 CLI를 사용하므로 별도 CLI 설치는 필요하지 않습니다.
 
-1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.0)에서 `SwitchGPT-v0.2.0-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
+1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1)에서 `SwitchGPT-v0.2.1-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
 2. 아래 명령으로 체크섬을 확인하고 ZIP 압축을 풀어 **SwitchGPT.app**을 **응용 프로그램** 폴더로 옮깁니다.
 3. SwitchGPT를 실행하고 메뉴 막대 아이콘을 클릭합니다. **+**를 눌러 브라우저 로그인으로 계정을 추가합니다. 저장할 계정마다 반복하세요.
 4. 계정 카드를 클릭합니다. 최초 설정에서 ChatGPT 재시작을 요청하면 진행 중인 작업을 마친 뒤 재시작 버튼을 누르세요. 이미 열려 있는 작업을 중계에 연결하는 과정이며, 이후 계정 전환에는 재시작이 필요하지 않습니다.
@@ -79,17 +85,19 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 - **새로 고침:** 사용량과 초기화 가능 횟수를 조회합니다. 패널을 닫아도 조회 완료 후 60초마다 자동 갱신하며, 로그인·계정 전환 중이거나 조회가 진행 중이면 건너뜁니다.
 - **계정 관리:** 카드를 드래그해 순서를 바꾸고, `⋯` 또는 카드 우클릭으로 이름 변경·저장 목록 삭제를 진행합니다. 표시 이름을 비우면 이메일로 돌아갑니다. 저장 목록에서 삭제해도 OpenAI 계정 자체는 삭제되지 않습니다.
 
-초기화 크레딧과 만료 날짜는 **조회 전용**이며 SwitchGPT에서 소모하지 않습니다. 날짜는 Mac의 시간대와 표시 언어를 따릅니다. Mac의 기본 언어를 바꾼 뒤에는 앱을 다시 여세요. 지원하지 않는 언어는 영어로 표시하고, 중국어의 다른 지역·문자 변형은 간체로 표시합니다.
+계정 카드의 **초기화**를 누르고 대상 계정·리셋권 1장 소모를 확인하면 리셋권을 사용할 수 있습니다. 현재 사용할 수 없거나 조회 정보가 오래되었으면 버튼이 비활성화됩니다. 사용 후 한도와 보유 수를 다시 조회하며, 자동 전환이 켜져 있으면 목록 우선순위를 다시 적용합니다. 응답이 끊기거나 후속 조회에 실패하면 **결과 확인**으로 같은 요청을 이어갑니다. 앱을 다시 실행해도 미확인 요청 번호를 유지하며 리셋권을 자동 소모하지 않습니다.
+
+날짜는 Mac의 시간대와 표시 언어를 따릅니다. Mac의 기본 언어를 바꾼 뒤에는 앱을 다시 여세요. 지원하지 않는 언어는 영어로 표시하고, 중국어의 다른 지역·문자 변형은 간체로 표시합니다.
 
 ## 자동 전환
 
-1. 선택 계정의 한도 구간 중 하나가 소진되면, 목록 순서대로 최근 조회에서 남은 사용량이 확인된 첫 계정을 선택합니다.
+1. 자동 모드에서는 최근 조회에서 사용 가능하다고 확인된 가장 앞 계정을 우선합니다. 3번 계정 사용 중 1번의 한도가 회복되면, 조회로 회복을 확인한 뒤 다음 모델 요청부터 1번을 사용합니다. 초기화 예정 시간이 지났다는 이유만으로 복귀하지 않습니다.
 2. 서버가 모델 요청을 `usage_limit_reached`로 거절하면, 응답을 전달하기 전에 다른 사용 가능한 계정으로 다시 시도합니다. 요청 하나당 각 계정은 최대 한 번만 시도합니다.
 3. 이미 스트리밍 중인 정상 응답은 원래 계정으로 완료하며 재실행하지 않습니다.
 4. 일시적인 요청 속도 제한과 인증 오류는 자동 전환 없이 반환합니다. 조회 실패·오래된 사용량의 계정은 자동 전환할 대체 계정으로 선택하지 않습니다.
 5. 선택 계정이 소진되었고 사용 가능한 대체 계정을 확인할 수 없으면 요청을 중단합니다. 한도가 초기화되거나, 사용 가능한 계정을 선택·추가해야 합니다. 초기화 크레딧은 자동 소모하지 않습니다.
 
-`⋯`에서 자동 전환을 끄면 선택 계정을 계속 사용하며 해당 계정의 한도 오류를 그대로 반환합니다. 카드 순서는 자동 선택 우선순위에도 적용되며, 계정별 한도는 각각 별도로 유지됩니다.
+`⋯`에서 자동 전환을 끄면 선택 계정을 계속 사용하며 해당 계정의 한도 오류를 그대로 반환합니다. 자동 모드에서는 카드 순서가 수동 선택보다 우선하며, 순서를 바꾸면 다음 요청에 반영됩니다. 계정별 한도는 각각 별도로 유지됩니다.
 
 ## 문제 해결
 
@@ -108,6 +116,7 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 | 계정 목록과 순서 | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | 선택한 모델 계정 | `~/Library/Application Support/SwitchGPT/routing-selection.json` |
 | 자동 전환과 연결 확인 상태 | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
+| 미확인 리셋권 요청 번호 | `~/Library/Application Support/SwitchGPT/reset-credit-attempts.json` (동시 저장 제어용 `.lock` 파일 포함) |
 | 요청 메타데이터 | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
 | 기존 데스크톱 인증 정보 | `~/.codex/auth.json` — 유지 |
 
@@ -157,12 +166,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 릴리스 패키징
 
-스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.0 파일은 Apple silicon 빌드입니다.
+스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.1 파일은 Apple silicon 빌드입니다.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.0-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.0-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.1-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.1-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 소스 구조

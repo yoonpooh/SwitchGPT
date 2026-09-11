@@ -4,7 +4,6 @@ import AppKit
 struct AccountPanel: View {
     var store: AccountStore
     @State private var hoveredAccount: String?
-    @State private var deleting: Account?
     @State private var dropTarget: String?
     @State private var listHeight: CGFloat = 1
 
@@ -21,16 +20,19 @@ struct AccountPanel: View {
                     }.frame(maxWidth: .infinity)
                         .fixedSize(horizontal: false, vertical: true)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
+                        .padding(.vertical, listOverflows ? 12 : 0)
                 }.frame(height: min(maximumListHeight, max(1, listHeight)))
-            }
-            if let account = deleting {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(L10n.text("delete_confirm")).font(.callout)
-                    HStack {
-                        Button(L10n.text("delete"), role: .destructive) { store.remove(account); deleting = nil }
-                        Button(L10n.text("cancel")) { deleting = nil }
+                    .mask {
+                        if listOverflows {
+                            VStack(spacing: 0) {
+                                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                                    .frame(height: 8)
+                                Rectangle().fill(.black)
+                                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                                    .frame(height: 8)
+                            }
+                        } else { Rectangle().fill(.black) }
                     }
-                }.disabled(store.busy)
             }
             if !store.message.isEmpty {
                 Label(store.message, systemImage: store.addingAccount ? "person.crop.circle" : "exclamationmark.circle")
@@ -42,9 +44,19 @@ struct AccountPanel: View {
                 Label(L10n.text("routing_desktop_label"), systemImage: "desktopcomputer")
                     .foregroundStyle(.secondary).help(L10n.text("routing_desktop_help"))
                 Spacer(minLength: 8)
-                Text(store.desktopName).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
+                HStack(spacing: 6) {
+                    if let account = store.accounts.first(where: { $0.id == store.desktopID }) {
+                        AccountAvatar(store: store, account: account, size: 18)
+                    } else {
+                        Image(systemName: "person.crop.circle.fill")
+                            .resizable().scaledToFit().foregroundStyle(.secondary)
+                            .frame(width: 18, height: 18).accessibilityHidden(true)
+                    }
+                    Text(store.desktopName).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
+                }
             }.font(.caption).padding(.vertical, 4)
-        }.padding(16).frame(width: 400)
+        }.padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 8)
+            .frame(width: 400).fixedSize(horizontal: false, vertical: true)
             .task { await store.refreshUsage() }
             .onDisappear { NSCursor.arrow.set() }
             .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
@@ -84,14 +96,17 @@ struct AccountPanel: View {
         min(460, max(130, (NSScreen.main?.visibleFrame.height ?? 800) - (store.needsRestart ? 360 : 290)))
     }
 
+    private var listOverflows: Bool { listHeight > maximumListHeight }
+
     private func accountButton(_ account: Account) -> some View {
         let selected = account.id == store.currentID
         let tint: Color = selected && store.needsRestart ? .orange : .accentColor
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        return Button { Task { await store.switchTo(account) } } label: {
-            AccountCard(store: store, account: account)
-                .contentShape(shape).draggable(account.id)
-        }.buttonStyle(.plain).disabled(store.busy)
+        return AccountCard(store: store, account: account,
+                           select: { Task { await store.switchTo(account) } },
+                           useReset: { confirmReset(account) })
+            .disabled(store.busy)
+            .padding(.trailing, listOverflows ? 12 : 0)
             .background(selected ? tint.opacity(0.065) : hoveredAccount == account.id ? Color.primary.opacity(0.045) : Color.primary.opacity(0.015), in: shape)
             .overlay { shape.strokeBorder(selected ? tint.opacity(0.4) : Color.primary.opacity(0.08), lineWidth: selected ? 1 : 0.7).allowsHitTesting(false) }
             .overlay(alignment: .top) {
@@ -114,8 +129,20 @@ struct AccountPanel: View {
 
     @ViewBuilder private func accountActions(_ account: Account) -> some View {
         Button(L10n.text("edit_name")) { editName(account) }
-        Button(L10n.text("delete"), role: .destructive) { deleting = account }
+        Button(L10n.text("delete"), role: .destructive) { confirmDelete(account) }
             .disabled(account.id == store.currentID)
+    }
+
+    private func confirmDelete(_ account: Account) {
+        guard !store.busy, account.id != store.currentID else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L10n.text("delete_confirm")
+        alert.informativeText = store.displayName(account)
+        alert.addButton(withTitle: L10n.text("delete")).hasDestructiveAction = true
+        alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { store.remove(account) }
     }
 
     private func editName(_ account: Account) {
@@ -142,6 +169,18 @@ struct AccountPanel: View {
         alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn { Task { await store.restartDesktop() } }
+    }
+
+    private func confirmReset(_ account: Account) {
+        guard store.canUseReset(account) else { return }
+        let retrying = store.hasPendingReset(account)
+        let alert = NSAlert()
+        alert.messageText = L10n.text(retrying ? "reset_retry" : "reset_confirm_title")
+        alert.informativeText = L10n.format(retrying ? "reset_retry_confirm" : "reset_confirm_detail", store.displayName(account))
+        alert.addButton(withTitle: L10n.text(retrying ? "reset_retry" : "reset_use"))
+        alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { Task { await store.useResetCredit(account) } }
     }
 
     private func quit() {

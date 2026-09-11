@@ -20,8 +20,37 @@ struct AccountAvatar: View {
 struct AccountCard: View {
     var store: AccountStore
     let account: Account
+    var select: () -> Void
+    var useReset: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Button(action: select) { summary.contentShape(Rectangle()).draggable(account.id) }
+                .buttonStyle(.plain)
+            if (store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 || store.hasPendingReset(account) {
+                HStack(spacing: 6) {
+                    Label(L10n.format("resets", store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0),
+                          systemImage: "arrow.counterclockwise.circle")
+                    Spacer(minLength: 0)
+                    if let expiration = store.resetDetails[account.id]?.availableCredits.first?.expiration {
+                        Text(L10n.format("expires", L10n.date(expiration, includeTime: false)))
+                            .help(L10n.format("expires", L10n.date(expiration)))
+                    }
+                    if store.resetInProgressID == account.id { ProgressView().controlSize(.mini) }
+                    Button(L10n.text(store.hasPendingReset(account) ? "reset_retry" : "reset_use"), action: useReset)
+                        .buttonStyle(.bordered).controlSize(.mini)
+                        .disabled(!store.canUseReset(account)).help(store.resetHelp(account))
+                }.font(.caption2).foregroundStyle(.secondary).lineLimit(1).padding(.leading, 38)
+            }
+            if let message = store.resetMessages[account.id] {
+                Label(message.text, systemImage: message.succeeded ? "checkmark.circle" : "exclamationmark.circle")
+                    .font(.caption2).foregroundStyle(message.succeeded ? Color.secondary : .orange)
+                    .fixedSize(horizontal: false, vertical: true).padding(.leading, 38)
+            }
+        }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var summary: some View {
         HStack(alignment: .top, spacing: 10) {
             AccountAvatar(store: store, account: account)
             VStack(alignment: .leading, spacing: 9) {
@@ -45,18 +74,8 @@ struct AccountCard: View {
                     Label(L10n.text("routing_usage_unavailable"), systemImage: "exclamationmark.circle")
                         .font(.caption).foregroundStyle(.orange).help(error)
                 }
-                if let credits = store.usages[account.id]?.rateLimitResetCredits, credits.availableCount > 0 {
-                    HStack(spacing: 6) {
-                        Label(L10n.format("resets", credits.availableCount), systemImage: "arrow.counterclockwise.circle")
-                        Spacer(minLength: 0)
-                        if let expiration = store.resetDetails[account.id]?.availableCredits.first?.expiration {
-                            Text(L10n.format("expires", L10n.date(expiration, includeTime: false)))
-                                .help(L10n.format("expires", L10n.date(expiration)))
-                        }
-                    }.font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                }
             }
-        }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -73,7 +92,7 @@ private struct UsageWindowView: View {
                     .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
                     .frame(width: 64, alignment: .trailing)
             }
-            Text(L10n.format("resets_at", compactResetDate)).font(.system(size: 10)).foregroundStyle(.tertiary)
+            Text(L10n.format("resets_at", compactResetDate)).font(.system(size: 10)).foregroundStyle(.secondary)
                 .help(L10n.format("resets_at", L10n.date(window.resetDate)))
         }
     }

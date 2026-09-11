@@ -16,6 +16,8 @@ final class AccountStore {
     var desktopLaunchedAt: Date?
     var selectedExhausted = false
     var resetDetails: [String: ResetCreditDetails] = [:]
+    var resetInProgressID: String?
+    var resetMessages: [String: ResetCreditMessage] = [:]
     var usages: [String: AccountUsage] = [:]
     var usageErrors: [String: String] = [:]
     var usageUpdatedAt: [String: Date] = [:]
@@ -23,7 +25,9 @@ final class AccountStore {
     var profileImages: [String: NSImage] = [:]
     var emails: [String: String] = [:]
     private let vault = Vault()
-    private let session = CodexSession()
+    private let session: CodexSession
+    private let usageClient: UsageClient
+    private let resetLedger: ResetCreditLedger
     private let index: URL
     private var relay: ModelRelay?
     private var routingCredentials: [String: RelayCredentials] = [:]
@@ -33,9 +37,12 @@ final class AccountStore {
     private var selectionURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-selection.json") }
     private var preferencesURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-preferences.json") }
 
-    init(index: URL? = nil) {
+    init(index: URL? = nil, usageClient: UsageClient = UsageClient(), session: CodexSession = CodexSession()) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         self.index = index ?? support.appendingPathComponent("SwitchGPT/accounts.json")
+        self.session = session
+        self.usageClient = usageClient
+        self.resetLedger = ResetCreditLedger(file: self.index.deletingLastPathComponent().appendingPathComponent("reset-credit-attempts.json"))
         do {
             if index == nil { try Self.migrateAccountIndex(in: support) }
             if FileManager.default.fileExists(atPath: self.index.path) {
@@ -106,13 +113,13 @@ final class AccountStore {
                 routingCredentials[account.id] = selected
                 if router.selected?.fingerprint == selected.fingerprint { relay?.select(selected) }
                 emails[account.id] = credential.email ?? L10n.text("email_missing")
-                if let photoData = try? await UsageClient().fetchProfileImage(credential) {
+                if let photoData = try? await usageClient.fetchProfileImage(credential) {
                     profileImages[account.id] = NSImage(data: photoData)
                 } else { profileImages[account.id] = nil }
                 let queriedAt = Date.now
-                usages[account.id] = try await UsageClient().fetch(credential)
+                usages[account.id] = try await usageClient.fetch(credential)
                 if (usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 {
-                    resetDetails[account.id] = try? await UsageClient().fetchResetCredits(credential)
+                    resetDetails[account.id] = try? await usageClient.fetchResetCredits(credential)
                 } else { resetDetails[account.id] = nil }
                 usageUpdatedAt[account.id] = queriedAt
                 usageErrors[account.id] = nil
@@ -123,6 +130,69 @@ final class AccountStore {
         updateRouter()
         if routingActive { _ = router.resolve() }
         selectedExhausted = router.isCurrentExhausted()
+    }
+
+    func hasPendingReset(_ account: Account) -> Bool { resetLedger.hasPending(account.id) }
+
+    func canUseReset(_ account: Account) -> Bool {
+        guard !busy, !loadingUsage, resetLedger.readable, accounts.contains(where: { $0.id == account.id }) else { return false }
+        if hasPendingReset(account) { return true }
+        return usageErrors[account.id] == nil
+            && Date.now.timeIntervalSince(usageUpdatedAt[account.id] ?? .distantPast) <= 120
+            && usages[account.id]?.rateLimitResetCredits?.canUse == true
+    }
+
+    func resetHelp(_ account: Account) -> String {
+        if !resetLedger.readable { return L10n.text("reset_storage_error") }
+        if hasPendingReset(account) { return L10n.text("reset_retry_help") }
+        if usageErrors[account.id] != nil || Date.now.timeIntervalSince(usageUpdatedAt[account.id] ?? .distantPast) > 120 {
+            return L10n.text("reset_refresh_help")
+        }
+        guard let credits = usages[account.id]?.rateLimitResetCredits else { return L10n.text("reset_refresh_help") }
+        if credits.availableCount <= 0 { return L10n.text("reset_no_credit") }
+        return L10n.text(credits.canUse ? "reset_use_help" : "reset_not_applicable")
+    }
+
+    func useResetCredit(_ account: Account) async {
+        guard !busy, resetLedger.readable, accounts.contains(where: { $0.id == account.id }) else { return }
+        busy = true
+        resetInProgressID = account.id
+        resetMessages[account.id] = nil
+        defer { resetInProgressID = nil; busy = false }
+        do {
+            // A refresh may have started while the confirmation dialog was open.
+            // Let that older read finish before sending a reset and refreshing its result.
+            while loadingUsage { try await Task.sleep(for: .milliseconds(50)) }
+            let desktop = try? session.read()
+            let credential: Credential
+            if let desktop, desktop.id == account.id { credential = desktop }
+            else { credential = try Credential(data: vault.read(account.id)) }
+            guard credential.id == account.id else { throw SwitchError(message: L10n.text("account_mismatch")) }
+            let receipt = try await ResetCreditService(client: usageClient, ledger: resetLedger).redeem(credential)
+            if let usage = receipt.usage, let observedAt = receipt.observedAt {
+                usages[account.id] = usage
+                usageUpdatedAt[account.id] = observedAt
+                usageErrors[account.id] = nil
+                resetDetails[account.id] = receipt.details
+                routingCredentials[account.id] = try RelayCredentials(credential)
+                updateRouter()
+                if routingActive { _ = router.resolve() }
+                selectedExhausted = router.isCurrentExhausted()
+            }
+            let key: String
+            switch receipt.result.code {
+            case .reset: key = "reset_success"
+            case .alreadyRedeemed: key = "reset_already_redeemed"
+            case .nothingToReset: key = "reset_not_applicable"
+            case .noCredit: key = "reset_no_credit"
+            }
+            let used = receipt.result.code == .reset || receipt.result.code == .alreadyRedeemed
+            let text = L10n.text(key) + (receipt.reconciled ? "" : " " + L10n.text("reset_followup_pending"))
+            resetMessages[account.id] = ResetCreditMessage(text: text, succeeded: used && receipt.reconciled)
+        } catch {
+            let text = hasPendingReset(account) ? L10n.text("reset_uncertain") : L10n.format("reset_failed", error.localizedDescription)
+            resetMessages[account.id] = ResetCreditMessage(text: text, succeeded: false)
+        }
     }
 
     private func updateRouter() {
@@ -201,7 +271,13 @@ final class AccountStore {
         let previous = accounts
         let account = accounts.remove(at: source)
         accounts.insert(account, at: target)
-        do { try persist(); updateRouter(); return true }
+        do {
+            try persist()
+            updateRouter()
+            if routingActive { _ = router.resolve() }
+            selectedExhausted = router.isCurrentExhausted()
+            return true
+        }
         catch { accounts = previous; message = L10n.text("order_save"); return false }
     }
     private func persist() throws {

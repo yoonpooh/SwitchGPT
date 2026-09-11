@@ -7,6 +7,7 @@ struct AccountUsage: Decodable {
     struct ResetCredits: Decodable {
         let availableCount: Int
         let applicableAvailableCount: Int?
+        var canUse: Bool { availableCount > 0 && (applicableAvailableCount ?? availableCount) > 0 }
     }
     struct Limit: Decodable {
         let allowed: Bool?
@@ -30,6 +31,7 @@ struct AccountUsage: Decodable {
         var remaining: Double { max(0, min(100, 100 - usedPercent)) }
         var label: String {
             if limitWindowSeconds == 604800 { return L10n.text("weekly") }
+            if limitWindowSeconds == 2592000 { return L10n.text("monthly") }
             if limitWindowSeconds % 3600 == 0 { return L10n.format("hours", limitWindowSeconds / 3600) }
             return L10n.format("minutes", limitWindowSeconds / 60)
         }
@@ -40,6 +42,21 @@ struct AccountUsage: Decodable {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(Self.self, from: data)
     }
+}
+
+struct ResetCreditResult: Decodable, Sendable {
+    enum Code: String, Decodable, Sendable {
+        case reset
+        case alreadyRedeemed = "already_redeemed"
+        case nothingToReset = "nothing_to_reset"
+        case noCredit = "no_credit"
+    }
+    let code: Code
+}
+
+struct ResetCreditMessage {
+    let text: String
+    let succeeded: Bool
 }
 
 struct ResetCreditDetails: Decodable {

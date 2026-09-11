@@ -47,16 +47,92 @@ final class AccountRouterTests: XCTestCase {
         XCTAssertEqual(router.resolve(now: now.addingTimeInterval(1))?.fingerprint, first.fingerprint)
     }
 
-    func testManualSelectionWinsOverLateFailureAndAutomaticCanBeDisabled() throws {
+    func testRecoveredEarlierAccountPreemptsHealthyCurrentAccount() throws {
         let router = AccountRouter()
         let first = try credentials("first"), second = try credentials("second"), third = try credentials("third")
         router.select(first)
-        router.update([first, second, third].map { RoutingCandidate(credentials: $0, availability: .available, observedAt: now) }, automatic: true)
+        router.update([
+            RoutingCandidate(credentials: first, availability: .exhausted, observedAt: now),
+            RoutingCandidate(credentials: second, availability: .exhausted, observedAt: now),
+            RoutingCandidate(credentials: third, availability: .available, observedAt: now)
+        ], automatic: true)
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, third.fingerprint)
+
+        let recoveredAt = now.addingTimeInterval(1)
+        router.update([
+            RoutingCandidate(credentials: first, availability: .available, observedAt: recoveredAt),
+            RoutingCandidate(credentials: second, availability: .exhausted, observedAt: recoveredAt),
+            RoutingCandidate(credentials: third, availability: .available, observedAt: recoveredAt)
+        ], automatic: true)
+        XCTAssertEqual(router.resolve(now: recoveredAt)?.fingerprint, first.fingerprint)
+
+        router.update([
+            RoutingCandidate(credentials: first, availability: .exhausted, observedAt: recoveredAt),
+            RoutingCandidate(credentials: second, availability: .available, observedAt: recoveredAt),
+            RoutingCandidate(credentials: third, availability: .available, observedAt: recoveredAt)
+        ], automatic: true)
+        XCTAssertEqual(router.resolve(now: recoveredAt)?.fingerprint, second.fingerprint)
+    }
+
+    func testRecoveryRequiresFreshSuccessfulQuotaAfterServerRejection() throws {
+        let router = AccountRouter()
+        let first = try credentials("first"), second = try credentials("second"), third = try credentials("third")
         router.select(third)
+        router.update([
+            RoutingCandidate(credentials: first, availability: .unknown, observedAt: now),
+            RoutingCandidate(credentials: second, availability: .available, observedAt: now.addingTimeInterval(-121)),
+            RoutingCandidate(credentials: third, availability: .available, observedAt: now)
+        ], automatic: true)
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, third.fingerprint)
+
+        let candidates = [first, third].map { RoutingCandidate(credentials: $0, availability: .available, observedAt: now) }
+        router.update(candidates, automatic: true)
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, first.fingerprint)
         XCTAssertEqual(router.resolve(now: now, excluding: [first.fingerprint], exhausted: first)?.fingerprint, third.fingerprint)
+        router.update(candidates, automatic: true)
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, third.fingerprint)
+
+        let recoveredAt = now.addingTimeInterval(1)
+        router.update([first, third].map { RoutingCandidate(credentials: $0, availability: .available, observedAt: recoveredAt) }, automatic: true)
+        XCTAssertEqual(router.resolve(now: recoveredAt)?.fingerprint, first.fingerprint)
+
+        router.update([], automatic: true)
+        XCTAssertEqual(router.resolve(now: recoveredAt)?.fingerprint, first.fingerprint)
+    }
+
+    func testReorderingChangesPriorityAndManualSelectionRequiresAutomaticOff() throws {
+        let router = AccountRouter()
+        let first = try credentials("first"), second = try credentials("second"), third = try credentials("third")
+        router.select(third)
+        router.update([third, second, first].map { RoutingCandidate(credentials: $0, availability: .available, observedAt: now) }, automatic: true)
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, third.fingerprint)
+        router.update([first, second, third].map { RoutingCandidate(credentials: $0, availability: .available, observedAt: now) }, automatic: true)
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, first.fingerprint)
+        router.select(third)
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, first.fingerprint)
+        router.update([first, second, third].map { RoutingCandidate(credentials: $0, availability: .available, observedAt: now) }, automatic: false)
+        router.select(third)
+        XCTAssertNil(router.resolve(now: now, excluding: [first.fingerprint], exhausted: first))
+        XCTAssertEqual(router.selected?.fingerprint, third.fingerprint)
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, third.fingerprint)
         router.update([RoutingCandidate(credentials: third, availability: .exhausted, observedAt: now)], automatic: false)
         XCTAssertEqual(router.resolve(now: now)?.fingerprint, third.fingerprint)
         XCTAssertNil(router.resolve(now: now, excluding: [third.fingerprint], exhausted: third))
+    }
+
+    func testConcurrentRequestsSwitchToRecoveredPriorityOnlyOnce() throws {
+        let switched = expectation(description: "One automatic selection change")
+        switched.assertForOverFulfill = true
+        let first = try credentials("first"), third = try credentials("third")
+        let router = AccountRouter { _ in switched.fulfill() }
+        router.select(third)
+        router.update([first, third].map { RoutingCandidate(credentials: $0, availability: .available, observedAt: now) }, automatic: true)
+        let now = now
+        DispatchQueue.concurrentPerform(iterations: 64) { _ in
+            XCTAssertEqual(router.resolve(now: now)?.fingerprint, first.fingerprint)
+        }
+        wait(for: [switched], timeout: 1)
+        XCTAssertEqual(router.selected?.fingerprint, first.fingerprint)
     }
 
     func testOnlyStructuredSubscriptionQuotaErrorsPermitRetry() {
