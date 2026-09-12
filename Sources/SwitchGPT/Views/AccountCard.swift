@@ -42,11 +42,6 @@ struct AccountCard: View {
                         .disabled(!store.canUseReset(account)).help(store.resetHelp(account))
                 }.font(.caption2).foregroundStyle(.secondary).lineLimit(1).padding(.leading, 38)
             }
-            if let message = store.resetMessages[account.id] {
-                Label(message.text, systemImage: message.succeeded ? "checkmark.circle" : "exclamationmark.circle")
-                    .font(.caption2).foregroundStyle(message.succeeded ? Color.secondary : .orange)
-                    .fixedSize(horizontal: false, vertical: true).padding(.leading, 38)
-            }
         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
     }
 

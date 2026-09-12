@@ -180,7 +180,17 @@ struct AccountPanel: View {
         alert.addButton(withTitle: L10n.text(retrying ? "reset_retry" : "reset_use"))
         alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn { Task { await store.useResetCredit(account) } }
+        if alert.runModal() == .alertFirstButtonReturn {
+            Task {
+                guard let result = await store.useResetCredit(account) else { return }
+                let completion = NSAlert()
+                completion.alertStyle = result.succeeded ? .informational : .warning
+                completion.messageText = result.text
+                completion.informativeText = store.displayName(account)
+                NSApp.activate(ignoringOtherApps: true)
+                completion.runModal()
+            }
+        }
     }
 
     private func quit() {

@@ -12,9 +12,9 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 
 Choose an account yourself, or let SwitchGPT move to another available account when a usage limit is reached.
 
-[Download v0.2.1](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[Download v0.2.2](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## What's new in 0.2.1
+## What's new in 0.2.2
 
 - **Return to your preferred account:** Automatic mode uses the first account in your list whose recently fetched quota is available. It returns to a recovered earlier account on the next request.
 - **Use reset credits from a card:** Confirm the account and one-credit consumption before resetting. Interrupted requests retain their request ID for a safe result check; credits are never used automatically.
@@ -46,7 +46,7 @@ This applies to Codex requests using the built-in `openai` provider on this Mac,
 
 Requirements: **Apple silicon, macOS 14 or later**, and the current ChatGPT desktop app installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate CLI installation is required.
 
-1. Download `SwitchGPT-v0.2.1-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1).
+1. Download `SwitchGPT-v0.2.2-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2).
 2. Verify the checksum below, extract the ZIP, and move **SwitchGPT.app** into **Applications**.
 3. Open SwitchGPT and click its menu bar icon. Choose **+** to add an account through browser sign-in. Repeat for each account you want to save.
 4. Click an account card. If initial setup asks you to restart ChatGPT, finish active work before using the restart button. This connects already-open tasks to the relay; later account changes do not require a restart.
@@ -166,12 +166,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.2.1 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.2.2 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.1-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.1-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.2-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.2-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## Source layout

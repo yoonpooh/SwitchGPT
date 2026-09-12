@@ -12,9 +12,9 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 직접 실행 계정을 선택하거나, 한도가 소진되면 사용 가능한 다음 계정으로 자동 전환하세요.
 
-[v0.2.1 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.2 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.1의 주요 변경
+## 0.2.2의 주요 변경
 
 - **앞순위 계정으로 자동 복귀:** 자동 모드는 최근 조회에서 사용 가능하다고 확인된 첫 계정을 우선합니다. 앞 계정의 한도가 회복되면 다음 요청부터 돌아갑니다.
 - **카드에서 리셋권 사용:** 대상 계정과 리셋권 1장 소모를 확인한 뒤 초기화합니다. 응답이 끊겨도 같은 요청 번호로 결과를 확인하며 자동 소모하지 않습니다.
@@ -46,7 +46,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 **Apple silicon Mac, macOS 14 이상**, 설치 및 로그인이 완료된 현재 ChatGPT 데스크톱 앱이 필요합니다. 기본 파일 기반 인증 저장 경로인 `~/.codex/auth.json`을 사용해야 합니다. 데스크톱 앱에 포함된 CLI를 사용하므로 별도 CLI 설치는 필요하지 않습니다.
 
-1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1)에서 `SwitchGPT-v0.2.1-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
+1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2)에서 `SwitchGPT-v0.2.2-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
 2. 아래 명령으로 체크섬을 확인하고 ZIP 압축을 풀어 **SwitchGPT.app**을 **응용 프로그램** 폴더로 옮깁니다.
 3. SwitchGPT를 실행하고 메뉴 막대 아이콘을 클릭합니다. **+**를 눌러 브라우저 로그인으로 계정을 추가합니다. 저장할 계정마다 반복하세요.
 4. 계정 카드를 클릭합니다. 최초 설정에서 ChatGPT 재시작을 요청하면 진행 중인 작업을 마친 뒤 재시작 버튼을 누르세요. 이미 열려 있는 작업을 중계에 연결하는 과정이며, 이후 계정 전환에는 재시작이 필요하지 않습니다.
@@ -166,12 +166,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 릴리스 패키징
 
-스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.1 파일은 Apple silicon 빌드입니다.
+스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.2 파일은 Apple silicon 빌드입니다.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.1-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.1-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.2-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.2-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 소스 구조

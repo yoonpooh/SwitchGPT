@@ -17,7 +17,6 @@ final class AccountStore {
     var selectedExhausted = false
     var resetDetails: [String: ResetCreditDetails] = [:]
     var resetInProgressID: String?
-    var resetMessages: [String: ResetCreditMessage] = [:]
     var usages: [String: AccountUsage] = [:]
     var usageErrors: [String: String] = [:]
     var usageUpdatedAt: [String: Date] = [:]
@@ -153,11 +152,10 @@ final class AccountStore {
         return L10n.text(credits.canUse ? "reset_use_help" : "reset_not_applicable")
     }
 
-    func useResetCredit(_ account: Account) async {
-        guard !busy, resetLedger.readable, accounts.contains(where: { $0.id == account.id }) else { return }
+    func useResetCredit(_ account: Account) async -> ResetCreditMessage? {
+        guard !busy, resetLedger.readable, accounts.contains(where: { $0.id == account.id }) else { return nil }
         busy = true
         resetInProgressID = account.id
-        resetMessages[account.id] = nil
         defer { resetInProgressID = nil; busy = false }
         do {
             // A refresh may have started while the confirmation dialog was open.
@@ -188,10 +186,10 @@ final class AccountStore {
             }
             let used = receipt.result.code == .reset || receipt.result.code == .alreadyRedeemed
             let text = L10n.text(key) + (receipt.reconciled ? "" : " " + L10n.text("reset_followup_pending"))
-            resetMessages[account.id] = ResetCreditMessage(text: text, succeeded: used && receipt.reconciled)
+            return ResetCreditMessage(text: text, succeeded: used && receipt.reconciled)
         } catch {
             let text = hasPendingReset(account) ? L10n.text("reset_uncertain") : L10n.format("reset_failed", error.localizedDescription)
-            resetMessages[account.id] = ResetCreditMessage(text: text, succeeded: false)
+            return ResetCreditMessage(text: text, succeeded: false)
         }
     }
 

@@ -12,9 +12,9 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 你可以手动选择账户，也可以在额度用尽时自动切换到其他可用账户。
 
-[下载 v0.2.1](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[下载 v0.2.2](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.1 的主要更新
+## 0.2.2 的主要更新
 
 - **自动切回优先账户：** 自动模式优先使用列表中近期查询确认可用的第一个账户。前序账户额度恢复后，从下一个请求起切回。
 - **在卡片中使用重置次数：** 确认目标账户及消耗1次重置机会后即可重置。响应中断时保留原请求编号以确认结果，不会自动消耗重置次数。
@@ -46,7 +46,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 需要 **Apple 芯片 Mac、macOS 14 或更新版本**，以及已安装并登录的当前 ChatGPT 桌面应用。须使用默认文件式认证路径 `~/.codex/auth.json`。SwitchGPT 使用应用自带的 CLI，无需单独安装 CLI。
 
-1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1)下载 `SwitchGPT-v0.2.1-macos-arm64.zip` 和 `SHA256SUMS.txt`。
+1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2)下载 `SwitchGPT-v0.2.2-macos-arm64.zip` 和 `SHA256SUMS.txt`。
 2. 使用下方命令验证校验和，解压 ZIP，将 **SwitchGPT.app** 移至**应用程序**。
 3. 打开 SwitchGPT 并点击菜单栏图标。选择 **+**，通过浏览器登录添加账户。对每个要保存的账户重复操作。
 4. 点击账户卡片。首次设置如提示重启 ChatGPT，请先完成正在进行的工作，再使用重启按钮。此步骤将已打开的任务连接到中继；之后切换账户无需重启。
@@ -166,12 +166,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 打包发布版本
 
-脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.2.1 文件是 Apple 芯片构建。
+脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.2.2 文件是 Apple 芯片构建。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.1-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.1-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.2-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.2-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 源码结构

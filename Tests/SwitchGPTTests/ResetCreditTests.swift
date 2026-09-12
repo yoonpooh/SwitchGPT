@@ -184,15 +184,16 @@ final class ResetCreditTests: XCTestCase {
         await Task.yield()
         XCTAssertTrue(store.busy)
         XCTAssertEqual(store.resetInProgressID, account.id)
-        await store.useResetCredit(account)
+        let duplicate = await store.useResetCredit(account)
+        XCTAssertNil(duplicate)
         let beforeRefreshFinished = await backend.requests
         XCTAssertTrue(beforeRefreshFinished.isEmpty)
         store.loadingUsage = false
-        await first.value
+        let result = await first.value
         let requests = await backend.requests
         XCTAssertEqual(requests.filter { $0.httpMethod == "POST" }.count, 1)
         XCTAssertEqual(store.usages[account.id]?.rateLimit?.primaryWindow?.remaining, 100)
-        XCTAssertEqual(store.resetMessages[account.id]?.succeeded, true)
+        XCTAssertEqual(result?.succeeded, true)
         XCTAssertFalse(store.hasPendingReset(account))
         XCTAssertFalse(store.canUseReset(account))
         XCTAssertFalse(store.busy)

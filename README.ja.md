@@ -12,9 +12,9 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 アカウントを手動で選ぶことも、利用上限に達したら利用可能な別のアカウントへ自動で切り替えることもできます。
 
-[v0.2.1 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.2 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.1 の主な変更
+## 0.2.2 の主な変更
 
 - **優先アカウントへ自動復帰：** 自動モードでは、最近の取得で利用可能と確認できた先頭のアカウントを優先します。上位アカウントの利用枠が回復すると、次のリクエストから戻ります。
 - **カードからリセット権を使用：** 対象アカウントと1回分の消費を確認してリセットできます。応答が途切れても同じリクエスト番号で結果を確認し、自動では消費しません。
@@ -46,7 +46,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 **Apple シリコン搭載 Mac、macOS 14 以降**と、インストール・ログイン済みの現行 ChatGPT デスクトップアプリが必要です。標準のファイル形式の認証情報 `~/.codex/auth.json` を使用してください。同梱の CLI を使うため、CLI の別途インストールは不要です。
 
-1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.1)から `SwitchGPT-v0.2.1-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
+1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2)から `SwitchGPT-v0.2.2-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
 2. 下のコマンドでチェックサムを確認し、ZIP を展開して **SwitchGPT.app** を **アプリケーション** に移動します。
 3. SwitchGPT を開き、メニューバーアイコンをクリックします。**+** からブラウザでログインしてアカウントを追加します。保存するアカウントごとに繰り返してください。
 4. アカウントカードをクリックします。初回設定で ChatGPT の再起動を求められたら、作業を終えてから再起動ボタンを使ってください。開いているタスクを中継に接続するための操作で、以後のアカウント変更では再起動は不要です。
@@ -166,12 +166,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### リリースのパッケージ化
 
-スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.1 は Apple シリコン向けです。
+スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.2 は Apple シリコン向けです。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.1-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.1-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.2-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.2-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## ソース構成
