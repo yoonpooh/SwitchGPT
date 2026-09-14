@@ -25,8 +25,12 @@ struct AccountCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Button(action: select) { summary.contentShape(Rectangle()).draggable(account.id) }
-                .buttonStyle(.plain)
+            if store.routingPreferences.automatic {
+                summary.contentShape(Rectangle()).draggable(account.id)
+            } else {
+                Button(action: select) { summary.contentShape(Rectangle()).draggable(account.id) }
+                    .buttonStyle(.plain)
+            }
             if (store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 || store.hasPendingReset(account) {
                 HStack(spacing: 6) {
                     Label(L10n.format("resets", store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0),

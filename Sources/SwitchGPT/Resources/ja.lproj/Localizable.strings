@@ -123,3 +123,5 @@
 "reset_followup_pending" = "状態の更新が未完了です。「結果を確認」で完了してください。";
 "reset_uncertain" = "使用結果を確認できませんでした。「結果を確認」で前のリクエストを続けて確認してください。";
 "reset_failed" = "リセット権を使用できませんでした：%@";
+
+"routing_manual_badge" = "手動";

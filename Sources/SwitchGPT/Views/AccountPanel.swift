@@ -61,11 +61,17 @@ struct AccountPanel: View {
             .onDisappear { NSCursor.arrow.set() }
             .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.currentID) { _, _ in NSCursor.arrow.set() }
+            .onChange(of: store.routingPreferences.automatic) { _, _ in NSCursor.arrow.set() }
     }
 
     private var header: some View {
         HStack(spacing: 6) {
             Text("SwitchGPT").font(.system(size: 17, weight: .semibold))
+            Text(L10n.text(store.routingPreferences.automatic ? "routing_auto_badge" : "routing_manual_badge"))
+                .font(.caption2.weight(.medium)).foregroundStyle(.secondary)
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(Color.primary.opacity(0.045), in: Capsule())
+                .fixedSize().help(L10n.text("routing_auto_help"))
             Spacer()
             Button { Task { await store.refreshUsage() } } label: {
                 Group {
@@ -103,7 +109,10 @@ struct AccountPanel: View {
         let tint: Color = selected && store.needsRestart ? .orange : .accentColor
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         return AccountCard(store: store, account: account,
-                           select: { Task { await store.switchTo(account) } },
+                           select: { Task {
+                               guard !store.routingPreferences.automatic else { return }
+                               await store.switchTo(account)
+                           } },
                            useReset: { confirmReset(account) })
             .disabled(store.busy)
             .padding(.trailing, listOverflows ? 12 : 0)
@@ -121,7 +130,7 @@ struct AccountPanel: View {
             .onHover { hovered in hoveredAccount = hovered ? account.id : (hoveredAccount == account.id ? nil : hoveredAccount) }
             .onContinuousHover { phase in
                 switch phase {
-                case .active: if !store.busy && !selected { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+                case .active: if !store.busy && (store.routingPreferences.automatic || !selected) { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
                 case .ended: NSCursor.arrow.set()
                 }
             }.animation(.easeOut(duration: 0.12), value: hoveredAccount)

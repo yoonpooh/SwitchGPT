@@ -12,13 +12,13 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 
 Choose an account yourself, or let SwitchGPT move to another available account when a usage limit is reached.
 
-[Download v0.2.2](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[Download v0.2.3](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## What's new in 0.2.2
+## What's new in 0.2.3
 
-- **Return to your preferred account:** Automatic mode uses the first account in your list whose recently fetched quota is available. It returns to a recovered earlier account on the next request.
-- **Use reset credits from a card:** Confirm the account and one-credit consumption before resetting. Interrupted requests retain their request ID for a safe result check; credits are never used automatically.
-- **Clearer, better-sized panel:** Improved reset details and scroll fades, a native account-removal confirmation, and a popup that follows its content size.
+- **Simpler panel:** removed the large status card and recent-request row; Auto/Manual now appears beside the title.
+- **Automatic mode:** drag cards to set priority; clicking no longer switches accounts. The pointer cursor remains available.
+- **Manual mode:** turn automatic switching off to select an account by clicking. Restart and quota warnings remain visible when needed.
 
 ## Core features introduced in 0.2.0
 
@@ -46,11 +46,11 @@ This applies to Codex requests using the built-in `openai` provider on this Mac,
 
 Requirements: **Apple silicon, macOS 14 or later**, and the current ChatGPT desktop app installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate CLI installation is required.
 
-1. Download `SwitchGPT-v0.2.2-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.2).
+1. Download `SwitchGPT-v0.2.3-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3).
 2. Verify the checksum below, extract the ZIP, and move **SwitchGPT.app** into **Applications**.
 3. Open SwitchGPT and click its menu bar icon. Choose **+** to add an account through browser sign-in. Repeat for each account you want to save.
-4. Click an account card. If initial setup asks you to restart ChatGPT, finish active work before using the restart button. This connects already-open tasks to the relay; later account changes do not require a restart.
-5. Send a Codex request in the desktop app. The panel confirms the connection after a real desktop model response completes.
+4. For initial account selection, turn automatic switching off in `⋯`, then click an account card. Enable automatic switching again to follow list order. If prompted, finish active work before restarting ChatGPT.
+5. Send a Codex request in the desktop app and confirm that the response completes.
 
 With the ZIP and checksum file in the same directory:
 
@@ -78,10 +78,9 @@ If local tools are unavailable, use the manual steps above.
 
 ## Use the panel
 
-- **Next request:** the account selected for new model requests. Click a card to change it.
-- **Last request:** the account that actually completed the most recent model response. Selecting a card alone does not update this result.
+- **Selected account:** highlighted in the list. Click to change it in manual mode.
 - **Desktop sign-in:** your desktop account, shown separately in the footer.
-- **Automatic switching:** enabled by default in `⋯`. A brief badge appears after an automatic switch.
+- **Automatic switching:** enabled by default in `⋯`; the header shows Auto or Manual.
 - **Refresh:** retrieve usage and reset availability. Usage also refreshes 60 seconds after each refresh completes, even with the panel closed; login, switching, and overlapping refreshes are skipped.
 - **Manage accounts:** drag cards to set their order; use `⋯` or right-click to rename or remove a saved account. An empty display name restores its email. Removing it from the list does not delete the OpenAI account itself.
 
@@ -166,12 +165,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.2.2 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.2.3 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.2-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.2-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.3-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.3-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## Source layout

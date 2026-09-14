@@ -123,3 +123,5 @@
 "reset_followup_pending" = "状态尚未刷新完成，请点击“确认结果”完成操作。";
 "reset_uncertain" = "无法确认使用结果，请点击“确认结果”继续确认此前的请求。";
 "reset_failed" = "无法使用重置机会：%@";
+
+"routing_manual_badge" = "手动";

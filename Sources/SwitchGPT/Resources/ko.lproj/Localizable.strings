@@ -123,3 +123,5 @@
 "reset_followup_pending" = "상태 갱신을 마치지 못했습니다. ‘결과 확인’을 눌러 마무리해 주세요.";
 "reset_uncertain" = "사용 결과를 확인하지 못했습니다. ‘결과 확인’으로 이전 요청을 이어서 확인해 주세요.";
 "reset_failed" = "리셋권을 사용하지 못했습니다: %@";
+
+"routing_manual_badge" = "수동";

@@ -123,3 +123,5 @@
 "reset_followup_pending" = "Status refresh is incomplete. Select Check result to finish.";
 "reset_uncertain" = "Could not confirm the result. Select Check result to continue the previous request.";
 "reset_failed" = "Could not use a reset credit: %@";
+
+"routing_manual_badge" = "Manual";
