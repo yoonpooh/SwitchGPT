@@ -2,6 +2,8 @@ import SwiftUI
 
 @MainActor @Observable
 final class AccountStore {
+    static let jevAPIKeyID = "switchgpt.jev-api-key"
+
     var accounts: [Account] = []
     var message = ""
     var addingAccount = false
@@ -12,6 +14,7 @@ final class AccountStore {
     var routingActive = false
     var routingPreferences = RoutingPreferences()
     var lastRequest: RelayEvent?
+    var lastCompletedModelRouting: ModelRoutingDecision?
     var lastAutomaticSwitch: Date?
     var desktopLaunchedAt: Date?
     var selectedExhausted = false
@@ -23,6 +26,7 @@ final class AccountStore {
     var loadingUsage = false
     var profileImages: [String: NSImage] = [:]
     var emails: [String: String] = [:]
+    private(set) var hasJevAPIKey = false
     private let vault: any CredentialVault
     private let session: CodexSession
     private let usageClient: UsageClient
@@ -30,6 +34,9 @@ final class AccountStore {
     private let resetLedger: ResetCreditLedger
     private let index: URL
     private var relay: ModelRelay?
+    @ObservationIgnored let intelligentRouter = IntelligentModelRouter()
+    @ObservationIgnored private var jevAPIKey: String?
+    @ObservationIgnored private var lastCompletedEventAt: Date?
     private(set) var routingCredentials: [String: RelayCredentials] = [:]
     @ObservationIgnored private lazy var router = AccountRouter { [weak self] credentials in
         Task { @MainActor [weak self] in self?.didAutomaticallySwitch(credentials) }
@@ -45,6 +52,10 @@ final class AccountStore {
         self.credentialRefresher = CredentialRefresher(client: tokenRefreshClient)
         self.usageClient = usageClient
         self.resetLedger = ResetCreditLedger(file: self.index.deletingLastPathComponent().appendingPathComponent("reset-credit-attempts.json"))
+        self.jevAPIKey = Self.readJevAPIKey(from: vault)
+        self.hasJevAPIKey = self.jevAPIKey != nil
+        self.lastCompletedEventAt = nil
+        self.lastCompletedModelRouting = nil
         do {
             if index == nil { try Self.migrateAccountIndex(in: support) }
             if FileManager.default.fileExists(atPath: self.index.path) {
@@ -52,13 +63,35 @@ final class AccountStore {
             }
             if let data = try? Data(contentsOf: preferencesURL),
                let saved = try? JSONDecoder().decode(RoutingPreferences.self, from: data) { routingPreferences = saved }
+            if routingPreferences.modelAutomatic && jevAPIKey == nil {
+                // A legacy/stale preference must not make the UI claim that Jev is enabled.
+                routingPreferences.modelAutomatic = false
+                try? savePreferences(routingPreferences)
+            }
             let events = self.index.deletingLastPathComponent().appendingPathComponent("relay-events.jsonl")
             if let lines = try? String(contentsOf: events, encoding: .utf8).split(separator: "\n") {
-                lastRequest = lines.reversed().compactMap { try? JSONDecoder().decode(RelayEvent.self, from: Data($0.utf8)) }
+                let completed = lines.reversed().compactMap { try? JSONDecoder().decode(RelayEvent.self, from: Data($0.utf8)) }
                     .first { $0.completed && $0.status == 200 }
+                lastRequest = completed
+                lastCompletedEventAt = completed.map { $0.finishedAt ?? $0.date }
+                lastCompletedModelRouting = completed?.modelRouting?.changed == true ? completed?.modelRouting : nil
             }
             refresh()
         } catch { message = L10n.text("list_read") }
+        updateIntelligentRouter()
+    }
+
+    private static func readJevAPIKey(from vault: any CredentialVault) -> String? {
+        guard let data = try? vault.read(Self.jevAPIKeyID),
+              let value = String(data: data, encoding: .utf8) else { return nil }
+        return normalizeJevAPIKey(value)
+    }
+
+    private static func normalizeJevAPIKey(_ rawKey: String) -> String? {
+        let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, !key.hasPrefix("{"), !key.hasPrefix("["),
+              !key.contains("\r"), !key.contains("\n") else { return nil }
+        return key
     }
     static func migrateAccountIndex(in support: URL) throws {
         let destination = support.appendingPathComponent("SwitchGPT/accounts.json")
@@ -247,6 +280,11 @@ final class AccountStore {
         router.update(candidates, automatic: routingPreferences.automatic)
     }
 
+    private func updateIntelligentRouter() {
+        let enabled = routingPreferences.modelAutomatic && jevAPIKey != nil
+        intelligentRouter.update(enabled: enabled, apiKey: enabled ? jevAPIKey : nil)
+    }
+
     func setAutomatic(_ enabled: Bool) {
         var updated = routingPreferences
         updated.automatic = enabled
@@ -256,6 +294,80 @@ final class AccountStore {
             if routingActive { _ = router.resolve() }
             selectedExhausted = router.isCurrentExhausted()
         } catch { message = error.localizedDescription }
+    }
+
+    /// Toggle Jev's model selection independently from account-order routing.
+    /// Enabling without a saved key leaves the preference and engine disabled.
+    func setModelAutomatic(_ enabled: Bool) {
+        guard !enabled || jevAPIKey != nil else {
+            message = L10n.text("jev_key_required")
+            updateIntelligentRouter()
+            return
+        }
+        var updated = routingPreferences
+        updated.modelAutomatic = enabled
+        if !enabled {
+            // A disable action must take effect even if the preference file is unavailable.
+            routingPreferences = updated
+            updateIntelligentRouter()
+            do { try savePreferences(updated) }
+            catch { message = L10n.text("jev_settings_save_failed") }
+            return
+        }
+        do {
+            try savePreferences(updated)
+            updateIntelligentRouter()
+            message = ""
+        } catch {
+            // Do not update the engine or claim that Jev is enabled when persistence failed.
+            message = L10n.text("jev_settings_save_failed")
+            updateIntelligentRouter()
+        }
+    }
+
+    @discardableResult
+    func saveJevAPIKey(_ rawKey: String) -> Bool {
+        guard let key = Self.normalizeJevAPIKey(rawKey) else {
+            message = L10n.text("jev_key_required")
+            return false
+        }
+        do {
+            try vault.save(Data(key.utf8), id: Self.jevAPIKeyID)
+            jevAPIKey = key
+            hasJevAPIKey = true
+            updateIntelligentRouter()
+            message = ""
+            return true
+        } catch {
+            message = L10n.text("jev_key_save_failed")
+            updateIntelligentRouter()
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeJevAPIKey() -> Bool {
+        do {
+            try vault.remove(Self.jevAPIKeyID)
+        } catch {
+            message = L10n.text("jev_key_remove_failed")
+            return false
+        }
+        jevAPIKey = nil
+        hasJevAPIKey = false
+        var updated = routingPreferences
+        updated.modelAutomatic = false
+        // Removing a key always disables the engine, even if preference persistence fails.
+        routingPreferences = updated
+        updateIntelligentRouter()
+        do {
+            try savePreferences(updated)
+            message = ""
+            return true
+        } catch {
+            message = L10n.text("jev_settings_save_failed")
+            return false
+        }
     }
 
     private func savePreferences(_ updated: RoutingPreferences) throws {
@@ -281,6 +393,13 @@ final class AccountStore {
     func received(_ event: RelayEvent) {
         guard event.path == "/backend-api/codex/responses" else { return }
         selectedExhausted = router.isCurrentExhausted()
+        if event.status == 200 && event.completed {
+            let completedAt = event.finishedAt ?? event.date
+            if lastCompletedEventAt == nil || completedAt >= lastCompletedEventAt! {
+                lastCompletedEventAt = completedAt
+                lastCompletedModelRouting = event.modelRouting?.changed == true ? event.modelRouting : nil
+            }
+        }
         if event.status == 200 && event.completed {
             if (event.finishedAt ?? event.date) >= (lastRequest?.finishedAt ?? lastRequest?.date ?? .distantPast) {
                 lastRequest = event
@@ -381,7 +500,7 @@ final class AccountStore {
             let support = index.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             let activeRelay = relay ?? ModelRelay(desktopAuth: session.auth, eventURL: support.appendingPathComponent("relay-events.jsonl"),
-                                                 router: router, didRecord: { [weak self] event in
+                                                 router: router, intelligentRouter: intelligentRouter, didRecord: { [weak self] event in
                 Task { @MainActor [weak self] in self?.received(event) }
             })
             let isStarting = relay == nil

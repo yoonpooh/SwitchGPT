@@ -1,7 +1,7 @@
 import Foundation
 
 /// One HTTP request per connection; responses explicitly close the connection.
-struct RelayRequest {
+struct RelayRequest: Sendable {
     static let headerLimit = 65_536
     static let bodyLimit = 64 * 1024 * 1024
     let method: String
