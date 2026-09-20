@@ -24,7 +24,16 @@ final class JevRelayIntegrationTests: XCTestCase {
         try await exercise(reject: true, quota: false, compressed: true)
     }
 
-    private func exercise(reject: Bool, quota: Bool, compressed: Bool = false) async throws {
+    func testModelOnlyCompressedRequestPreservesOriginalEffort() async throws {
+        try await exercise(reject: false, quota: false, compressed: true, routeEffort: false)
+    }
+
+    func testEffortOnlyCompressedRequestSurvivesAccountRetry() async throws {
+        try await exercise(reject: false, quota: true, compressed: true, routeModel: false)
+    }
+
+    private func exercise(reject: Bool, quota: Bool, compressed: Bool = false,
+                          routeModel: Bool = true, routeEffort: Bool = true) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -37,9 +46,9 @@ final class JevRelayIntegrationTests: XCTestCase {
         let recorder = JevRelayRecorder()
         let engine = IntelligentModelRouter(classifier: { _, _ in
             recorder.classified()
-            return JevRoutingAnswer(preset: "luna_max", confidence: 0.99)
+            return JevRoutingAnswer(preset: routeModel ? "luna_max" : "sol_high", confidence: 0.99)
         })
-        engine.update(enabled: true, apiKey: "fixture-key")
+        engine.update(enabled: true, apiKey: "fixture-key", routeModel: routeModel, routeEffort: routeEffort)
         let accounts = try ["first", "second"].map { try RelayCredentials(credential($0)) }
         let accountRouter = AccountRouter()
         accountRouter.select(accounts[0])
@@ -66,8 +75,9 @@ final class JevRelayIntegrationTests: XCTestCase {
         let calls = upstream.requests
         XCTAssertEqual(calls.count, reject || quota ? 2 : 1)
         let routed = try XCTUnwrap(try JSONSerialization.jsonObject(with: calls[0].body) as? [String: Any])
-        XCTAssertEqual(routed["model"] as? String, "gpt-5.6-luna")
-        XCTAssertEqual((routed["reasoning"] as? [String: Any])?["effort"] as? String, "max")
+        XCTAssertEqual(routed["model"] as? String, routeModel ? "gpt-5.6-luna" : "gpt-6-astra")
+        XCTAssertEqual((routed["reasoning"] as? [String: Any])?["effort"] as? String,
+                       routeEffort ? (routeModel ? "max" : "high") : "medium")
         XCTAssertNil(calls[0].headers["content-encoding"])
         if reject {
             XCTAssertEqual(calls[1].body, baseline.httpBody)
@@ -78,8 +88,15 @@ final class JevRelayIntegrationTests: XCTestCase {
             XCTAssertEqual(calls[1].headers["authorization"], "Bearer second-token")
         }
         let completed = try XCTUnwrap(recorder.events.last { $0.completed })
-        XCTAssertEqual(completed.model, reject ? "gpt-6-astra" : "gpt-5.6-luna")
+        XCTAssertEqual(completed.model, reject || !routeModel ? "gpt-6-astra" : "gpt-5.6-luna")
         XCTAssertEqual(completed.modelRouting?.changed, !reject)
+        let diagnostics = try XCTUnwrap(completed.modelRouting?.diagnostics)
+        XCTAssertEqual(diagnostics.routeModel, routeModel)
+        XCTAssertEqual(diagnostics.routeEffort, routeEffort)
+        XCTAssertEqual(diagnostics.modelDisposition, routeModel ? (reject ? .upstreamRejected : .applied) : .disabled)
+        XCTAssertEqual(diagnostics.effortDisposition, routeEffort ? (reject ? .upstreamRejected : .applied) : .disabled)
+        XCTAssertNil(routed["diagnostics"])
+        XCTAssertNil(routed["modelRouting"])
         if reject { XCTAssertEqual(completed.modelRouting?.reason, "upstream_unsupported") }
         XCTAssertEqual(try Data(contentsOf: auth), desktop.data)
 

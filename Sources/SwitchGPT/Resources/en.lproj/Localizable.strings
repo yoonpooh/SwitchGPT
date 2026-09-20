@@ -110,6 +110,7 @@
 "jev_disclosure" = "Uses TypeSafe · billed separately";
 "jev_key_disclosure" = "A short fragment of your prompt may be sent to TypeSafe to choose a model. TypeSafe inference is a separate billed service.";
 "jev_auto_toggle" = "Automatically choose the model";
+"jev_effort_auto_toggle" = "Automatically choose reasoning effort";
 "jev_save_key" = "Save Jev API key";
 "jev_replace_key" = "Replace Jev API key";
 "jev_remove_key" = "Remove Jev API key";

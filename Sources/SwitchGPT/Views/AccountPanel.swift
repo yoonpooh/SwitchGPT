@@ -67,6 +67,7 @@ struct AccountPanel: View {
             .onChange(of: store.currentID) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.routingPreferences.automatic) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.routingPreferences.modelAutomatic) { _, _ in NSCursor.arrow.set() }
+            .onChange(of: store.routingPreferences.effortAutomatic) { _, _ in NSCursor.arrow.set() }
     }
 
     private var header: some View {
@@ -96,6 +97,8 @@ struct AccountPanel: View {
                         .font(.caption).foregroundStyle(.secondary)
                     Toggle(L10n.text("jev_auto_toggle"), isOn: Binding(
                         get: { store.routingPreferences.modelAutomatic }, set: { store.setModelAutomatic($0) }))
+                    Toggle(L10n.text("jev_effort_auto_toggle"), isOn: Binding(
+                        get: { store.routingPreferences.effortAutomatic }, set: { store.setEffortAutomatic($0) }))
                     Divider()
                     Button(L10n.text(store.hasJevAPIKey ? "jev_replace_key" : "jev_save_key"), action: editJevAPIKey)
                     Button(L10n.text("jev_remove_key"), role: .destructive) {

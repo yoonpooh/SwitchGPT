@@ -1,0 +1,167 @@
+[
+  {
+    "case": "live-low",
+    "attribution": "time-and-token matched candidate, not verified thread ownership",
+    "date": "2026-09-20 18:13:16.209815+00:00",
+    "completed": true,
+    "status": 200,
+    "inputTokens": 24171,
+    "outputTokens": 334,
+    "routing": {
+      "originalModel": "gpt-6-astra",
+      "originalEffort": "low",
+      "reason": "routed",
+      "selectedModel": "gpt-5.6-sol",
+      "diagnostics": {
+        "proposedModel": "gpt-5.6-sol",
+        "effortConfidence": 0.62,
+        "effortDisposition": "low_confidence",
+        "modelDisposition": "applied",
+        "routeModel": true,
+        "effortThreshold": 0.8,
+        "modelConfidence": 0.84,
+        "modelThreshold": 0.8,
+        "proposedEffort": "high",
+        "routeEffort": true
+      },
+      "selectedEffort": "low"
+    }
+  },
+  {
+    "case": "easy",
+    "attribution": "time-and-token matched candidate, not verified thread ownership",
+    "date": "2026-09-20 18:14:10.467570+00:00",
+    "completed": true,
+    "status": 200,
+    "inputTokens": 24114,
+    "outputTokens": 26,
+    "routing": {
+      "selectedEffort": "medium",
+      "reason": "routed",
+      "diagnostics": {
+        "effortDisposition": "unchanged",
+        "proposedModel": "gpt-5.6-luna",
+        "routeEffort": true,
+        "modelConfidence": 0.97,
+        "routeModel": true,
+        "modelDisposition": "applied",
+        "effortConfidence": 0.86,
+        "proposedEffort": "medium",
+        "modelThreshold": 0.8
+      },
+      "originalEffort": "medium",
+      "originalModel": "gpt-6-astra",
+      "selectedModel": "gpt-5.6-luna"
+    }
+  },
+  {
+    "case": "proof",
+    "attribution": "time-and-token matched candidate, not verified thread ownership",
+    "date": "2026-09-20 18:14:10.494134+00:00",
+    "completed": true,
+    "status": 200,
+    "inputTokens": 24187,
+    "outputTokens": 442,
+    "routing": {
+      "reason": "routed",
+      "diagnostics": {
+        "proposedModel": "gpt-5.6-luna",
+        "modelDisposition": "applied",
+        "modelConfidence": 0.89,
+        "effortDisposition": "low_confidence",
+        "routeModel": true,
+        "routeEffort": true,
+        "proposedEffort": "max",
+        "effortConfidence": 0.69,
+        "modelThreshold": 0.8,
+        "effortThreshold": 0.8
+      },
+      "originalModel": "gpt-6-astra",
+      "selectedModel": "gpt-5.6-luna",
+      "originalEffort": "medium",
+      "selectedEffort": "medium"
+    }
+  },
+  {
+    "case": "hard",
+    "attribution": "time-and-token matched candidate, not verified thread ownership",
+    "date": "2026-09-20 18:14:10.462444+00:00",
+    "completed": true,
+    "status": 200,
+    "inputTokens": 24215,
+    "outputTokens": 521,
+    "routing": {
+      "selectedModel": "gpt-6-astra",
+      "reason": "low_confidence",
+      "diagnostics": {
+        "proposedModel": "gpt-6-astra",
+        "effortDisposition": "low_confidence",
+        "modelConfidence": 0.4,
+        "routeModel": true,
+        "routeEffort": true,
+        "proposedEffort": "high",
+        "effortConfidence": 0.76,
+        "effortThreshold": 0.8,
+        "modelDisposition": "unchanged"
+      },
+      "selectedEffort": "medium",
+      "originalModel": "gpt-6-astra",
+      "originalEffort": "medium"
+    }
+  },
+  {
+    "case": "proof-after",
+    "attribution": "time-and-token matched candidate, not verified thread ownership",
+    "date": "2026-09-20 18:17:27.559804+00:00",
+    "completed": true,
+    "status": 200,
+    "inputTokens": 24184,
+    "outputTokens": 944,
+    "routing": {
+      "reason": "routed",
+      "originalEffort": "medium",
+      "selectedModel": "gpt-5.6-luna",
+      "originalModel": "gpt-6-astra",
+      "diagnostics": {
+        "modelConfidence": 0.89,
+        "proposedEffort": "max",
+        "effortThreshold": 0.65,
+        "routeEffort": true,
+        "proposedModel": "gpt-5.6-luna",
+        "effortConfidence": 0.83,
+        "routeModel": true,
+        "modelDisposition": "applied",
+        "effortDisposition": "applied",
+        "modelThreshold": 0.8
+      },
+      "selectedEffort": "max"
+    }
+  },
+  {
+    "case": "hard-after",
+    "attribution": "time-and-token matched candidate, not verified thread ownership",
+    "date": "2026-09-20 18:17:43.491401+00:00",
+    "completed": true,
+    "status": 200,
+    "inputTokens": 24216,
+    "outputTokens": 573,
+    "routing": {
+      "diagnostics": {
+        "proposedEffort": "high",
+        "effortConfidence": 0.76,
+        "routeModel": true,
+        "effortThreshold": 0.65,
+        "effortDisposition": "applied",
+        "modelDisposition": "unchanged",
+        "routeEffort": true,
+        "modelConfidence": 0.54,
+        "proposedModel": "gpt-6-astra"
+      },
+      "reason": "routed",
+      "selectedModel": "gpt-6-astra",
+      "originalModel": "gpt-6-astra",
+      "originalEffort": "medium",
+      "selectedEffort": "high"
+    }
+  }
+]

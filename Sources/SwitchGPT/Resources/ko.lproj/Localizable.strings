@@ -110,6 +110,7 @@
 "jev_disclosure" = "TypeSafe 사용 · 별도 과금";
 "jev_key_disclosure" = "모델 선택을 위해 프롬프트 일부가 TypeSafe로 전송될 수 있습니다. TypeSafe 추론은 별도 청구 서비스입니다.";
 "jev_auto_toggle" = "모델 자동 선택";
+"jev_effort_auto_toggle" = "추론 effort 자동 선택";
 "jev_save_key" = "Jev API 키 저장";
 "jev_replace_key" = "Jev API 키 교체";
 "jev_remove_key" = "Jev API 키 삭제";

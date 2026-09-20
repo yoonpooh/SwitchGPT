@@ -342,7 +342,9 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
                 if let decision = modelRouting {
                     modelRouting = ModelRoutingDecision(originalModel: decision.originalModel,
                         originalEffort: decision.originalEffort, selectedModel: decision.originalModel,
-                        selectedEffort: decision.originalEffort, reason: "upstream_unsupported")
+                        selectedEffort: decision.originalEffort, reason: "upstream_unsupported",
+                        diagnostics: decision.diagnostics?.markingUpstreamRejected(
+                            originalModel: decision.originalModel, originalEffort: decision.originalEffort))
                 }
                 intelligentRouter.retainOriginal(for: baseline)
                 originalRequest = baseline

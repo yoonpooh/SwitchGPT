@@ -110,6 +110,7 @@
 "jev_disclosure" = "使用 TypeSafe · 单独计费";
 "jev_key_disclosure" = "模型选择可能会将一小段提示内容发送给 TypeSafe。TypeSafe 推理属于单独计费的服务。";
 "jev_auto_toggle" = "自动选择模型";
+"jev_effort_auto_toggle" = "自动选择推理 effort";
 "jev_save_key" = "保存 Jev API 密钥";
 "jev_replace_key" = "替换 Jev API 密钥";
 "jev_remove_key" = "删除 Jev API 密钥";

@@ -45,9 +45,109 @@ final class IntelligentModelRouterTests: XCTestCase {
         }
     }
 
+    func testModelAndEffortCanRouteIndependently() async throws {
+        let modelOnly = IntelligentModelRouter(classifier: { _, _ in
+            JevRoutingAnswer(model: "luna", effort: "max", modelConfidence: 0.99, effortConfidence: 0.99)
+        })
+        modelOnly.update(enabled: true, apiKey: "fixture-key", routeModel: true, routeEffort: false)
+        let modelResult = await modelOnly.route(try makeRequest())
+        let modelObject = try XCTUnwrap(try JSONSerialization.jsonObject(with: modelResult.request.body) as? [String: Any])
+        XCTAssertEqual(modelObject["model"] as? String, "gpt-5.6-luna")
+        XCTAssertEqual((modelObject["reasoning"] as? [String: Any])?["effort"] as? String, "medium")
+
+        let effortOnly = IntelligentModelRouter(classifier: { _, _ in
+            JevRoutingAnswer(model: "keep", effort: "high", modelConfidence: 0.99, effortConfidence: 0.99)
+        })
+        effortOnly.update(enabled: true, apiKey: "fixture-key", routeModel: false, routeEffort: true)
+        let effortResult = await effortOnly.route(try makeRequest())
+        let effortObject = try XCTUnwrap(try JSONSerialization.jsonObject(with: effortResult.request.body) as? [String: Any])
+        XCTAssertEqual(effortObject["model"] as? String, "gpt-6-astra")
+        XCTAssertEqual((effortObject["reasoning"] as? [String: Any])?["effort"] as? String, "high")
+    }
+
+    func testIndependentConfidenceKeepsOnlyTheUncertainDimension() async throws {
+        let modelUncertain = IntelligentModelRouter(classifier: { _, _ in
+            JevRoutingAnswer(model: "luna", effort: "high", modelConfidence: 0.79, effortConfidence: 0.99)
+        })
+        modelUncertain.update(enabled: true, apiKey: "fixture-key")
+        let effortResult = await modelUncertain.route(try makeRequest())
+        let effortObject = try XCTUnwrap(try JSONSerialization.jsonObject(with: effortResult.request.body) as? [String: Any])
+        XCTAssertEqual(effortObject["model"] as? String, "gpt-6-astra")
+        XCTAssertEqual((effortObject["reasoning"] as? [String: Any])?["effort"] as? String, "high")
+
+        let effortUncertain = IntelligentModelRouter(classifier: { _, _ in
+            JevRoutingAnswer(model: "luna", effort: "high", modelConfidence: 0.99, effortConfidence: 0.64)
+        })
+        effortUncertain.update(enabled: true, apiKey: "fixture-key")
+        let modelResult = await effortUncertain.route(try makeRequest())
+        let modelObject = try XCTUnwrap(try JSONSerialization.jsonObject(with: modelResult.request.body) as? [String: Any])
+        XCTAssertEqual(modelObject["model"] as? String, "gpt-5.6-luna")
+        XCTAssertEqual((modelObject["reasoning"] as? [String: Any])?["effort"] as? String, "medium")
+    }
+
+    func testSameBaselineStaysRoutedButUnknownEffortIsKept() async throws {
+        let sameBaseline = IntelligentModelRouter(classifier: { _, _ in
+            JevRoutingAnswer(model: "astra", effort: "medium", modelConfidence: 0.99,
+                             effortConfidence: 0.99)
+        })
+        sameBaseline.update(enabled: true, apiKey: "fixture-key")
+        let sameResult = await sameBaseline.route(try makeRequest())
+        XCTAssertEqual(sameResult.decision?.reason, ModelRoutingReason.routed.rawValue)
+        XCTAssertFalse(sameResult.decision?.changed ?? true)
+
+        let unsupportedPair = IntelligentModelRouter(classifier: { _, _ in
+            JevRoutingAnswer(model: "astra", effort: "max", modelConfidence: 0.99,
+                             effortConfidence: 0.99)
+        })
+        unsupportedPair.update(enabled: true, apiKey: "fixture-key")
+        let unsupportedRequest = try makeRequest(body: ["model": "gpt-6-astra", "reasoning": ["effort": "xhigh"], "input": "Explain the algorithm"])
+        let rejectedResult = await unsupportedPair.route(unsupportedRequest)
+        XCTAssertEqual(rejectedResult.decision?.reason, ModelRoutingReason.keep.rawValue)
+        XCTAssertFalse(rejectedResult.decision?.changed ?? true)
+        XCTAssertEqual(rejectedResult.request.body, unsupportedRequest.body)
+    }
+
+    func testLiveIndependentEffortUsesSupportedCombinations() async throws {
+        for (family, model, effort) in [("luna", "gpt-5.6-luna", "high"),
+                                         ("sol", "gpt-5.6-sol", "max"),
+                                         ("astra", "gpt-6-astra", "max")] {
+            let response = try JSONSerialization.data(withJSONObject: ["answers": [
+                "model": ["type": "choice", "choice": family, "confidence": 0.99,
+                          "probabilities": [family: 0.99, "keep": 0.01]],
+                "effort": ["type": "choice", "choice": effort, "confidence": 0.99,
+                           "probabilities": [effort: 0.99, "keep": 0.01]]
+            ]])
+            let router = IntelligentModelRouter(transport: { _ in
+                IntelligentModelRouterHTTPResponse(statusCode: 200, data: response)
+            })
+            router.update(enabled: true, apiKey: "fixture-key", routeModel: false, routeEffort: true)
+            let request = try makeRequest(body: ["model": model, "reasoning": ["effort": "medium"],
+                                                  "input": "Explain this algorithm"])
+            let result = await router.route(request)
+            let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: result.request.body) as? [String: Any])
+            XCTAssertEqual(object["model"] as? String, model)
+            XCTAssertEqual((object["reasoning"] as? [String: Any])?["effort"] as? String, effort)
+            XCTAssertEqual(result.decision?.reason, "routed")
+        }
+    }
+
+    func testLiveKeepOnEitherDimensionPreservesTheWholeBaseline() async throws {
+        let response = Data("""
+        {"answers":{"model":{"type":"choice","choice":"keep","probabilities":{"keep":0.99,"luna":0.01},"confidence":0.99},"effort":{"type":"choice","choice":"high","probabilities":{"high":0.99,"keep":0.01},"confidence":0.99}}}
+        """.utf8)
+        let router = IntelligentModelRouter(transport: { _ in
+            IntelligentModelRouterHTTPResponse(statusCode: 200, data: response)
+        })
+        router.update(enabled: true, apiKey: "fixture-key")
+        let request = try makeRequest()
+        let result = await router.route(request)
+        XCTAssertEqual(result.request.body, request.body)
+        XCTAssertEqual(result.decision?.reason, ModelRoutingReason.keep.rawValue)
+    }
+
     func testLowConfidenceMalformedAndTimeoutKeepBaselineExactly() async throws {
         let cases: [(JevRoutingAnswer?, Error?)] = [
-            (JevRoutingAnswer(preset: "luna_max", confidence: 0.79), nil),
+            (JevRoutingAnswer(preset: "luna_max", confidence: 0.64), nil),
             (nil, IntelligentModelRouterError.malformedResponse),
             (nil, IntelligentModelRouterError.timeout)
         ]
@@ -71,7 +171,7 @@ final class IntelligentModelRouterTests: XCTestCase {
         let router = IntelligentModelRouter(transport: { request in
             await capture.save(request)
             let response = Data("""
-            {"model":"jev-1.13.0","answers":{"route":{"type":"choice","choice":"sol_high","probabilities":{"sol_high":0.95,"keep":0.05},"confidence":0.95}},"usage":{"input_tokens":1,"output_tokens":1}}
+            {"model":"jev-1.13.0","answers":{"model":{"type":"choice","choice":"sol","probabilities":{"sol":0.95,"keep":0.05},"confidence":0.95},"effort":{"type":"choice","choice":"high","probabilities":{"high":0.95,"keep":0.05},"confidence":0.95}},"usage":{"input_tokens":1,"output_tokens":1}}
             """.utf8)
             return IntelligentModelRouterHTTPResponse(statusCode: 200, data: response)
         })
@@ -93,9 +193,12 @@ final class IntelligentModelRouterTests: XCTestCase {
         XCTAssertNil(state["authorization"])
         XCTAssertNil(state["thread-id"])
         XCTAssertEqual((body["model"] as? String), "jev-1.13.0")
-        let question = try XCTUnwrap((body["questions"] as? [String: Any])?["route"] as? [String: Any])
+        let questions = try XCTUnwrap(body["questions"] as? [String: Any])
+        let question = try XCTUnwrap(questions["model"] as? [String: Any])
         XCTAssertEqual(question["type"] as? String, "choice")
-        XCTAssertTrue((question["criteria"] as? [String: Any])?.keys.contains("luna_max") == true)
+        XCTAssertTrue((question["criteria"] as? [String: Any])?.keys.contains("luna") == true)
+        let effortQuestion = try XCTUnwrap(questions["effort"] as? [String: Any])
+        XCTAssertEqual(effortQuestion["type"] as? String, "choice")
     }
 
     func testUnrelatedFieldsRemainAndContinuationReusesDecisionOnce() async throws {
@@ -163,6 +266,126 @@ final class IntelligentModelRouterTests: XCTestCase {
         XCTAssertFalse(result.decision?.changed ?? true)
     }
 
+    @available(macOS 15.0, *)
+    func testSingleFlightRetainOriginalPreservesNewSameTurnRequests() async throws {
+        let executor = RoutingTestExecutor()
+        let classifier = RoutingTestClassifierGate()
+        let router = IntelligentModelRouter(classifier: { _, _ in await classifier.answer() }, timeout: 60)
+        router.update(enabled: true, apiKey: "fixture-key")
+        let request = try makeRequest()
+        let first = Task.detached(executorPreference: executor) {
+            classifier.routeStarted()
+            return await router.route(request)
+        }
+        let second = Task.detached(executorPreference: executor) {
+            classifier.routeStarted()
+            return await router.route(request)
+        }
+
+        // Exhaust every runnable job while classification is blocked. Both route calls
+        // have reached task.value; neither can be satisfied by a completed cache entry.
+        executor.runUntilIdle()
+        XCTAssertEqual(classifier.startedRoutes, 2)
+        XCTAssertEqual(classifier.count, 1)
+        classifier.releaseAll(JevRoutingAnswer(preset: "luna_max", confidence: 0.99))
+        executor.runAutomatically()
+        let results = await [first.value, second.value]
+        for result in results {
+            XCTAssertEqual(result.decision?.selectedModel, "gpt-5.6-luna")
+            XCTAssertEqual(result.decision?.selectedEffort, "max")
+        }
+        XCTAssertEqual(classifier.count, 1)
+
+        // ModelRelay calls this on a capability rejection. Previously returned
+        // results are allowed to finish; newly admitted requests must keep baseline.
+        router.retainOriginal(for: request)
+        let repeated = await router.route(request)
+        XCTAssertEqual(repeated.request.body, request.body)
+        XCTAssertEqual(repeated.decision?.reason, "keep")
+        let continuation = try makeRequest(body: [
+            "model": "gpt-6-astra", "reasoning": ["effort": "medium"],
+            "input": [["type": "function_call_output", "call_id": "1", "output": "done"]]
+        ])
+        let continued = await router.route(continuation)
+        XCTAssertEqual(continued.request.body, continuation.body)
+        XCTAssertEqual(continued.decision?.reason, "continuation_reused")
+        XCTAssertEqual(classifier.count, 1)
+    }
+
+    func testNewSameTurnRequestsReflectModelAndEffortSettingChanges() async throws {
+        let calls = CallCounter()
+        let router = IntelligentModelRouter(classifier: { _, _ in
+            await calls.increment()
+            return JevRoutingAnswer(preset: "sol_high", confidence: 0.99)
+        })
+        let request = try makeRequest()
+        for (model, effort, expectedModel, expectedEffort) in [
+            (true, true, "gpt-5.6-sol", "high"),
+            (false, true, "gpt-6-astra", "high"),
+            (true, false, "gpt-5.6-sol", "medium"),
+            (false, false, "gpt-6-astra", "medium")
+        ] {
+            router.update(enabled: true, apiKey: "fixture-key", routeModel: model, routeEffort: effort)
+            let result = await router.route(request)
+            XCTAssertEqual(result.decision?.selectedModel, expectedModel)
+            XCTAssertEqual(result.decision?.selectedEffort, expectedEffort)
+            if !model && !effort { XCTAssertEqual(result.request.body, request.body) }
+        }
+        let count = await calls.value
+        XCTAssertEqual(count, 3) // Each enabled generation reclassifies the identical key.
+    }
+
+    @available(macOS 15.0, *)
+    func testSettingsChangeDuringSingleFlightCannotRepopulateOldGeneration() async throws {
+        for (model, effort, expectedModel, expectedEffort) in [
+            (false, true, "gpt-6-astra", "high"),
+            (true, false, "gpt-5.6-sol", "medium")
+        ] {
+            let executor = RoutingTestExecutor()
+            let classifier = RoutingTestClassifierGate()
+            let router = IntelligentModelRouter(classifier: { _, _ in await classifier.answer() }, timeout: 60)
+            router.update(enabled: true, apiKey: "fixture-key")
+            let request = try makeRequest()
+            let first = Task.detached(executorPreference: executor) {
+                classifier.routeStarted()
+                return await router.route(request)
+            }
+            let second = Task.detached(executorPreference: executor) {
+                classifier.routeStarted()
+                return await router.route(request)
+            }
+            executor.runUntilIdle()
+            XCTAssertEqual(classifier.startedRoutes, 2)
+            XCTAssertEqual(classifier.count, 1)
+
+            router.update(enabled: true, apiKey: "fixture-key", routeModel: model, routeEffort: effort)
+            let fresh = Task.detached(executorPreference: executor) {
+                classifier.routeStarted()
+                return await router.route(request)
+            }
+            executor.runAutomatically()
+            await fulfillment(of: [classifier.secondCallStarted], timeout: 5)
+            XCTAssertEqual(classifier.count, 2) // New request cannot join the cancelled generation.
+            // Deliberately ignore cancellation in the fixture: late old work must be
+            // harmless even when the classifier cooperates poorly with cancellation.
+            classifier.releaseLast(JevRoutingAnswer(preset: "sol_high", confidence: 0.99))
+            let newResult = await fresh.value
+            // Complete the obsolete generation only after the new result is cached.
+            classifier.releaseAll(JevRoutingAnswer(preset: "luna_max", confidence: 0.99))
+            let oldResults = await [first.value, second.value]
+            for result in oldResults {
+                XCTAssertEqual(result.request.body, request.body)
+                XCTAssertEqual(result.decision?.reason, "settings_changed")
+            }
+            XCTAssertEqual(newResult.decision?.selectedModel, expectedModel)
+            XCTAssertEqual(newResult.decision?.selectedEffort, expectedEffort)
+            let cached = await router.route(request)
+            XCTAssertEqual(cached.decision?.selectedModel, expectedModel)
+            XCTAssertEqual(cached.decision?.selectedEffort, expectedEffort)
+            XCTAssertEqual(classifier.count, 2)
+        }
+    }
+
     func testUnknownModelAndMultimodalBodyPassThrough() async throws {
         let calls = CallCounter()
         let router = IntelligentModelRouter(classifier: { _, _ in
@@ -170,7 +393,7 @@ final class IntelligentModelRouterTests: XCTestCase {
             return JevRoutingAnswer(preset: "luna_max", confidence: 1)
         })
         router.update(enabled: true, apiKey: "fixture-key")
-        let unknown = try makeRequest(body: ["model": "unknown-model", "input": "text"])
+        let unknown = try makeRequest(body: ["model": "gpt-5.4-codex", "input": "text"])
         let image = try makeRequest(body: [
             "model": "gpt-6-astra", "input": [["role": "user", "content": [
                 ["type": "input_text", "text": "inspect"], ["type": "input_image", "image_url": "https://example.invalid/a.png"]
@@ -256,18 +479,24 @@ final class IntelligentModelRouterTests: XCTestCase {
 
     func testMalformedProbabilityDistributionsKeepOriginalBody() async throws {
         let distributions: [[String: Double]] = [
-            ["luna_medium": 0.1, "keep": 0.9], // choice contradicts winner
+            ["luna": 0.1, "keep": 0.9], // choice contradicts winner
             ["keep": 1], // selected label absent
-            ["luna_medium": 1.1, "keep": -0.1],
-            ["luna_medium": 0.7], // not normalized
-            ["luna_medium": 0.99, "unknown": 0.01],
+            ["luna": 1.1, "keep": -0.1],
+            ["luna": 0.7], // not normalized
+            ["luna": 0.99, "unknown": 0.01],
             [:]
         ]
         for distribution in distributions {
-            let data = try JSONSerialization.data(withJSONObject: ["answers": ["route": [
-                "type": "choice", "choice": "luna_medium", "confidence": 0.99,
-                "probabilities": distribution
-            ]]])
+            let data = try JSONSerialization.data(withJSONObject: ["answers": [
+                "model": [
+                    "type": "choice", "choice": "luna", "confidence": 0.99,
+                    "probabilities": distribution
+                ],
+                "effort": [
+                    "type": "choice", "choice": "medium", "confidence": 0.99,
+                    "probabilities": ["medium": 1.0]
+                ]
+            ]])
             let router = IntelligentModelRouter(transport: { _ in
                 IntelligentModelRouterHTTPResponse(statusCode: 200, data: data)
             })
@@ -277,6 +506,20 @@ final class IntelligentModelRouterTests: XCTestCase {
             XCTAssertEqual(result.request.body, request.body)
             XCTAssertEqual(result.decision?.reason, "malformed_response")
         }
+    }
+
+    func testMalformedIndependentAnswerKeepsBothDimensions() async throws {
+        let response = Data("""
+        {"answers":{"model":{"type":"choice","choice":"luna","probabilities":{"luna":0.7,"keep":0.1},"confidence":0.99},"effort":{"type":"choice","choice":"high","probabilities":{"high":0.99,"keep":0.01},"confidence":0.99}}}
+        """.utf8)
+        let router = IntelligentModelRouter(transport: { _ in
+            IntelligentModelRouterHTTPResponse(statusCode: 200, data: response)
+        })
+        router.update(enabled: true, apiKey: "fixture-key")
+        let request = try makeRequest()
+        let result = await router.route(request)
+        XCTAssertEqual(result.request.body, request.body)
+        XCTAssertEqual(result.decision?.reason, ModelRoutingReason.malformedResponse.rawValue)
     }
 
     func testCredentialsInLatestOrPriorNeverReachClassifier() async throws {
@@ -394,4 +637,86 @@ private actor InputCapture {
     private var input: JevRoutingInput?
     func save(_ input: JevRoutingInput) { self.input = input }
     var value: JevRoutingInput? { input }
+}
+
+/// Manual draining fixes the ordering without sleeps or scheduler-luck assumptions.
+/// Once the blocked phase is inspected, a serial queue finishes all remaining jobs.
+@available(macOS 15.0, *)
+private final class RoutingTestExecutor: TaskExecutor, @unchecked Sendable {
+    private let lock = NSLock()
+    private let queue = DispatchQueue(label: "switchgpt.routing-test-executor")
+    private var jobs: [UnownedJob] = []
+    private var automatic = false
+
+    func enqueue(_ job: consuming ExecutorJob) {
+        let job = UnownedJob(job)
+        lock.lock()
+        if automatic {
+            queue.async { job.runSynchronously(on: self.asUnownedTaskExecutor()) }
+        } else {
+            jobs.append(job)
+        }
+        lock.unlock()
+    }
+
+    func runUntilIdle() {
+        while true {
+            lock.lock()
+            let job = jobs.isEmpty ? nil : jobs.removeFirst()
+            lock.unlock()
+            guard let job else { return }
+            job.runSynchronously(on: asUnownedTaskExecutor())
+        }
+    }
+
+    func runAutomatically() {
+        lock.lock()
+        automatic = true
+        for job in jobs {
+            queue.async { job.runSynchronously(on: self.asUnownedTaskExecutor()) }
+        }
+        jobs.removeAll()
+        lock.unlock()
+    }
+}
+
+private final class RoutingTestClassifierGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pending: [CheckedContinuation<JevRoutingAnswer, Never>] = []
+    private var calls = 0
+    private var routes = 0
+    let secondCallStarted = XCTestExpectation(description: "new generation classification started")
+
+    var count: Int { lock.lock(); defer { lock.unlock() }; return calls }
+    var startedRoutes: Int { lock.lock(); defer { lock.unlock() }; return routes }
+
+    func routeStarted() {
+        lock.lock(); defer { lock.unlock() }
+        routes += 1
+    }
+
+    func answer() async -> JevRoutingAnswer {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            calls += 1
+            pending.append(continuation)
+            if calls == 2 { secondCallStarted.fulfill() }
+            lock.unlock()
+        }
+    }
+
+    func releaseLast(_ answer: JevRoutingAnswer) {
+        lock.lock()
+        let continuation = pending.popLast()
+        lock.unlock()
+        continuation?.resume(returning: answer)
+    }
+
+    func releaseAll(_ answer: JevRoutingAnswer) {
+        lock.lock()
+        let continuations = pending
+        pending.removeAll()
+        lock.unlock()
+        for continuation in continuations { continuation.resume(returning: answer) }
+    }
 }

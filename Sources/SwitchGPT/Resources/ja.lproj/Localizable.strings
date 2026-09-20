@@ -110,6 +110,7 @@
 "jev_disclosure" = "TypeSafeを使用 · 別途請求";
 "jev_key_disclosure" = "モデル選択のため、プロンプトの一部がTypeSafeに送信される場合があります。TypeSafeの推論は別途請求されるサービスです。";
 "jev_auto_toggle" = "モデルを自動選択";
+"jev_effort_auto_toggle" = "推論effortを自動選択";
 "jev_save_key" = "Jev APIキーを保存";
 "jev_replace_key" = "Jev APIキーを置き換え";
 "jev_remove_key" = "Jev APIキーを削除";
