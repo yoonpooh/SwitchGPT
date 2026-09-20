@@ -12,13 +12,16 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 アカウントを手動で選ぶことも、利用上限に達したら利用可能な別のアカウントへ自動で切り替えることもできます。
 
-[v0.2.4 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.5 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.4 の主な変更
+## 0.2.5 の主な変更
 
-- **認証トークンの自動更新：** 保存済みアカウントを期限直前、または利用状況の取得が401になった際に一度更新し、保存してから再試行します。
-- **デスクトップ認証の同期：** 共有トークンを独自に更新せず、Codexが更新した最新の認証情報を保存します。
-- **コンパクトなパネル：** アカウント行、利用状況バー、プラン表示、リセット操作を小さくまとめました。
+- **任意の JEV モデル選択:** アカウント切り替えとは別にモデルと推論レベルを選択します。
+- **圧縮リクエストの修正:** zstd を展開して分類し、安全に切り替えられない場合は元のリクエストを維持します。
+- **画像履歴の改善:** 過去の画像と無関係な新しいテキストを分類します。現在の画像や画像への参照は保守的に元のモデルを維持します。
+- **パネルの整理:** 一時的な使用量取得エラー表示と空の状態欄の余白を削減しました。
+
+JEV は既定で無効です。メニューから API キーを保存して有効にします。最新および直前のユーザーテキストが TypeSafe に送信され、ChatGPT サブスクリプションとは別料金です。資格情報のパターン検査は、すべての機密情報の除去を保証しません。詳細は [英語版](README.md#optional-automatic-model-selection)をご覧ください。
 
 ## 0.2.0 で導入した基本機能
 
@@ -46,7 +49,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 **Apple シリコン搭載 Mac、macOS 14 以降**と、インストール・ログイン済みの現行 ChatGPT デスクトップアプリが必要です。標準のファイル形式の認証情報 `~/.codex/auth.json` を使用してください。同梱の CLI を使うため、CLI の別途インストールは不要です。
 
-1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4)から `SwitchGPT-v0.2.4-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
+1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5)から `SwitchGPT-v0.2.5-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
 2. 下のコマンドでチェックサムを確認し、ZIP を展開して **SwitchGPT.app** を **アプリケーション** に移動します。
 3. SwitchGPT を開き、メニューバーアイコンをクリックします。**+** からブラウザでログインしてアカウントを追加します。保存するアカウントごとに繰り返してください。
 4. 初回は `⋯` で自動切り替えを無効にし、アカウントカードをクリックします。リスト順を使う場合は自動切り替えを再び有効にします。 ChatGPT の再起動を求められたら、進行中の作業を終えてから再起動してください。
@@ -140,6 +143,7 @@ Issue やコミットに認証情報、アカウント一覧、個人アカウ�
 Swift 6 と macOS SDK を含む Xcode をインストールし、そのコマンドラインツールを選択してから実行してください。
 
 ```sh
+brew install zstd
 git clone https://github.com/yoonpooh/SwitchGPT.git
 cd SwitchGPT
 ./script/build_and_run.sh --verify
@@ -165,12 +169,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### リリースのパッケージ化
 
-スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.4 は Apple シリコン向けです。
+スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.5 は Apple シリコン向けです。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.5-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.5-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## ソース構成

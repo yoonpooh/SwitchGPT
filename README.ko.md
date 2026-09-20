@@ -12,13 +12,14 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 직접 실행 계정을 선택하거나, 한도가 소진되면 사용 가능한 다음 계정으로 자동 전환하세요.
 
-[v0.2.4 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.5 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.4의 주요 변경
+## 0.2.5의 주요 변경
 
-- **인증 토큰 자동 갱신:** 저장 계정의 토큰을 만료 직전 또는 사용량 조회 401 오류 시 한 번 갱신하고, 새 토큰을 저장한 뒤 재조회합니다.
-- **데스크톱 로그인 동기화:** 현재 데스크톱 계정은 별도 갱신하지 않고 Codex가 갱신한 최신 인증 정보를 저장합니다.
-- **작은 계정 패널:** 계정 행, 사용량 막대, 요금제 배지와 초기화 버튼을 더 간결하게 표시합니다.
+- **선택형 JEV 모델 자동 선택:** 계정 자동 전환과 별도로 모델과 추론 수준을 선택합니다.
+- **압축 요청 처리 수정:** zstd 요청도 분류하며, 안전하게 전환할 수 없으면 원본 요청을 유지합니다.
+- **이미지 이력 처리 개선:** 이전 이미지와 무관한 새 텍스트 요청은 분류합니다. 현재 이미지와 이미지 관련 후속 요청은 보수적으로 원래 모델을 유지합니다.
+- **간결한 패널:** 일시적인 사용량 조회 오류 표시와 빈 상태 영역의 간격을 줄였습니다.
 
 ## 0.2.0에서 도입한 핵심 기능
 - **데스크톱 로그인 유지:** 모델 실행 계정을 바꿔도 기존 플러그인 연결과 원격 접속에 사용하는 데스크톱 인증을 유지합니다.
@@ -45,7 +46,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 **Apple silicon Mac, macOS 14 이상**, 설치 및 로그인이 완료된 현재 ChatGPT 데스크톱 앱이 필요합니다. 기본 파일 기반 인증 저장 경로인 `~/.codex/auth.json`을 사용해야 합니다. 데스크톱 앱에 포함된 CLI를 사용하므로 별도 CLI 설치는 필요하지 않습니다.
 
-1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4)에서 `SwitchGPT-v0.2.4-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
+1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5)에서 `SwitchGPT-v0.2.5-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
 2. 아래 명령으로 체크섬을 확인하고 ZIP 압축을 풀어 **SwitchGPT.app**을 **응용 프로그램** 폴더로 옮깁니다.
 3. SwitchGPT를 실행하고 메뉴 막대 아이콘을 클릭합니다. **+**를 눌러 브라우저 로그인으로 계정을 추가합니다. 저장할 계정마다 반복하세요.
 4. 최초 계정 선택은 `⋯`에서 자동 전환을 끈 뒤 계정 카드를 클릭하세요. 목록 순서를 따르려면 자동 전환을 다시 켜세요. ChatGPT 재시작 안내가 나오면 진행 중인 작업을 마친 뒤 재시작하세요.
@@ -96,6 +97,7 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 - 기준 모델과 추론 수준은 Codex가 요청에 담아 보낸 값입니다. 꺼져 있거나 판단이 불확실하거나 Jev 호출이 실패하면 원래 값을 유지합니다.
 - 자동 선택 후보는 Luna medium/max, Sol medium/high, Astra medium/high입니다. Jev의 판단을 제한된 후보에 매핑하며, 사용 중인 계정의 모델 접근 권한을 추가하지 않습니다.
 - 판단에 필요한 제한된 사용자 메시지가 TypeSafe로 전송되며, Jev 사용료는 ChatGPT 구독과 별도입니다. 요청 헤더의 인증 정보·시스템 지시·도구 실행 결과는 분류 요청에 넣지 않습니다. 사용자 문장에 인식 가능한 키·비밀번호가 있으면 외부 분류를 생략합니다. 이 검사는 모든 개인정보나 비밀 형식을 탐지하지는 않습니다.
+- 명시적인 서브에이전트 요청은 원래 모델을 유지합니다. 이전 이미지와 무관한 새 텍스트는 분류하되, 현재 이미지·이전 이미지 참조·모호한 후속 지시는 보수적으로 제외합니다. 이미지 참조 검사는 완전한 의미 분석이 아닌 휴리스틱입니다.
 - 완료된 요청에서 조합이 변경되면 패널에 원래 조합과 선택된 조합을 표시합니다. 원문 프롬프트와 API 키는 로그에 남기지 않습니다.
 - 서버가 변경된 모델·추론 수준을 지원하지 않는다고 명시적으로 거절한 경우, 응답 전달 전에 원래 요청으로 한 번 재시도합니다. 정상 스트리밍이나 도구 실행을 되감아 재실행하지 않습니다.
 
@@ -168,6 +170,7 @@ Jev의 `confidence`가 0.8 미만이면 원래 설정을 유지합니다. 이 �
 Swift 6와 macOS SDK가 포함된 Xcode를 설치하고 해당 명령줄 도구를 선택한 뒤 실행하세요.
 
 ```sh
+brew install zstd
 git clone https://github.com/yoonpooh/SwitchGPT.git
 cd SwitchGPT
 ./script/build_and_run.sh --verify
@@ -193,12 +196,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 릴리스 패키징
 
-스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.4 파일은 Apple silicon 빌드입니다.
+스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.5 파일은 Apple silicon 빌드입니다.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.5-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.5-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 소스 구조

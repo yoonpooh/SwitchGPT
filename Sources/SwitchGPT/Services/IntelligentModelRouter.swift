@@ -630,11 +630,22 @@ final class IntelligentModelRouter: @unchecked Sendable {
         object["reasoning"] = reasoning
         guard JSONSerialization.isValidJSONObject(object),
               let body = try? JSONSerialization.data(withJSONObject: object) else { return nil }
-        return RelayRequest(method: request.method, target: request.target, headers: request.headers, body: body)
+        var headers = request.headers
+        headers.removeValue(forKey: "content-encoding")
+        headers.removeValue(forKey: "content-length")
+        return RelayRequest(method: request.method, target: request.target, headers: headers, body: body)
     }
 
     private static func parse(_ request: RelayRequest) -> ParsedRequest? {
-        guard let object = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any],
+        let body: Data
+        switch request.headers["content-encoding"]?.trimmingCharacters(in: .whitespaces).lowercased() {
+        case nil, "", "identity": body = request.body
+        case "zstd":
+            guard let decoded = ZstdRequestBody.decode(request.body) else { return nil }
+            body = decoded
+        default: return nil
+        }
+        guard let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
               let model = object["model"] as? String, !model.isEmpty else { return nil }
         var effort: String?
         if let reasoning = object["reasoning"] as? [String: Any] {
@@ -686,10 +697,15 @@ final class IntelligentModelRouter: @unchecked Sendable {
         var users: [String] = []
         var userLengths: [Int] = []
         var tool = false, image = false, unknown = false, configuration = false
+        var historicalMedia = false
         for item in items {
             let type = (item["type"] as? String)?.lowercased()
             if type == "configuration_update" { configuration = true; continue }
-            if type?.contains("image") == true || type?.contains("audio") == true { image = true; continue }
+            if type?.contains("image") == true || type?.contains("audio") == true {
+                image = true
+                historicalMedia = true
+                continue
+            }
             if type?.contains("tool") == true || type?.contains("function_call_output") == true || type?.contains("computer_call_output") == true {
                 tool = true
                 continue
@@ -699,14 +715,22 @@ final class IntelligentModelRouter: @unchecked Sendable {
             if role == "tool" { tool = true; continue }
             if role != nil && role != "user" && role != "assistant" { unknown = true; continue }
             guard role == "user" else { continue }
-            if containsMedia(item["content"]) { image = true }
-            if hasUnsupportedContent(item["content"]) { unknown = true }
+            let attachedMedia = containsMedia(item["content"])
+            // Media is handled per user turn below. Unknown/file attachments retain
+            // their conservative exclusion; do not let old media poison that flag.
+            if hasUnsupportedContent(item["content"], allowingMedia: true) { unknown = true }
             let rawContent = textContent(item["content"])
             let content = sanitizedUserText(rawContent)
             if content.isEmpty {
-                if !isInjectedContextOnly(rawContent) { unknown = true }
+                if attachedMedia {
+                    image = true
+                    historicalMedia = true
+                } else if !isInjectedContextOnly(rawContent) { unknown = true }
                 continue
             }
+            let dependsOnMedia = attachedMedia || (historicalMedia && referencesEarlierMedia(content, previousTurnUsesMedia: image))
+            image = dependsOnMedia
+            historicalMedia = historicalMedia || attachedMedia
             let bounded = String(content.prefix(4_000))
             users.append(bounded)
             userLengths.append(content.count)
@@ -743,10 +767,28 @@ final class IntelligentModelRouter: @unchecked Sendable {
         }
     }
 
-    private static func hasUnsupportedContent(_ value: Any?) -> Bool {
+    /// Local conservative heuristic only; ambiguous visual follow-ups keep the baseline.
+    private static func referencesEarlierMedia(_ text: String, previousTurnUsesMedia: Bool) -> Bool {
+        let lower = text.lowercased()
+        let visualTerms = ["사진", "화면", "스크린샷", "이미지", "그림", "도표", "첨부", "screenshot", "image", "photo", "picture", "diagram", "attachment", "screen", "画像", "写真", "画面", "图片", "截图"]
+        if visualTerms.contains(where: { lower.contains($0) }) { return true }
+        let references = ["이거", "이것", "그거", "그것", "저거", "저것", "아까", "위의", "위에", "앞서", "그대로", "방금", "earlier", "above", "previous", "that one", "this one", "fix this", "fix that", "それ", "これ", "这个", "那个"]
+        if references.contains(where: { lower.contains($0) }) { return true }
+        guard previousTurnUsesMedia else { return false }
+        // Short replies like “yes, do it” inherit the visual task. A substantive,
+        // self-contained new text request may start a fresh classification.
+        let followUps = ["응", "네", "ㅇ", "그래", "해줘", "고쳐", "수정", "계속", "다시", "맞아", "왜", "yes", "ok", "do it", "fix it", "continue", "try again", "why"]
+        let standalone = ["오타", "번역", "계산", "typo", "translate", "calculate"]
+        if standalone.contains(where: { lower.contains($0) }) { return false }
+        return lower.count <= 30 || (lower.count <= 80 && followUps.contains(where: { lower.contains($0) }))
+    }
+
+    private static func hasUnsupportedContent(_ value: Any?, allowingMedia: Bool = false) -> Bool {
         if value is String { return false }
         guard let parts = value as? [[String: Any]], !parts.isEmpty else { return true }
         return parts.contains { part in
+            if allowingMedia, let type = (part["type"] as? String)?.lowercased(),
+               type.contains("image") || type.contains("audio") { return false }
             guard let type = (part["type"] as? String)?.lowercased(),
                   ["input_text", "text", "output_text"].contains(type),
                   part["text"] is String else { return true }

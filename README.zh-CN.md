@@ -12,13 +12,16 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 你可以手动选择账户，也可以在额度用尽时自动切换到其他可用账户。
 
-[下载 v0.2.4](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[下载 v0.2.5](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.4 的主要更新
+## 0.2.5 的主要更新
 
-- **自动刷新认证令牌：** 保存的账户会在访问令牌即将过期时或用量查询返回401后刷新一次，保存新令牌后再重试。
-- **同步桌面登录：** 不独立刷新共享令牌，而是保存Codex更新后的最新认证信息。
-- **紧凑面板：** 缩小账户行、用量条、套餐标签和重置操作控件。
+- **可选 JEV 模型选择：** 独立于账号切换，选择模型和推理级别。
+- **修复压缩请求处理：** 解压 zstd 后分类；无法安全切换时保留原始请求。
+- **改进图片历史处理：** 旧图片不再阻止无关的新文本请求分类。当前图片及相关追问会保守地保留原模型。
+- **简化面板：** 减少临时用量查询错误提示和空状态区域的间距。
+
+JEV 默认关闭。在菜单中保存 API 密钥后启用。最新及上一条用户文本会发送至 TypeSafe，费用独立于 ChatGPT 订阅。凭据模式检查不能保证移除所有敏感信息。详见[英文说明](README.md#optional-automatic-model-selection)。
 
 ## 0.2.0 引入的核心功能
 
@@ -46,7 +49,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 需要 **Apple 芯片 Mac、macOS 14 或更新版本**，以及已安装并登录的当前 ChatGPT 桌面应用。须使用默认文件式认证路径 `~/.codex/auth.json`。SwitchGPT 使用应用自带的 CLI，无需单独安装 CLI。
 
-1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4)下载 `SwitchGPT-v0.2.4-macos-arm64.zip` 和 `SHA256SUMS.txt`。
+1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5)下载 `SwitchGPT-v0.2.5-macos-arm64.zip` 和 `SHA256SUMS.txt`。
 2. 使用下方命令验证校验和，解压 ZIP，将 **SwitchGPT.app** 移至**应用程序**。
 3. 打开 SwitchGPT 并点击菜单栏图标。选择 **+**，通过浏览器登录添加账户。对每个要保存的账户重复操作。
 4. 首次选择账户时，在 `⋯` 中关闭自动切换，然后点击账户卡片。若要按列表顺序使用，请重新开启自动切换。 如提示重启 ChatGPT，请先完成正在进行的工作。
@@ -140,6 +143,7 @@ SwitchGPT 没有普通窗口或 Dock 图标。使用模型中继时，请保持�
 安装包含 Swift 6 和 macOS SDK 的 Xcode，并选用其命令行工具，然后运行：
 
 ```sh
+brew install zstd
 git clone https://github.com/yoonpooh/SwitchGPT.git
 cd SwitchGPT
 ./script/build_and_run.sh --verify
@@ -165,12 +169,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 打包发布版本
 
-脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.2.4 文件是 Apple 芯片构建。
+脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.2.5 文件是 Apple 芯片构建。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.5-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.5-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 源码结构

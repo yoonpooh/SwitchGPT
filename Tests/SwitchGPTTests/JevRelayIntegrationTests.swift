@@ -16,7 +16,15 @@ final class JevRelayIntegrationTests: XCTestCase {
         try await exercise(reject: false, quota: true)
     }
 
-    private func exercise(reject: Bool, quota: Bool) async throws {
+    func testZstdRequestIsClassifiedRewrittenAndForwardedUncompressed() async throws {
+        try await exercise(reject: false, quota: false, compressed: true)
+    }
+
+    func testZstdUnsupportedModelRetriesExactCompressedBaseline() async throws {
+        try await exercise(reject: true, quota: false, compressed: true)
+    }
+
+    private func exercise(reject: Bool, quota: Bool, compressed: Bool = false) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -46,7 +54,11 @@ final class JevRelayIntegrationTests: XCTestCase {
         defer { relay.stop() }
         let client = URLSession(configuration: .ephemeral)
         defer { client.invalidateAndCancel() }
-        let baseline = try request(port: port)
+        var baseline = try request(port: port)
+        if compressed {
+            baseline.httpBody = try zstdFixture(try XCTUnwrap(baseline.httpBody))
+            baseline.setValue("zstd", forHTTPHeaderField: "Content-Encoding")
+        }
         let (data, response) = try await client.data(for: baseline)
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("response.completed"))
@@ -56,7 +68,11 @@ final class JevRelayIntegrationTests: XCTestCase {
         let routed = try XCTUnwrap(try JSONSerialization.jsonObject(with: calls[0].body) as? [String: Any])
         XCTAssertEqual(routed["model"] as? String, "gpt-5.6-luna")
         XCTAssertEqual((routed["reasoning"] as? [String: Any])?["effort"] as? String, "max")
-        if reject { XCTAssertEqual(calls[1].body, baseline.httpBody) }
+        XCTAssertNil(calls[0].headers["content-encoding"])
+        if reject {
+            XCTAssertEqual(calls[1].body, baseline.httpBody)
+            XCTAssertEqual(calls[1].headers["content-encoding"], compressed ? "zstd" : nil)
+        }
         if quota {
             XCTAssertEqual(calls[0].body, calls[1].body)
             XCTAssertEqual(calls[1].headers["authorization"], "Bearer second-token")
@@ -74,11 +90,13 @@ final class JevRelayIntegrationTests: XCTestCase {
         XCTAssertEqual(upstream.requests.count, calls.count)
         if reject {
             var continuation = baseline
-            var object = try XCTUnwrap(try JSONSerialization.jsonObject(with: baseline.httpBody!) as? [String: Any])
+            let originalBody = try XCTUnwrap(compressed ? ZstdRequestBody.decode(baseline.httpBody!) : baseline.httpBody)
+            var object = try XCTUnwrap(try JSONSerialization.jsonObject(with: originalBody) as? [String: Any])
             var input = try XCTUnwrap(object["input"] as? [[String: Any]])
             input.append(["type": "function_call_output", "call_id": "fixture-call", "output": "done"])
             object["input"] = input
-            continuation.httpBody = try JSONSerialization.data(withJSONObject: object)
+            let nextBody = try JSONSerialization.data(withJSONObject: object)
+            continuation.httpBody = compressed ? try zstdFixture(nextBody) : nextBody
             let (_, continuationResponse) = try await client.data(for: continuation)
             XCTAssertEqual((continuationResponse as? HTTPURLResponse)?.statusCode, 200)
             XCTAssertEqual(upstream.requests.count, calls.count + 1)
@@ -151,7 +169,8 @@ private final class JevRelayServer: @unchecked Sendable {
                 return
             }
             lock.lock(); captured.append(request); lock.unlock()
-            let object = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let decoded = request.headers["content-encoding"] == "zstd" ? ZstdRequestBody.decode(request.body) : request.body
+            let object = decoded.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
             let model = object?["model"] as? String ?? "unknown"
             let status: Int
             let body: String

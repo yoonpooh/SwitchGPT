@@ -69,14 +69,11 @@ struct AccountCard: View {
                     if usage.rateLimit?.primaryWindow == nil && usage.rateLimit?.secondaryWindow == nil {
                         Text(L10n.text("no_limits")).font(.caption).foregroundStyle(.secondary)
                     }
-                } else if store.usageErrors[account.id] == nil {
+                } else {
                     Text(L10n.text(store.loadingUsage ? "loading" : "refresh_hint"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                if let error = store.usageErrors[account.id] {
-                    Label(L10n.text("routing_usage_unavailable"), systemImage: "exclamationmark.circle")
-                        .font(.caption).foregroundStyle(.orange).help(error)
-                }
+
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }

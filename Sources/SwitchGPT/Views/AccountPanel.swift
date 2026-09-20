@@ -10,7 +10,11 @@ struct AccountPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
-            RoutingStatusView(store: store, restart: confirmRestart)
+            if store.lastCompletedModelRouting != nil
+                || (store.selectedAccount != nil && (store.needsRestart || store.selectedExhausted))
+                || (store.selectedAccount == nil && !store.accounts.isEmpty) {
+                RoutingStatusView(store: store, restart: confirmRestart)
+            }
             if store.accounts.isEmpty {
                 Text(L10n.text("empty")).font(.callout).foregroundStyle(.secondary).padding(.vertical, 12)
             } else {
