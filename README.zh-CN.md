@@ -12,13 +12,13 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 你可以手动选择账户，也可以在额度用尽时自动切换到其他可用账户。
 
-[下载 v0.2.3](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[下载 v0.2.4](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.3 的主要更新
+## 0.2.4 的主要更新
 
-- **精简面板：** 移除大型状态卡片和最近处理行，在标题旁显示自动或手动模式。
-- **自动模式：** 拖动卡片设置优先级，禁止点击切换账户，保留手形指针。
-- **手动模式：** 关闭自动切换后可点击选择账户。需要时仍显示重启和额度提醒。
+- **自动刷新认证令牌：** 保存的账户会在访问令牌即将过期时或用量查询返回401后刷新一次，保存新令牌后再重试。
+- **同步桌面登录：** 不独立刷新共享令牌，而是保存Codex更新后的最新认证信息。
+- **紧凑面板：** 缩小账户行、用量条、套餐标签和重置操作控件。
 
 ## 0.2.0 引入的核心功能
 
@@ -46,7 +46,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 需要 **Apple 芯片 Mac、macOS 14 或更新版本**，以及已安装并登录的当前 ChatGPT 桌面应用。须使用默认文件式认证路径 `~/.codex/auth.json`。SwitchGPT 使用应用自带的 CLI，无需单独安装 CLI。
 
-1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3)下载 `SwitchGPT-v0.2.3-macos-arm64.zip` 和 `SHA256SUMS.txt`。
+1. 从[发布页面](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4)下载 `SwitchGPT-v0.2.4-macos-arm64.zip` 和 `SHA256SUMS.txt`。
 2. 使用下方命令验证校验和，解压 ZIP，将 **SwitchGPT.app** 移至**应用程序**。
 3. 打开 SwitchGPT 并点击菜单栏图标。选择 **+**，通过浏览器登录添加账户。对每个要保存的账户重复操作。
 4. 首次选择账户时，在 `⋯` 中关闭自动切换，然后点击账户卡片。若要按列表顺序使用，请重新开启自动切换。 如提示重启 ChatGPT，请先完成正在进行的工作。
@@ -102,7 +102,7 @@ SwitchGPT 没有普通窗口或 Dock 图标。使用模型中继时，请保持�
 
 - **退出 SwitchGPT 后请求失败：** 重新打开它，或按下方说明解除中继连接。
 - **首次连接一直待确认：** 如有重启按钮，请先使用，再在桌面完成实际 Codex 请求。用量刷新或 CLI 请求不会确认桌面连接。
-- **账户需要重新登录：** 通过浏览器重新添加该账户。SwitchGPT 不会自动刷新过期认证信息。
+- **账户需要重新登录：** 通过浏览器重新添加该账户。已保存账户会自动刷新；如果刷新令牌本身已过期或被撤销，则需要重新登录。
 - **无法获取用量：** 缺失信息显示为未知，而不是剩余量为零。
 - **已有自定义端点：** SwitchGPT 会提示冲突，不会覆盖其他中继设置。
 
@@ -130,7 +130,7 @@ SwitchGPT 没有普通窗口或 Dock 图标。使用模型中继时，请保持�
 - 仅发布 Apple 芯片版本，Intel 未验证。
 - 不支持 API 密钥认证、keyring/auto 认证存储、自定义 `CODEX_HOME` 或配置其他远程主机。对这台 Mac 的远程访问保留原有设置。
 - 使用这台 Mac 内置 `openai` 提供方及相同配置的 CLI 会话也会经过中继。
-- 没有内置更新器，也不会自动刷新过期登录认证。
+- 没有内置应用更新器。当前桌面会话由Codex刷新令牌，SwitchGPT同步其最新认证信息。
 - 构建成功不代表兼容所有桌面或 macOS 版本。实际插件与远程行为需要单独验证。
 
 请勿在 Issue 或提交中包含认证信息、账户列表或显示个人账户的截图。SwitchGPT 是独立工具，与 OpenAI 无关联，也未获得 OpenAI 的认可。
@@ -165,12 +165,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 打包发布版本
 
-脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.2.3 文件是 Apple 芯片构建。
+脚本会为运行构建的 Mac 的架构生成应用。已发布的 v0.2.4 文件是 Apple 芯片构建。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 源码结构

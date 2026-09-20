@@ -8,14 +8,14 @@ struct AccountPanel: View {
     @State private var listHeight: CGFloat = 1
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             header
             RoutingStatusView(store: store, restart: confirmRestart)
             if store.accounts.isEmpty {
                 Text(L10n.text("empty")).font(.callout).foregroundStyle(.secondary).padding(.vertical, 12)
             } else {
                 ScrollView {
-                    VStack(spacing: 9) {
+                    VStack(spacing: 3) {
                         ForEach(store.accounts) { account in accountButton(account) }
                     }.frame(maxWidth: .infinity)
                         .fixedSize(horizontal: false, vertical: true)
@@ -55,8 +55,8 @@ struct AccountPanel: View {
                     Text(store.desktopName).fontWeight(.medium).lineLimit(1).truncationMode(.middle)
                 }
             }.font(.caption).padding(.vertical, 4)
-        }.padding(.horizontal, 16).padding(.top, 16).padding(.bottom, 8)
-            .frame(width: 400).fixedSize(horizontal: false, vertical: true)
+        }.padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 7)
+            .frame(width: 320).fixedSize(horizontal: false, vertical: true)
             .task { await store.refreshUsage() }
             .onDisappear { NSCursor.arrow.set() }
             .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
@@ -66,7 +66,7 @@ struct AccountPanel: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Text("SwitchGPT").font(.system(size: 17, weight: .semibold))
+            Text("SwitchGPT").font(.system(size: 13, weight: .semibold))
             Text(L10n.text(store.routingPreferences.automatic ? "routing_auto_badge" : "routing_manual_badge"))
                 .font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                 .padding(.horizontal, 6).padding(.vertical, 3)
@@ -77,10 +77,10 @@ struct AccountPanel: View {
                 Group {
                     if store.loadingUsage { ProgressView().controlSize(.small) }
                     else { Image(systemName: "arrow.clockwise") }
-                }.frame(width: 24, height: 24)
+                }.frame(width: 20, height: 20)
             }.buttonStyle(.plain).disabled(store.loadingUsage || store.busy).help(L10n.text("refresh"))
             Button { Task { await store.addAccount(); await store.refreshUsage() } } label: {
-                Image(systemName: "plus").frame(width: 24, height: 24)
+                Image(systemName: "plus").frame(width: 20, height: 20)
             }.buttonStyle(.plain).disabled(store.busy).help(L10n.text("add")).accessibilityLabel(L10n.text("add"))
             Menu {
                 Toggle(L10n.text("routing_auto_toggle"), isOn: Binding(
@@ -92,7 +92,7 @@ struct AccountPanel: View {
                 Divider()
                 Button(L10n.text("quit"), action: quit)
             } label: {
-                Image(systemName: "ellipsis").frame(width: 24, height: 24)
+                Image(systemName: "ellipsis").frame(width: 20, height: 20)
             }.menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
                 .disabled(store.busy).help(L10n.text("routing_more"))
         }
@@ -106,8 +106,8 @@ struct AccountPanel: View {
 
     private func accountButton(_ account: Account) -> some View {
         let selected = account.id == store.currentID
-        let tint: Color = selected && store.needsRestart ? .orange : .accentColor
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let tint: Color = selected && store.needsRestart ? .orange : .primary
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
         return AccountCard(store: store, account: account,
                            select: { Task {
                                guard !store.routingPreferences.automatic else { return }
@@ -116,8 +116,7 @@ struct AccountPanel: View {
                            useReset: { confirmReset(account) })
             .disabled(store.busy)
             .padding(.trailing, listOverflows ? 12 : 0)
-            .background(selected ? tint.opacity(0.065) : hoveredAccount == account.id ? Color.primary.opacity(0.045) : Color.primary.opacity(0.015), in: shape)
-            .overlay { shape.strokeBorder(selected ? tint.opacity(0.4) : Color.primary.opacity(0.08), lineWidth: selected ? 1 : 0.7).allowsHitTesting(false) }
+            .background(selected ? tint.opacity(0.045) : hoveredAccount == account.id ? Color.primary.opacity(0.035) : .clear, in: shape)
             .overlay(alignment: .top) {
                 if dropTarget == account.id { Capsule().fill(Color.accentColor).frame(height: 3).allowsHitTesting(false) }
             }

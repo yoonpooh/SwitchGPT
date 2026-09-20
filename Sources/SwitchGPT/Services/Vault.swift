@@ -1,7 +1,14 @@
 import Foundation
 import Security
 
-struct Vault {
+@MainActor
+protocol CredentialVault {
+    func save(_ data: Data, id: String) throws
+    func read(_ id: String) throws -> Data
+    func remove(_ id: String) throws
+}
+
+struct Vault: CredentialVault {
     private let service = "local.codex-account-switch.credentials"
     private func query(_ id: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: id]

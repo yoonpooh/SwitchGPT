@@ -10,6 +10,21 @@ struct UsageClient: Sendable {
     func fetch(_ credential: Credential) async throws -> AccountUsage {
         try await AccountUsage.decode(request(credential, path: "usage"))
     }
+    @MainActor
+    func fetchWithRefresh(_ initial: Credential, proactively: Bool,
+                          renew: (Credential) async throws -> Credential) async throws -> (Credential, AccountUsage) {
+        var credential = initial
+        var renewed = false
+        if proactively && credential.accessTokenExpiresSoon {
+            credential = try await renew(credential)
+            renewed = true
+        }
+        do { return (credential, try await fetch(credential)) }
+        catch is UsageAuthenticationError where !renewed {
+            credential = try await renew(credential)
+            return (credential, try await fetch(credential))
+        }
+    }
     func fetchResetCredits(_ credential: Credential) async throws -> ResetCreditDetails {
         try await JSONDecoder().decode(ResetCreditDetails.self, from: request(credential, path: "rate-limit-reset-credits"))
     }
@@ -50,7 +65,8 @@ struct UsageClient: Sendable {
         let (data, response) = try await send(request)
         guard let response = response as? HTTPURLResponse else { throw SwitchError(message: L10n.text("usage_response")) }
         guard response.statusCode == 200 else {
-            if response.statusCode == 401 || response.statusCode == 403 {
+            if response.statusCode == 401 { throw UsageAuthenticationError() }
+            if response.statusCode == 403 {
                 throw SwitchError(message: L10n.text("auth_expired"))
             }
             throw SwitchError(message: L10n.format("usage_error", response.statusCode))
@@ -65,8 +81,12 @@ struct UsageClient: Sendable {
     }
 }
 
-private final class NoRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+final class NoRedirects: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
         completionHandler(nil)
     }
+}
+
+struct UsageAuthenticationError: LocalizedError {
+    var errorDescription: String? { L10n.text("auth_expired") }
 }

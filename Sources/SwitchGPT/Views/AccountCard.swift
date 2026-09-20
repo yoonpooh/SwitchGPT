@@ -3,7 +3,7 @@ import SwiftUI
 struct AccountAvatar: View {
     var store: AccountStore
     let account: Account
-    var size: CGFloat = 28
+    var size: CGFloat = 24
 
     var body: some View {
         Group {
@@ -24,44 +24,48 @@ struct AccountCard: View {
     var useReset: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        ZStack(alignment: .topTrailing) {
             if store.routingPreferences.automatic {
                 summary.contentShape(Rectangle()).draggable(account.id)
             } else {
                 Button(action: select) { summary.contentShape(Rectangle()).draggable(account.id) }
                     .buttonStyle(.plain)
             }
-            if (store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 || store.hasPendingReset(account) {
-                HStack(spacing: 6) {
-                    Label(L10n.format("resets", store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0),
-                          systemImage: "arrow.counterclockwise.circle")
-                    Spacer(minLength: 0)
-                    if let expiration = store.resetDetails[account.id]?.availableCredits.first?.expiration {
-                        Text(L10n.format("expires", L10n.date(expiration, includeTime: false)))
-                            .help(L10n.format("expires", L10n.date(expiration)))
+            if hasReset {
+                if store.resetInProgressID == account.id {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Button(action: useReset) {
+                        Label("\(resetCount)", systemImage: "arrow.counterclockwise.circle")
+                            .labelStyle(.titleAndIcon)
                     }
-                    if store.resetInProgressID == account.id { ProgressView().controlSize(.mini) }
-                    Button(L10n.text(store.hasPendingReset(account) ? "reset_retry" : "reset_use"), action: useReset)
-                        .buttonStyle(.bordered).controlSize(.mini)
-                        .disabled(!store.canUseReset(account)).help(store.resetHelp(account))
-                }.font(.caption2).foregroundStyle(.secondary).lineLimit(1).padding(.leading, 38)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .disabled(!store.canUseReset(account))
+                    .help(resetHelp)
+                    .accessibilityLabel(L10n.text(store.hasPendingReset(account) ? "reset_retry" : "reset_use"))
+                }
             }
-        }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        }.padding(.horizontal, 7).padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var summary: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 8) {
             AccountAvatar(store: store, account: account)
-            VStack(alignment: .leading, spacing: 9) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 7) {
-                    Text(store.displayName(account)).font(.callout.weight(.semibold))
+                    Text(store.displayName(account)).font(.caption.weight(.semibold))
                         .lineLimit(1).truncationMode(.middle).help(store.email(account))
                     if let plan = store.usages[account.id]?.planType { PlanBadge(plan: plan) }
                     Spacer(minLength: 0)
+                    if hasReset { Color.clear.frame(width: 24, height: 1) }
                 }
                 if let usage = store.usages[account.id] {
-                    if let window = usage.rateLimit?.primaryWindow { UsageWindowView(window: window) }
-                    if let window = usage.rateLimit?.secondaryWindow { UsageWindowView(window: window) }
+                    let windows = [usage.rateLimit?.primaryWindow, usage.rateLimit?.secondaryWindow].compactMap { $0 }
+                    ForEach(Array(windows.enumerated()), id: \.offset) { _, window in
+                        UsageWindowView(window: window)
+                    }
                     if usage.rateLimit?.primaryWindow == nil && usage.rateLimit?.secondaryWindow == nil {
                         Text(L10n.text("no_limits")).font(.caption).foregroundStyle(.secondary)
                     }
@@ -76,30 +80,54 @@ struct AccountCard: View {
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    private var resetCount: Int {
+        store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0
+    }
+
+    private var hasReset: Bool { resetCount > 0 || store.hasPendingReset(account) }
+
+    private var resetHelp: String {
+        if let expiration = store.resetDetails[account.id]?.availableCredits.first?.expiration {
+            return store.resetHelp(account) + " " + L10n.format("expires", L10n.date(expiration))
+        }
+        return store.resetHelp(account)
+    }
 }
 
 private struct UsageWindowView: View {
     let window: AccountUsage.Window
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Text(window.label).font(.caption2).frame(width: 52, alignment: .leading)
-                ProgressView(value: window.remaining, total: 100)
-                    .tint(window.remaining <= 10 ? .orange : .accentColor)
-                Text(L10n.format("remaining", Int(window.remaining.rounded(.up))))
-                    .font(.caption2).monospacedDigit().foregroundStyle(.secondary)
-                    .frame(width: 64, alignment: .trailing)
+        HStack(alignment: .top, spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(window.label)
+                    .font(.system(size: 9))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                Text(compactDate(window.resetDate))
+                    .font(.system(size: 8))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .help(L10n.format("resets_at", L10n.date(window.resetDate)))
             }
-            Text(L10n.format("resets_at", compactResetDate)).font(.system(size: 10)).foregroundStyle(.secondary)
-                .help(L10n.format("resets_at", L10n.date(window.resetDate)))
+            .frame(width: 54, alignment: .leading)
+            ProgressView(value: window.remaining, total: 100)
+                .progressViewStyle(.linear)
+                .controlSize(.mini)
+                .tint(window.remaining <= 10 ? .orange : .accentColor)
+                .padding(.top, 3)
+            Text("\(Int(window.remaining.rounded(.up)))%")
+                .font(.system(size: 9)).monospacedDigit().foregroundStyle(.secondary)
+                .frame(width: 30, alignment: .trailing)
+                .accessibilityLabel(L10n.format("remaining", Int(window.remaining.rounded(.up))))
         }
     }
 
-    private var compactResetDate: String {
+    private func compactDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = L10n.locale
-        formatter.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(window.resetDate) ? "Hm" : "MdHm")
-        return formatter.string(from: window.resetDate)
+        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "H:mm" : "M/d H:mm"
+        return formatter.string(from: date)
     }
 }

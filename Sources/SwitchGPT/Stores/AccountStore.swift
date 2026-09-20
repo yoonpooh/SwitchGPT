@@ -23,23 +23,26 @@ final class AccountStore {
     var loadingUsage = false
     var profileImages: [String: NSImage] = [:]
     var emails: [String: String] = [:]
-    private let vault = Vault()
+    private let vault: any CredentialVault
     private let session: CodexSession
     private let usageClient: UsageClient
+    private let credentialRefresher: CredentialRefresher
     private let resetLedger: ResetCreditLedger
     private let index: URL
     private var relay: ModelRelay?
-    private var routingCredentials: [String: RelayCredentials] = [:]
+    private(set) var routingCredentials: [String: RelayCredentials] = [:]
     @ObservationIgnored private lazy var router = AccountRouter { [weak self] credentials in
         Task { @MainActor [weak self] in self?.didAutomaticallySwitch(credentials) }
     }
     private var selectionURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-selection.json") }
     private var preferencesURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-preferences.json") }
 
-    init(index: URL? = nil, usageClient: UsageClient = UsageClient(), session: CodexSession = CodexSession()) {
+    init(index: URL? = nil, usageClient: UsageClient = UsageClient(), session: CodexSession = CodexSession(), vault: any CredentialVault = Vault(), tokenRefreshClient: TokenRefreshClient = TokenRefreshClient()) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         self.index = index ?? support.appendingPathComponent("SwitchGPT/accounts.json")
         self.session = session
+        self.vault = vault
+        self.credentialRefresher = CredentialRefresher(client: tokenRefreshClient)
         self.usageClient = usageClient
         self.resetLedger = ResetCreditLedger(file: self.index.deletingLastPathComponent().appendingPathComponent("reset-credit-attempts.json"))
         do {
@@ -104,19 +107,26 @@ final class AccountStore {
         refresh()
         for account in accounts {
             do {
-                let current = try? session.read()
-                let credential: Credential
-                if let current, current.id == account.id { credential = current }
-                else { credential = try Credential(data: vault.read(account.id)) }
-                let selected = try RelayCredentials(credential)
-                routingCredentials[account.id] = selected
-                if router.selected?.fingerprint == selected.fingerprint { relay?.select(selected) }
+                let initial = try credentialForUsage(account)
+                try updateRoutingCredential(initial, account: account)
+                // Codex owns the active desktop refresh token; never rotate it independently.
+                let isDesktop = (try? session.read().id) == account.id
+                let queriedAt = Date.now
+                let (credential, usage) = try await usageClient.fetchWithRefresh(initial, proactively: !isDesktop) { [self] previous in
+                    let latest = try credentialForUsage(account)
+                    if latest.data != previous.data {
+                        try updateRoutingCredential(latest, account: account)
+                        return latest
+                    }
+                    guard !isDesktop else { throw UsageAuthenticationError() }
+                    return try await renewSavedCredential(previous, account: account)
+                }
+                usages[account.id] = usage
+                try updateRoutingCredential(credential, account: account)
                 emails[account.id] = credential.email ?? L10n.text("email_missing")
                 if let photoData = try? await usageClient.fetchProfileImage(credential) {
                     profileImages[account.id] = NSImage(data: photoData)
                 } else { profileImages[account.id] = nil }
-                let queriedAt = Date.now
-                usages[account.id] = try await usageClient.fetch(credential)
                 if (usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 {
                     resetDetails[account.id] = try? await usageClient.fetchResetCredits(credential)
                 } else { resetDetails[account.id] = nil }
@@ -129,6 +139,40 @@ final class AccountStore {
         updateRouter()
         if routingActive { _ = router.resolve() }
         selectedExhausted = router.isCurrentExhausted()
+    }
+
+    private func updateRoutingCredential(_ credential: Credential, account: Account) throws {
+        let selected = try RelayCredentials(credential)
+        routingCredentials[account.id] = selected
+        if router.selected?.fingerprint == selected.fingerprint { relay?.select(selected) }
+        updateRouter()
+    }
+
+    private func credentialForUsage(_ account: Account) throws -> Credential {
+        guard accounts.contains(where: { $0.id == account.id }) else {
+            throw SwitchError(message: L10n.text("account_mismatch"))
+        }
+        let credential: Credential
+        if let desktop = try? session.read(), desktop.id == account.id {
+            credential = desktop
+            // Keep our saved copy in step with refreshes performed by the desktop owner.
+            // Otherwise a later desktop account change could revive an already-used token.
+            if (try? vault.read(account.id)) != desktop.data { try vault.save(desktop.data, id: account.id) }
+        }
+        else { credential = try Credential(data: vault.read(account.id)) }
+        guard credential.id == account.id else { throw SwitchError(message: L10n.text("account_mismatch")) }
+        return credential
+    }
+
+    private func renewSavedCredential(_ credential: Credential, account: Account) async throws -> Credential {
+        try await credentialRefresher.refresh(credential, load: { [self] in
+            // If this account became the desktop session, its new credential takes priority.
+            guard (try? session.read().id) != account.id else { throw UsageAuthenticationError() }
+            return try credentialForUsage(account)
+        }, save: { [self] renewed in
+            try vault.save(renewed.data, id: account.id)
+            try updateRoutingCredential(renewed, account: account)
+        })
     }
 
     func hasPendingReset(_ account: Account) -> Bool { resetLedger.hasPending(account.id) }
@@ -296,6 +340,10 @@ final class AccountStore {
     func addAccount() async {
         guard !busy else { return }
         busy = true
+        while loadingUsage {
+            do { try await Task.sleep(for: .milliseconds(50)) }
+            catch { busy = false; return }
+        }
         addingAccount = true
         defer { busy = false; addingAccount = false }
         do {
@@ -308,6 +356,7 @@ final class AccountStore {
     }
     func cancelLogin() { login.cancel() }
     func remove(_ account: Account) {
+        guard !loadingUsage, !busy else { return }
         guard account.id != currentID else { message = L10n.text("routing_delete_active"); return }
         do {
             try vault.remove(account.id)

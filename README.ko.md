@@ -12,13 +12,13 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 직접 실행 계정을 선택하거나, 한도가 소진되면 사용 가능한 다음 계정으로 자동 전환하세요.
 
-[v0.2.3 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.4 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.3의 주요 변경
+## 0.2.4의 주요 변경
 
-- **간결한 패널:** 큰 상태 카드와 최근 처리 행을 제거하고 제목 옆에 자동·수동을 표시합니다.
-- **자동 모드:** 드래그로 우선순위를 정하고 클릭 전환은 차단합니다. 손가락 포인터는 유지합니다.
-- **수동 모드:** 자동 전환을 끄면 카드 클릭으로 계정을 선택합니다. 필요한 재시작·한도 안내는 유지합니다.
+- **인증 토큰 자동 갱신:** 저장 계정의 토큰을 만료 직전 또는 사용량 조회 401 오류 시 한 번 갱신하고, 새 토큰을 저장한 뒤 재조회합니다.
+- **데스크톱 로그인 동기화:** 현재 데스크톱 계정은 별도 갱신하지 않고 Codex가 갱신한 최신 인증 정보를 저장합니다.
+- **작은 계정 패널:** 계정 행, 사용량 막대, 요금제 배지와 초기화 버튼을 더 간결하게 표시합니다.
 
 ## 0.2.0에서 도입한 핵심 기능
 - **데스크톱 로그인 유지:** 모델 실행 계정을 바꿔도 기존 플러그인 연결과 원격 접속에 사용하는 데스크톱 인증을 유지합니다.
@@ -45,7 +45,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 **Apple silicon Mac, macOS 14 이상**, 설치 및 로그인이 완료된 현재 ChatGPT 데스크톱 앱이 필요합니다. 기본 파일 기반 인증 저장 경로인 `~/.codex/auth.json`을 사용해야 합니다. 데스크톱 앱에 포함된 CLI를 사용하므로 별도 CLI 설치는 필요하지 않습니다.
 
-1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3)에서 `SwitchGPT-v0.2.3-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
+1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4)에서 `SwitchGPT-v0.2.4-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
 2. 아래 명령으로 체크섬을 확인하고 ZIP 압축을 풀어 **SwitchGPT.app**을 **응용 프로그램** 폴더로 옮깁니다.
 3. SwitchGPT를 실행하고 메뉴 막대 아이콘을 클릭합니다. **+**를 눌러 브라우저 로그인으로 계정을 추가합니다. 저장할 계정마다 반복하세요.
 4. 최초 계정 선택은 `⋯`에서 자동 전환을 끈 뒤 계정 카드를 클릭하세요. 목록 순서를 따르려면 자동 전환을 다시 켜세요. ChatGPT 재시작 안내가 나오면 진행 중인 작업을 마친 뒤 재시작하세요.
@@ -101,7 +101,7 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 
 - **SwitchGPT 종료 후 요청이 실패해요:** 다시 실행하거나 아래 연결 해제 절차를 진행하세요.
 - **최초 연결이 계속 대기 중이에요:** 재시작 버튼이 보이면 사용한 뒤 데스크톱에서 실제 Codex 요청을 완료하세요. 사용량 조회나 CLI 요청만으로는 데스크톱 연결이 확인되지 않습니다.
-- **계정에 다시 로그인해야 해요:** 브라우저를 통해 해당 계정을 다시 추가하세요. SwitchGPT는 만료된 인증 정보를 자동 갱신하지 않습니다.
+- **계정에 다시 로그인해야 해요:** 브라우저를 통해 해당 계정을 다시 추가하세요. 저장 계정은 자동 갱신됩니다. 갱신 토큰 자체가 만료·폐기된 경우에는 재로그인이 필요합니다.
 - **사용량을 확인할 수 없어요:** 없는 정보는 남은 사용량 0으로 표시하지 않고 확인 불가로 표시합니다.
 - **기존 사용자 지정 엔드포인트가 있어요:** 다른 중계 설정을 덮어쓰지 않고 충돌을 안내합니다.
 
@@ -129,7 +129,7 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 - Apple silicon 빌드만 배포하며 Intel은 검증하지 않았습니다.
 - API 키 인증, keyring/auto 인증 저장 방식, 사용자 지정 `CODEX_HOME`, 다른 원격 호스트의 설정은 지원하지 않습니다. 이 Mac으로의 원격 접속은 기존 설정을 유지합니다.
 - 같은 Mac의 기본 `openai` 제공자와 설정을 사용하는 CLI 세션에도 중계가 적용됩니다.
-- 내장 업데이트 기능과 만료된 로그인 인증의 자동 갱신은 없습니다.
+- 앱 자체의 자동 업데이트 기능은 없습니다. 현재 데스크톱 세션의 토큰 갱신은 Codex가 담당하며 SwitchGPT는 최신 인증 정보를 동기화합니다.
 - 빌드 성공이 모든 데스크톱·macOS 버전의 호환성을 보장하지는 않습니다. 실제 플러그인·원격 동작은 별도로 검증해야 합니다.
 
 이슈나 커밋에 인증 정보, 계정 목록, 개인 계정이 드러나는 스크린샷을 포함하지 마세요. SwitchGPT는 독립적인 유틸리티로, OpenAI와 제휴하거나 OpenAI의 승인을 받은 제품이 아닙니다.
@@ -164,12 +164,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 릴리스 패키징
 
-스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.3 파일은 Apple silicon 빌드입니다.
+스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.4 파일은 Apple silicon 빌드입니다.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 소스 구조

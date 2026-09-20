@@ -12,13 +12,13 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 アカウントを手動で選ぶことも、利用上限に達したら利用可能な別のアカウントへ自動で切り替えることもできます。
 
-[v0.2.3 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.4 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.3 の主な変更
+## 0.2.4 の主な変更
 
-- **シンプルなパネル：** 大きな状態カードと直近の処理行を削除し、タイトル横に自動・手動を表示します。
-- **自動モード：** ドラッグで優先順位を変更し、クリックによる切り替えを無効にします。ポインターは維持します。
-- **手動モード：** 自動切り替えを無効にするとクリックで選択できます。必要な再起動・利用枠の警告は表示します。
+- **認証トークンの自動更新：** 保存済みアカウントを期限直前、または利用状況の取得が401になった際に一度更新し、保存してから再試行します。
+- **デスクトップ認証の同期：** 共有トークンを独自に更新せず、Codexが更新した最新の認証情報を保存します。
+- **コンパクトなパネル：** アカウント行、利用状況バー、プラン表示、リセット操作を小さくまとめました。
 
 ## 0.2.0 で導入した基本機能
 
@@ -46,7 +46,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 **Apple シリコン搭載 Mac、macOS 14 以降**と、インストール・ログイン済みの現行 ChatGPT デスクトップアプリが必要です。標準のファイル形式の認証情報 `~/.codex/auth.json` を使用してください。同梱の CLI を使うため、CLI の別途インストールは不要です。
 
-1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3)から `SwitchGPT-v0.2.3-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
+1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4)から `SwitchGPT-v0.2.4-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
 2. 下のコマンドでチェックサムを確認し、ZIP を展開して **SwitchGPT.app** を **アプリケーション** に移動します。
 3. SwitchGPT を開き、メニューバーアイコンをクリックします。**+** からブラウザでログインしてアカウントを追加します。保存するアカウントごとに繰り返してください。
 4. 初回は `⋯` で自動切り替えを無効にし、アカウントカードをクリックします。リスト順を使う場合は自動切り替えを再び有効にします。 ChatGPT の再起動を求められたら、進行中の作業を終えてから再起動してください。
@@ -102,7 +102,7 @@ https://github.com/yoonpooh/SwitchGPT から最新の SwitchGPT リリースを�
 
 - **SwitchGPT 終了後にリクエストが失敗する：** アプリを再度開くか、後述の接続解除を行ってください。
 - **初回接続が保留のまま：** 再起動ボタンがあれば使い、デスクトップで実際の Codex リクエストを完了してください。使用量の更新や CLI リクエストだけでは接続を確認しません。
-- **再ログインが必要：** ブラウザでアカウントを追加し直してください。期限切れの認証情報は自動更新しません。
+- **再ログインが必要：** ブラウザでアカウントを追加し直してください。保存済みアカウントは自動更新されます。更新トークン自体が期限切れ、または無効化された場合は再ログインが必要です。
 - **使用量が取得できない：** 情報がない場合は残量ゼロではなく不明と表示します。
 - **既存のカスタムエンドポイントがある：** 他の中継設定を上書きせず、競合を知らせます。
 
@@ -130,7 +130,7 @@ https://github.com/yoonpooh/SwitchGPT から最新の SwitchGPT リリースを�
 - Apple シリコン版のみ配布し、Intel は未検証です。
 - API キー認証、keyring/auto 形式の認証保存、独自の `CODEX_HOME`、他のリモートホストの設定には対応していません。この Mac へのリモート接続は既存設定を維持します。
 - この Mac の標準 `openai` プロバイダーと同じ設定を使う CLI セッションにも中継が適用されます。
-- 内蔵アップデーターや期限切れ認証の自動更新はありません。
+- アプリの自動アップデーターはありません。現在のデスクトップ認証はCodexが更新し、SwitchGPTが最新情報を同期します。
 - ビルド成功は全デスクトップ・macOS バージョンの互換性を保証しません。実際のプラグイン・リモート動作は別途検証が必要です。
 
 Issue やコミットに認証情報、アカウント一覧、個人アカウントが見えるスクリーンショットを含めないでください。SwitchGPT は独立したユーティリティで、OpenAI と提携しておらず、OpenAI の承認を受けた製品でもありません。
@@ -165,12 +165,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### リリースのパッケージ化
 
-スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.3 は Apple シリコン向けです。
+スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.4 は Apple シリコン向けです。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## ソース構成

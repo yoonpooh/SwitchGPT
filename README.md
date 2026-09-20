@@ -12,13 +12,13 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 
 Choose an account yourself, or let SwitchGPT move to another available account when a usage limit is reached.
 
-[Download v0.2.3](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[Download v0.2.4](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## What's new in 0.2.3
+## What's new in 0.2.4
 
-- **Simpler panel:** removed the large status card and recent-request row; Auto/Manual now appears beside the title.
-- **Automatic mode:** drag cards to set priority; clicking no longer switches accounts. The pointer cursor remains available.
-- **Manual mode:** turn automatic switching off to select an account by clicking. Restart and quota warnings remain visible when needed.
+- **Automatic token refresh:** saved accounts refresh shortly before access-token expiry or once after a usage-query 401. Rotated tokens are saved before retrying.
+- **Desktop sign-in stays in sync:** copy the desktop app's latest credentials without independently refreshing its shared token.
+- **Compact panel:** smaller account rows, usage bars, plan badges, and reset-credit controls.
 
 ## Core features introduced in 0.2.0
 
@@ -46,7 +46,7 @@ This applies to Codex requests using the built-in `openai` provider on this Mac,
 
 Requirements: **Apple silicon, macOS 14 or later**, and the current ChatGPT desktop app installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate CLI installation is required.
 
-1. Download `SwitchGPT-v0.2.3-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.3).
+1. Download `SwitchGPT-v0.2.4-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.4).
 2. Verify the checksum below, extract the ZIP, and move **SwitchGPT.app** into **Applications**.
 3. Open SwitchGPT and click its menu bar icon. Choose **+** to add an account through browser sign-in. Repeat for each account you want to save.
 4. For initial account selection, turn automatic switching off in `⋯`, then click an account card. Enable automatic switching again to follow list order. If prompted, finish active work before restarting ChatGPT.
@@ -102,7 +102,7 @@ Turn automatic switching off in `⋯` to keep using the selected account and rec
 
 - **Requests fail after quitting SwitchGPT:** reopen it, or remove routing as described below.
 - **Initial connection stays pending:** use the restart button if shown, then complete a real desktop Codex request. Usage refreshes and CLI requests do not verify the desktop connection.
-- **An account needs to sign in again:** add it again through the browser. SwitchGPT does not automatically refresh expired credentials.
+- **An account needs to sign in again:** add it again through the browser. Saved accounts refresh automatically. Sign in again if the refresh token has expired or been revoked.
 - **Usage is unavailable:** missing information is shown as unknown, not zero remaining.
 - **An existing custom endpoint is configured:** SwitchGPT reports a conflict instead of overwriting another relay's setting.
 
@@ -130,7 +130,7 @@ Current limitations:
 - The release includes an Apple silicon build only; Intel is not verified.
 - API-key authentication, keyring/auto credential storage, a custom `CODEX_HOME`, and configuring other Remote hosts are not supported. Remote access into this Mac keeps using its existing setup.
 - Routing also applies to CLI sessions using this Mac's built-in `openai` provider and configuration.
-- There is no built-in updater or automatic refresh of expired sign-in credentials.
+- There is no built-in app updater. The active desktop session relies on Codex for token refresh; SwitchGPT synchronizes its latest credentials.
 - Successful builds do not establish compatibility with every desktop or macOS version. Live plugin and Remote behavior require separate verification.
 
 Do not include credentials, account lists, or screenshots exposing personal accounts in issues or commits. SwitchGPT is an independent utility and is not affiliated with or endorsed by OpenAI.
@@ -165,12 +165,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.2.3 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.2.4 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## Source layout
