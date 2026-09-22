@@ -66,7 +66,6 @@ struct AccountPanel: View {
             .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.currentID) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.routingPreferences.automatic) { _, _ in NSCursor.arrow.set() }
-            .onChange(of: store.routingPreferences.modelAutomatic) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.routingPreferences.effortAutomatic) { _, _ in NSCursor.arrow.set() }
     }
 
@@ -95,8 +94,6 @@ struct AccountPanel: View {
                 Menu(L10n.text("jev_settings")) {
                     Text(L10n.text("jev_disclosure"))
                         .font(.caption).foregroundStyle(.secondary)
-                    Toggle(L10n.text("jev_auto_toggle"), isOn: Binding(
-                        get: { store.routingPreferences.modelAutomatic }, set: { store.setModelAutomatic($0) }))
                     Toggle(L10n.text("jev_effort_auto_toggle"), isOn: Binding(
                         get: { store.routingPreferences.effortAutomatic }, set: { store.setEffortAutomatic($0) }))
                     Divider()

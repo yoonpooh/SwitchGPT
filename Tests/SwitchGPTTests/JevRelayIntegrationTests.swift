@@ -71,15 +71,19 @@ final class JevRelayIntegrationTests: XCTestCase {
         let (data, response) = try await client.data(for: baseline)
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("response.completed"))
-        XCTAssertEqual(recorder.classifications, 1)
+        let adaptive = routeEffort
+        XCTAssertEqual(recorder.classifications, adaptive ? 1 : 0)
         let calls = upstream.requests
-        XCTAssertEqual(calls.count, reject || quota ? 2 : 1)
-        let routed = try XCTUnwrap(try JSONSerialization.jsonObject(with: calls[0].body) as? [String: Any])
-        XCTAssertEqual(routed["model"] as? String, routeModel ? "gpt-5.6-luna" : "gpt-6-astra")
+        XCTAssertEqual(calls.count, quota || (reject && adaptive) ? 2 : 1)
+        let routedBody = compressed && !adaptive
+            ? try XCTUnwrap(ZstdRequestBody.decode(calls[0].body))
+            : calls[0].body
+        let routed = try XCTUnwrap(try JSONSerialization.jsonObject(with: routedBody) as? [String: Any])
+        XCTAssertEqual(routed["model"] as? String, "gpt-6-astra")
         XCTAssertEqual((routed["reasoning"] as? [String: Any])?["effort"] as? String,
                        routeEffort ? (routeModel ? "max" : "high") : "medium")
-        XCTAssertNil(calls[0].headers["content-encoding"])
-        if reject {
+        XCTAssertEqual(calls[0].headers["content-encoding"], adaptive ? nil : (compressed ? "zstd" : nil))
+        if reject && adaptive {
             XCTAssertEqual(calls[1].body, baseline.httpBody)
             XCTAssertEqual(calls[1].headers["content-encoding"], compressed ? "zstd" : nil)
         }
@@ -88,24 +92,24 @@ final class JevRelayIntegrationTests: XCTestCase {
             XCTAssertEqual(calls[1].headers["authorization"], "Bearer second-token")
         }
         let completed = try XCTUnwrap(recorder.events.last { $0.completed })
-        XCTAssertEqual(completed.model, reject || !routeModel ? "gpt-6-astra" : "gpt-5.6-luna")
-        XCTAssertEqual(completed.modelRouting?.changed, !reject)
+        XCTAssertEqual(completed.model, "gpt-6-astra")
+        XCTAssertEqual(completed.modelRouting?.changed, adaptive && !reject)
         let diagnostics = try XCTUnwrap(completed.modelRouting?.diagnostics)
-        XCTAssertEqual(diagnostics.routeModel, routeModel)
+        XCTAssertFalse(diagnostics.routeModel)
         XCTAssertEqual(diagnostics.routeEffort, routeEffort)
-        XCTAssertEqual(diagnostics.modelDisposition, routeModel ? (reject ? .upstreamRejected : .applied) : .disabled)
+        XCTAssertEqual(diagnostics.modelDisposition, .disabled)
         XCTAssertEqual(diagnostics.effortDisposition, routeEffort ? (reject ? .upstreamRejected : .applied) : .disabled)
         XCTAssertNil(routed["diagnostics"])
         XCTAssertNil(routed["modelRouting"])
-        if reject { XCTAssertEqual(completed.modelRouting?.reason, "upstream_unsupported") }
+        if reject && adaptive { XCTAssertEqual(completed.modelRouting?.reason, "upstream_unsupported") }
         XCTAssertEqual(try Data(contentsOf: auth), desktop.data)
 
         let (unauthorizedBody, unauthorizedResponse) = try await client.data(for: request(port: port, token: "unknown"))
         XCTAssertEqual((unauthorizedResponse as? HTTPURLResponse)?.statusCode, 401)
         XCTAssertTrue(unauthorizedBody.isEmpty)
-        XCTAssertEqual(recorder.classifications, 1)
+        XCTAssertEqual(recorder.classifications, adaptive ? 1 : 0)
         XCTAssertEqual(upstream.requests.count, calls.count)
-        if reject {
+        if reject && adaptive {
             var continuation = baseline
             let originalBody = try XCTUnwrap(compressed ? ZstdRequestBody.decode(baseline.httpBody!) : baseline.httpBody)
             var object = try XCTUnwrap(try JSONSerialization.jsonObject(with: originalBody) as? [String: Any])
@@ -117,8 +121,14 @@ final class JevRelayIntegrationTests: XCTestCase {
             let (_, continuationResponse) = try await client.data(for: continuation)
             XCTAssertEqual((continuationResponse as? HTTPURLResponse)?.statusCode, 200)
             XCTAssertEqual(upstream.requests.count, calls.count + 1)
-            XCTAssertEqual(upstream.requests.last?.body, continuation.httpBody)
-            XCTAssertEqual(recorder.classifications, 1)
+            let last = try XCTUnwrap(upstream.requests.last)
+            let lastBody = last.headers["content-encoding"] == "zstd"
+                ? try XCTUnwrap(ZstdRequestBody.decode(last.body))
+                : last.body
+            let lastObject = try XCTUnwrap(try JSONSerialization.jsonObject(with: lastBody) as? [String: Any])
+            XCTAssertEqual(lastObject["model"] as? String, "gpt-6-astra")
+            XCTAssertEqual((lastObject["reasoning"] as? [String: Any])?["effort"] as? String, "max")
+            XCTAssertEqual(recorder.classifications, 2)
         }
     }
 
@@ -148,6 +158,7 @@ private final class JevRelayServer: @unchecked Sendable {
     private let lock = NSLock()
     private var listener: NWListener?
     private var captured: [RelayRequest] = []
+    private var rejectedRoutedRoute = false
     let rejectRoutedModel: Bool
     let quotaAccount: String?
     init(rejectRoutedModel: Bool = false, quotaAccount: String? = nil) {
@@ -189,14 +200,15 @@ private final class JevRelayServer: @unchecked Sendable {
             let decoded = request.headers["content-encoding"] == "zstd" ? ZstdRequestBody.decode(request.body) : request.body
             let object = decoded.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
             let model = object?["model"] as? String ?? "unknown"
+            let effort = (object?["reasoning"] as? [String: Any])?["effort"] as? String
             let status: Int
             let body: String
             if let quotaAccount, request.headers["authorization"] == "Bearer \(quotaAccount)-token" {
                 status = 429
                 body = "{\"error\":{\"type\":\"usage_limit_reached\"}}"
-            } else if rejectRoutedModel && model == "gpt-5.6-luna" {
+            } else if rejectRoutedModel && effort == "max" && shouldRejectRoutedRoute() {
                 status = 400
-                body = "{\"error\":{\"code\":\"model_not_found\",\"param\":\"model\"}}"
+                body = "{\"error\":{\"code\":\"unsupported_value\",\"param\":\"reasoning.effort\"}}"
             } else {
                 status = 200
                 body = "data: {\"type\":\"response.completed\",\"response\":{\"model\":\"\(model)\",\"usage\":{\"input_tokens\":4,\"output_tokens\":2}}}\n\n"
@@ -204,6 +216,14 @@ private final class JevRelayServer: @unchecked Sendable {
             let response = "HTTP/1.1 \(status) Response\r\nContent-Type: text/event-stream\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
             connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
         }
+    }
+
+    private func shouldRejectRoutedRoute() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !rejectedRoutedRoute else { return false }
+        rejectedRoutedRoute = true
+        return true
     }
 }
 

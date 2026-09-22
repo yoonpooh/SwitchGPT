@@ -24,9 +24,9 @@ final class ModelRoutingDiagnosticsTests: XCTestCase {
         XCTAssertEqual(diagnostics.proposedEffort, "high")
         XCTAssertEqual(diagnostics.modelConfidence, 0.79)
         XCTAssertEqual(diagnostics.effortConfidence, 0.99)
-        XCTAssertEqual(diagnostics.modelThreshold, 0.8)
+        XCTAssertNil(diagnostics.modelThreshold)
         XCTAssertEqual(diagnostics.effortThreshold, 0.65)
-        XCTAssertEqual(diagnostics.modelDisposition, .lowConfidence)
+        XCTAssertEqual(diagnostics.modelDisposition, .disabled)
         XCTAssertEqual(diagnostics.effortDisposition, .applied)
         XCTAssertEqual(result.decision?.selectedModel, "gpt-6-astra")
         XCTAssertEqual(result.decision?.selectedEffort, "high")
@@ -39,14 +39,15 @@ final class ModelRoutingDiagnosticsTests: XCTestCase {
         })
         router.update(enabled: true, apiKey: "fixture-key")
 
-        let result = await router.route(try makeRequest())
+        let request = try makeRequest()
+        let result = await router.route(request)
         let diagnostics = try XCTUnwrap(result.decision?.diagnostics)
 
         XCTAssertEqual(diagnostics.proposedModel, "keep")
         XCTAssertEqual(diagnostics.proposedEffort, "high")
         XCTAssertEqual(diagnostics.modelDisposition, .globalKeep)
         XCTAssertEqual(diagnostics.effortDisposition, .globalKeep)
-        XCTAssertEqual(result.request.body, try makeRequest().body)
+        XCTAssertEqual(result.request.body, request.body)
     }
 
     func testLowConfidenceNoPlanStillCarriesPerDimensionDiagnostics() async throws {
@@ -59,9 +60,9 @@ final class ModelRoutingDiagnosticsTests: XCTestCase {
         let diagnostics = try XCTUnwrap(result.decision?.diagnostics)
 
         XCTAssertEqual(result.decision?.reason, ModelRoutingReason.lowConfidence.rawValue)
-        XCTAssertEqual(diagnostics.modelDisposition, .lowConfidence)
+        XCTAssertEqual(diagnostics.modelDisposition, .disabled)
         XCTAssertEqual(diagnostics.effortDisposition, .lowConfidence)
-        XCTAssertEqual(diagnostics.modelThreshold, 0.8)
+        XCTAssertNil(diagnostics.modelThreshold)
         XCTAssertEqual(diagnostics.effortThreshold, 0.65)
     }
 
@@ -107,7 +108,7 @@ final class ModelRoutingDiagnosticsTests: XCTestCase {
         let diagnostics = try XCTUnwrap(result.decision?.diagnostics)
 
         XCTAssertEqual(diagnostics.effortDisposition, .unsupportedBaseline)
-        XCTAssertEqual(diagnostics.modelDisposition, .unchanged)
+        XCTAssertEqual(diagnostics.modelDisposition, .disabled)
         XCTAssertNil(diagnostics.effortThreshold)
         XCTAssertEqual(result.request.body, try makeRequest(body: [
             "model": "gpt-6-astra", "reasoning": ["effort": "xhigh"],
@@ -133,7 +134,7 @@ final class ModelRoutingDiagnosticsTests: XCTestCase {
 
         XCTAssertEqual(continuation.decision?.reason, ModelRoutingReason.continuationReused.rawValue)
         XCTAssertEqual(continuation.decision?.diagnostics, routed.decision?.diagnostics)
-        XCTAssertEqual(continuation.decision?.diagnostics?.modelDisposition, .applied)
+        XCTAssertEqual(continuation.decision?.diagnostics?.modelDisposition, .disabled)
         XCTAssertEqual(continuation.decision?.diagnostics?.effortDisposition, .applied)
     }
 

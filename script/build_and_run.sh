@@ -5,7 +5,7 @@ MODE="${1:-run}"
 case "$MODE" in run|--verify|--build|--release) ;; *) echo 'usage: build_and_run.sh [run|--verify|--build|--release]'; exit 2;; esac
 CONFIGURATION=debug
 if [ "$MODE" = '--release' ]; then CONFIGURATION=release; fi
-if [ "$MODE" = run ] || [ "$MODE" = '--verify' ]; then pkill -x SwitchGPT || true; fi
+if [ "$MODE" = run ]; then pkill -x SwitchGPT || true; fi
 swift build -c "$CONFIGURATION"
 BUILD_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 APP='dist/SwitchGPT.app'
@@ -61,5 +61,16 @@ PLIST
 xattr -cr "$APP"
 codesign --force --sign - "$APP"
 codesign --verify --strict "$APP"
-if [ "$MODE" = run ] || [ "$MODE" = '--verify' ]; then open -n "$APP"; fi
-if [ "$MODE" = '--verify' ]; then sleep 2; pgrep -x SwitchGPT >/dev/null; fi
+if [ "$MODE" = run ]; then open -n "$APP"; fi
+if [ "$MODE" = '--verify' ]; then
+    if pgrep -x SwitchGPT >/dev/null; then
+        echo 'SwitchGPT is already running; verified the build and signature without launching a competing relay.'
+    else
+        open -n "$APP"
+        sleep 2
+        VERIFY_EXECUTABLE="$PWD/$APP/Contents/MacOS/SwitchGPT"
+        VERIFY_PID="$(pgrep -f "^$VERIFY_EXECUTABLE$")"
+        test -n "$VERIFY_PID"
+        kill "$VERIFY_PID"
+    fi
+fi

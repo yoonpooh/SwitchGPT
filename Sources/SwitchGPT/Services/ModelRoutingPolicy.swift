@@ -34,6 +34,7 @@ enum JevModelChoice: String, CaseIterable, Codable, Sendable {
 /// The reasoning levels that are known to be valid for at least one target
 /// model family.  `keep` is a classifier instruction, never an API value.
 enum JevEffortChoice: String, CaseIterable, Codable, Sendable {
+    case low
     case medium
     case high
     case max
@@ -43,6 +44,7 @@ enum JevEffortChoice: String, CaseIterable, Codable, Sendable {
         guard let rawValue else { return nil }
         switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "keep", "preserve", "baseline": self = .keep
+        case "low": self = .low
         case "medium": self = .medium
         case "high": self = .high
         case "max": self = .max
@@ -109,6 +111,7 @@ struct JevRoutingPolicy: Sendable, Equatable {
         if value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "low" { return -1 }
         guard let choice = JevEffortChoice(answerValue: value) else { return nil }
         switch choice {
+        case .low: return -1
         case .medium: return 0
         case .high: return 1
         case .max: return 2

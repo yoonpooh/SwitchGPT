@@ -92,6 +92,18 @@ struct AccountCard: View {
     }
 }
 
+enum UsageBarTone: Equatable {
+    case normal
+    case warning
+    case critical
+
+    static func resolve(remaining: Double) -> Self {
+        if remaining < 10 { return .critical }
+        if remaining < 20 { return .warning }
+        return .normal
+    }
+}
+
 private struct UsageWindowView: View {
     let window: AccountUsage.Window
 
@@ -109,15 +121,30 @@ private struct UsageWindowView: View {
                     .help(L10n.format("resets_at", L10n.date(window.resetDate)))
             }
             .frame(width: 54, alignment: .leading)
-            ProgressView(value: window.remaining, total: 100)
-                .progressViewStyle(.linear)
-                .controlSize(.mini)
-                .tint(window.remaining <= 10 ? .orange : .accentColor)
-                .padding(.top, 3)
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.18))
+                    if window.remaining > 0 {
+                        Capsule()
+                            .fill(barTint)
+                            .frame(width: geometry.size.width * window.remaining / 100)
+                    }
+                }
+            }
+            .frame(height: 4)
+            .padding(.top, 4)
             Text("\(Int(window.remaining.rounded(.up)))%")
                 .font(.system(size: 9)).monospacedDigit().foregroundStyle(.secondary)
                 .frame(width: 30, alignment: .trailing)
                 .accessibilityLabel(L10n.format("remaining", Int(window.remaining.rounded(.up))))
+        }
+    }
+
+    private var barTint: Color {
+        switch UsageBarTone.resolve(remaining: window.remaining) {
+        case .normal: return .accentColor
+        case .warning: return .orange
+        case .critical: return .red
         }
     }
 

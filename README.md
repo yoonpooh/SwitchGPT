@@ -162,13 +162,13 @@ cd SwitchGPT
 ./script/build_and_run.sh --verify
 ```
 
-This builds a local app at `dist/SwitchGPT.app`, signs it ad hoc, launches it, and checks that the process is running. It does not install the app into Applications. To install your build, quit SwitchGPT and move the generated app into Applications using Finder.
+This builds a local app at `dist/SwitchGPT.app` and signs it ad hoc. If SwitchGPT is not already running, it briefly launches the build, verifies its exact process, and stops it again. If an installed copy is running, verification does not launch a competing relay on port 19565. It does not install the app into Applications. To install your build, quit SwitchGPT and move the generated app into Applications using Finder.
 
 Available commands:
 
 ```sh
 ./script/build_and_run.sh           # Build and launch a debug app
-./script/build_and_run.sh --verify  # Build, launch, and verify the process
+./script/build_and_run.sh --verify  # Build/sign; launch briefly only when no copy is running
 ./script/build_and_run.sh --build   # Build a debug app without launching
 ./script/build_and_run.sh --release # Build an optimized app without launching
 swift test                         # Run the test suite

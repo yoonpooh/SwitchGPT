@@ -50,7 +50,7 @@ final class ZstdRequestBodyTests: XCTestCase {
     }
 
     func testCompressedFallbackPreservesOriginalBodyAndHeaders() async throws {
-        let body = try zstdFixture(Data(#"{"model":"gpt-6-astra","input":"Rename this button"}"#.utf8))
+        let body = try zstdFixture(Data(#"{"model":"gpt-6-astra","reasoning":{"effort":"medium"},"input":"Rename this button"}"#.utf8))
         let request = RelayRequest(method: "POST", target: "/backend-api/codex/responses",
             headers: ["content-encoding": "zstd", "content-length": String(body.count), "thread-id": "fixture"], body: body)
         let disabled = await IntelligentModelRouter().route(request)

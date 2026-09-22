@@ -61,12 +61,18 @@ final class AccountStore {
             if FileManager.default.fileExists(atPath: self.index.path) {
                 accounts = try JSONDecoder().decode([Account].self, from: Data(contentsOf: self.index))
             }
+            var loadedLegacyModelPreference = false
             if let data = try? Data(contentsOf: preferencesURL),
-               let saved = try? JSONDecoder().decode(RoutingPreferences.self, from: data) { routingPreferences = saved }
-            if (routingPreferences.modelAutomatic || routingPreferences.effortAutomatic) && jevAPIKey == nil {
+               let saved = try? JSONDecoder().decode(RoutingPreferences.self, from: data) {
+                routingPreferences = saved
+                loadedLegacyModelPreference = Self.hasLegacyModelAutomaticKey(in: data)
+            }
+            if routingPreferences.effortAutomatic && jevAPIKey == nil {
                 // A legacy/stale preference must not make the UI claim that Jev is enabled.
-                routingPreferences.modelAutomatic = false
                 routingPreferences.effortAutomatic = false
+                try? savePreferences(routingPreferences)
+            } else if loadedLegacyModelPreference {
+                // Rewrite legacy files so the model-routing key is not carried forward.
                 try? savePreferences(routingPreferences)
             }
             let events = self.index.deletingLastPathComponent().appendingPathComponent("relay-events.jsonl")
@@ -93,6 +99,11 @@ final class AccountStore {
         guard !key.isEmpty, !key.hasPrefix("{"), !key.hasPrefix("["),
               !key.contains("\r"), !key.contains("\n") else { return nil }
         return key
+    }
+
+    private static func hasLegacyModelAutomaticKey(in data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return object["modelAutomatic"] != nil
     }
     static func migrateAccountIndex(in support: URL) throws {
         let destination = support.appendingPathComponent("SwitchGPT/accounts.json")
@@ -282,11 +293,10 @@ final class AccountStore {
     }
 
     private func updateIntelligentRouter() {
-        let routeModel = routingPreferences.modelAutomatic
         let routeEffort = routingPreferences.effortAutomatic
-        let enabled = (routeModel || routeEffort) && jevAPIKey != nil
+        let enabled = routeEffort && jevAPIKey != nil
         intelligentRouter.update(enabled: enabled, apiKey: enabled ? jevAPIKey : nil,
-                                 routeModel: routeModel, routeEffort: routeEffort)
+                                 routeModel: false, routeEffort: routeEffort)
     }
 
     func setAutomatic(_ enabled: Bool) {
@@ -300,16 +310,16 @@ final class AccountStore {
         } catch { message = error.localizedDescription }
     }
 
-    /// Toggle one Jev routing dimension independently from account-order routing.
+    /// Toggle Jev's adaptive reasoning effort independently from account-order routing.
     /// Enabling without a saved key leaves the preference and engine disabled.
-    private func setJevAutomatic(_ enabled: Bool, keyPath: WritableKeyPath<RoutingPreferences, Bool>) {
+    func setEffortAutomatic(_ enabled: Bool) {
         guard !enabled || jevAPIKey != nil else {
             message = L10n.text("jev_key_required")
             updateIntelligentRouter()
             return
         }
         var updated = routingPreferences
-        updated[keyPath: keyPath] = enabled
+        updated.effortAutomatic = enabled
         if !enabled {
             // A disable action must take effect even if the preference file is unavailable.
             routingPreferences = updated
@@ -329,16 +339,6 @@ final class AccountStore {
             message = L10n.text("jev_settings_save_failed")
             updateIntelligentRouter()
         }
-    }
-
-    /// Toggle Jev's model selection independently from effort selection.
-    func setModelAutomatic(_ enabled: Bool) {
-        setJevAutomatic(enabled, keyPath: \.modelAutomatic)
-    }
-
-    /// Toggle Jev's reasoning-effort selection independently from model selection.
-    func setEffortAutomatic(_ enabled: Bool) {
-        setJevAutomatic(enabled, keyPath: \.effortAutomatic)
     }
 
     @discardableResult
@@ -372,7 +372,6 @@ final class AccountStore {
         jevAPIKey = nil
         hasJevAPIKey = false
         var updated = routingPreferences
-        updated.modelAutomatic = false
         updated.effortAutomatic = false
         // Removing a key always disables the engine, even if preference persistence fails.
         routingPreferences = updated
