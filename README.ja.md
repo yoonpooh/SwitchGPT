@@ -12,14 +12,14 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 アカウントを手動で選ぶことも、利用上限に達したら利用可能な別のアカウントへ自動で切り替えることもできます。
 
-[v0.2.5 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.6 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.6) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 現在のソースコード（未リリース）
+## 0.2.6 の主な変更
 
+- **JEV の削除:** モデルと推論レベルの自動選択、TypeSafe 分類、関連設定を削除しました。
 - **mini モデルの互換ルーティング:** GPT-5.4 mini / low のリクエストを GPT-6 Luna / low に変更します。zstd 圧縮リクエストにも対応します。
-- **パネルの整理:** 一時的な使用量取得エラー表示と空の状態欄の余白を削減しました。
 
-その他のモデルと推論レベルは維持します。この変更は公開済みの 0.2.5 アプリにはまだ含まれていません。
+その他のモデルと推論レベルは維持します。
 
 ## 0.2.0 で導入した基本機能
 
@@ -47,7 +47,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 **Apple シリコン搭載 Mac、macOS 14 以降**と、インストール・ログイン済みの現行 ChatGPT デスクトップアプリが必要です。標準のファイル形式の認証情報 `~/.codex/auth.json` を使用してください。同梱の CLI を使うため、CLI の別途インストールは不要です。
 
-1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5)から `SwitchGPT-v0.2.5-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
+1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.6)から `SwitchGPT-v0.2.6-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
 2. 下のコマンドでチェックサムを確認し、ZIP を展開して **SwitchGPT.app** を **アプリケーション** に移動します。
 3. SwitchGPT を開き、メニューバーアイコンをクリックします。**+** からブラウザでログインしてアカウントを追加します。保存するアカウントごとに繰り返してください。
 4. 初回は `⋯` で自動切り替えを無効にし、アカウントカードをクリックします。リスト順を使う場合は自動切り替えを再び有効にします。 ChatGPT の再起動を求められたら、進行中の作業を終えてから再起動してください。
@@ -167,12 +167,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### リリースのパッケージ化
 
-スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.5 は Apple シリコン向けです。
+スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.6 は Apple シリコン向けです。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.5-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.5-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.6-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.6-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## ソース構成

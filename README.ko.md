@@ -12,14 +12,12 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 직접 실행 계정을 선택하거나, 한도가 소진되면 사용 가능한 다음 계정으로 자동 전환하세요.
 
-[v0.2.5 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.6 다운로드](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.6) · [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 현재 소스 변경 사항 (미출시)
+## 0.2.6의 주요 변경
 
+- **JEV 제거:** 모델·추론 수준 자동 선택, TypeSafe 분류, 관련 설정을 제거했습니다.
 - **mini 모델 호환 라우팅:** GPT-5.4 mini / low 요청을 GPT-6 Luna / low로 보냅니다. zstd 압축 요청도 지원합니다.
-- **간결한 패널:** 일시적인 사용량 조회 오류 표시와 빈 상태 영역의 간격을 줄였습니다.
-
-이 소스 변경 사항은 공개된 0.2.5 앱에 아직 포함되지 않았습니다.
 
 ## 0.2.0에서 도입한 핵심 기능
 - **데스크톱 로그인 유지:** 모델 실행 계정을 바꿔도 기존 플러그인 연결과 원격 접속에 사용하는 데스크톱 인증을 유지합니다.
@@ -46,7 +44,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 
 **Apple silicon Mac, macOS 14 이상**, 설치 및 로그인이 완료된 현재 ChatGPT 데스크톱 앱이 필요합니다. 기본 파일 기반 인증 저장 경로인 `~/.codex/auth.json`을 사용해야 합니다. 데스크톱 앱에 포함된 CLI를 사용하므로 별도 CLI 설치는 필요하지 않습니다.
 
-1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5)에서 `SwitchGPT-v0.2.5-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
+1. [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.6)에서 `SwitchGPT-v0.2.6-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
 2. 아래 명령으로 체크섬을 확인하고 ZIP 압축을 풀어 **SwitchGPT.app**을 **응용 프로그램** 폴더로 옮깁니다.
 3. SwitchGPT를 실행하고 메뉴 막대 아이콘을 클릭합니다. **+**를 눌러 브라우저 로그인으로 계정을 추가합니다. 저장할 계정마다 반복하세요.
 4. 최초 계정 선택은 `⋯`에서 자동 전환을 끈 뒤 계정 카드를 클릭하세요. 목록 순서를 따르려면 자동 전환을 다시 켜세요. ChatGPT 재시작 안내가 나오면 진행 중인 작업을 마친 뒤 재시작하세요.
@@ -172,12 +170,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### 릴리스 패키징
 
-스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.5 파일은 Apple silicon 빌드입니다.
+스크립트는 빌드하는 Mac의 아키텍처를 대상으로 합니다. 공개된 v0.2.6 파일은 Apple silicon 빌드입니다.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.5-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.5-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.6-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.6-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## 소스 구조
