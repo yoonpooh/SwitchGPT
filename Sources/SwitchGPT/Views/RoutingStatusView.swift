@@ -8,7 +8,7 @@ struct RoutingStatusView: View {
         VStack(alignment: .leading, spacing: 6) {
             if let decision = store.lastCompletedModelRouting {
                 HStack(spacing: 5) {
-                    Label(L10n.text("jev_last_route"), systemImage: "wand.and.stars")
+                    Label(L10n.text("routing_last_model"), systemImage: "arrow.triangle.branch")
                     Text(Self.modelRoutingSummary(decision))
                         .lineLimit(1).truncationMode(.middle)
                 }
@@ -45,7 +45,7 @@ struct RoutingStatusView: View {
         let suffix = raw.split(whereSeparator: { $0 == "-" || $0 == "_" }).last.map(String.init) ?? raw
         let name: String
         if suffix.isEmpty {
-            name = L10n.text("jev_unknown_model")
+            name = L10n.text("routing_unknown_model")
         } else {
             name = suffix.prefix(1).uppercased() + suffix.dropFirst()
         }

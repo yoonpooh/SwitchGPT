@@ -66,7 +66,6 @@ struct AccountPanel: View {
             .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.currentID) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.routingPreferences.automatic) { _, _ in NSCursor.arrow.set() }
-            .onChange(of: store.routingPreferences.effortAutomatic) { _, _ in NSCursor.arrow.set() }
     }
 
     private var header: some View {
@@ -90,18 +89,6 @@ struct AccountPanel: View {
             Menu {
                 Toggle(L10n.text("routing_auto_toggle"), isOn: Binding(
                     get: { store.routingPreferences.automatic }, set: { store.setAutomatic($0) }))
-                Divider()
-                Menu(L10n.text("jev_settings")) {
-                    Text(L10n.text("jev_disclosure"))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Toggle(L10n.text("jev_effort_auto_toggle"), isOn: Binding(
-                        get: { store.routingPreferences.effortAutomatic }, set: { store.setEffortAutomatic($0) }))
-                    Divider()
-                    Button(L10n.text(store.hasJevAPIKey ? "jev_replace_key" : "jev_save_key"), action: editJevAPIKey)
-                    Button(L10n.text("jev_remove_key"), role: .destructive) {
-                        _ = store.removeJevAPIKey()
-                    }.disabled(!store.hasJevAPIKey)
-                }
                 Divider()
                 ForEach(store.accounts) { account in
                     Menu(store.displayName(account)) { accountActions(account) }
@@ -184,21 +171,6 @@ struct AccountPanel: View {
         alert.window.initialFirstResponder = field
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn { store.rename(account, to: field.stringValue) }
-    }
-
-    private func editJevAPIKey() {
-        guard !store.busy else { return }
-        let alert = NSAlert()
-        alert.messageText = L10n.text(store.hasJevAPIKey ? "jev_replace_key" : "jev_save_key")
-        alert.informativeText = L10n.text("jev_key_hint") + "\n\n" + L10n.text("jev_key_disclosure")
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        field.placeholderString = L10n.text("jev_key_placeholder")
-        alert.accessoryView = field
-        alert.addButton(withTitle: L10n.text("save"))
-        alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
-        alert.window.initialFirstResponder = field
-        NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn { _ = store.saveJevAPIKey(field.stringValue) }
     }
 
     private func confirmRestart() {

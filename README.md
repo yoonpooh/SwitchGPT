@@ -14,12 +14,12 @@ Choose an account yourself, or let SwitchGPT move to another available account w
 
 [Download v0.2.5](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## What's new in 0.2.5
+## Current source (unreleased)
 
-- **Optional JEV model selection:** choose a model and reasoning effort for eligible text requests, independently of account switching.
-- **Compressed requests work too:** decode zstd requests before classification; keep the original request when routing cannot safely proceed.
-- **Better image-history handling:** independent text requests can route after earlier images. Current images, references to earlier media, and ambiguous follow-ups conservatively keep the original model.
+- **Mini compatibility mapping:** route GPT-5.4 mini requests at low effort to GPT-6 Luna at low effort, including zstd-compressed requests.
 - **Quieter panel:** retain cached usage during temporary refresh failures and remove empty status spacing.
+
+These source changes are not included in the published 0.2.5 app.
 
 ## Core features introduced in 0.2.0
 
@@ -99,15 +99,9 @@ Dates follow the Mac's time zone and interface language. Reopen the app after ch
 
 Turn automatic switching off in `⋯` to keep using the selected account and receive its limit errors directly. In automatic mode, card order takes precedence over manual selection, and reordering applies to the next request. Quotas remain separate for each account.
 
-## Optional automatic model selection
+## Mini compatibility mapping
 
-Open **⋯ → Jev model settings**, save your TypeSafe/JEV API key, and enable **Automatically choose the model**. This setting is off by default and is separate from automatic account switching. The key is stored in macOS Keychain.
-
-JEV selects among Luna (medium/max), Sol (medium/high), and Astra (medium/high), according to the requested work. A selection is reused for tool continuations within the same turn. The panel shows the last model route; it does not insert model-change announcements into your conversation.
-
-**Privacy and billing:** classification sends extracted latest and, when available, previous user text plus the original model/effort to TypeSafe. It does not send the full transcript, images, tool results, or your OpenAI authentication tokens. Local credential-pattern checks are limited safeguards, not a guarantee that all personal or sensitive text is removed. TypeSafe inference is billed separately from your ChatGPT subscription.
-
-Low-confidence results, classifier failures/timeouts, unsupported content, and explicit subagent requests retain the original model. Current media and references to older media are conservatively excluded using text heuristics; those heuristics are not perfect semantic detection. An upstream unsupported-model response can retry the original request. Model availability still depends on the account and upstream service.
+GPT-5.4 mini requests with low reasoning effort use GPT-6 Luna with the same low effort. Other model and effort combinations stay unchanged. If the upstream service explicitly rejects the mapped model, SwitchGPT retries the original request before forwarding a response. Model availability still depends on the account and upstream service.
 
 ## Troubleshooting
 
@@ -119,7 +113,7 @@ Low-confidence results, classifier failures/timeouts, unsupported content, and e
 
 ## Data and compatibility
 
-Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth.json` unchanged, and reads the selected model account's credentials into memory. SwitchGPT sends model requests directly to OpenAI through a relay at `127.0.0.1:19565`; there is no external SwitchGPT server. If optional JEV model selection is enabled, classification text is also sent to TypeSafe as described above.
+Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth.json` unchanged, and reads the selected model account's credentials into memory. SwitchGPT sends model requests directly to OpenAI through a relay at `127.0.0.1:19565`; there is no external SwitchGPT server.
 
 | Local data | Location |
 | --- | --- |
@@ -130,7 +124,7 @@ Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth
 | Request metadata | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
 | Existing desktop credentials | `~/.codex/auth.json` — preserved |
 
-A managed block in `~/.codex/config.toml` sets `openai_base_url`. HTTP streaming lets subsequent requests use the selected account. Local logs contain an opaque account fingerprint, path, model, HTTP status, completion state, token counts, client type, timestamps, quota-exhaustion status, and model-routing decisions. Prompts, response content, and authentication tokens are not logged.
+A managed block in `~/.codex/config.toml` sets `openai_base_url`. HTTP streaming lets subsequent requests use the selected account. Local logs contain an opaque account fingerprint, path, model, HTTP status, completion state, token counts, client type, timestamps, quota-exhaustion status, and mini mapping decisions. Prompts, response content, and authentication tokens are not logged.
 
 To disconnect, finish active work, remove only the `BEGIN/END SwitchGPT model routing` block from `~/.codex/config.toml`, and restart ChatGPT. Preserve other settings. You can then quit or remove SwitchGPT; deleting the app bundle alone leaves the routing setting in place.
 
@@ -150,9 +144,7 @@ Do not include credentials, account lists, or screenshots exposing personal acco
 
 The packaging script downloads checksum-pinned zstd 1.5.7 source on its first run,
 builds it for macOS 14, and embeds `libzstd` and its license in the app.
-End users do not need Homebrew. For local tests, install `brew install zstd`. JEV routing decodes
-zstd request bodies up to 8 MiB, and preserves the original request when decoding
-or routing cannot safely proceed.
+End users do not need Homebrew. For local tests, install `brew install zstd`. The mini mapping decodes zstd request bodies up to 8 MiB and preserves the original request when decoding cannot proceed.
 
 Install Xcode with Swift 6 and a macOS SDK, and select its command-line tools. Then:
 

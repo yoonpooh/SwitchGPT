@@ -29,7 +29,6 @@ struct RelayEvent: Codable, Sendable {
 final class ModelRelay: @unchecked Sendable {
     private let queue = DispatchQueue(label: "local.switchgpt.model-relay")
     let router: AccountRouter
-    private let intelligentRouter: IntelligentModelRouter
     private var listener: NWListener?
     private var connections: [UUID: RelayConnection] = [:]
     private let desktopAuth: URL
@@ -39,14 +38,13 @@ final class ModelRelay: @unchecked Sendable {
     private let didRecord: @Sendable (RelayEvent) -> Void
 
     init(desktopAuth: URL, upstreamBaseURL: URL = URL(string: "https://chatgpt.com")!, eventURL: URL? = nil,
-         router: AccountRouter = AccountRouter(), intelligentRouter: IntelligentModelRouter = IntelligentModelRouter(),
+         router: AccountRouter = AccountRouter(),
          didRecord: @escaping @Sendable (RelayEvent) -> Void = { _ in }) {
         self.desktopAuth = desktopAuth
         initialDesktopToken = Self.accessToken(at: desktopAuth)
         self.upstreamBaseURL = upstreamBaseURL
         self.eventURL = eventURL
         self.router = router
-        self.intelligentRouter = intelligentRouter
         self.didRecord = didRecord
     }
 
@@ -116,7 +114,6 @@ final class ModelRelay: @unchecked Sendable {
     private func accept(_ connection: NWConnection) {
         let id = UUID()
         let client = RelayConnection(connection: connection, queue: queue, upstreamBaseURL: upstreamBaseURL,
-                                     intelligentRouter: intelligentRouter,
                                      credentials: { [weak self] request in
                                          guard let self else { throw HTTPFailure(status: 503) }
                                          return try self.credentials(for: request)
@@ -156,7 +153,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
     private let connection: NWConnection
     private let queue: DispatchQueue
     private let upstreamBaseURL: URL
-    private let intelligentRouter: IntelligentModelRouter
     private let credentials: @Sendable (RelayRequest) throws -> RelayCredentials
     private let fallback: @Sendable (RelayCredentials, Set<String>) -> RelayCredentials?
     private let report: @Sendable (RelayEvent) -> Void
@@ -172,7 +168,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
     private var originalRequest: RelayRequest?
     private var baselineRequest: RelayRequest?
     private var modelRouting: ModelRoutingDecision?
-    private var routingTask: Task<Void, Never>?
     private var usedModelFallback = false
     private var selected: RelayCredentials?
     private var attempted: Set<String> = []
@@ -180,7 +175,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
     private var deferredBody = Data()
 
     init(connection: NWConnection, queue: DispatchQueue, upstreamBaseURL: URL,
-         intelligentRouter: IntelligentModelRouter,
          credentials: @escaping @Sendable (RelayRequest) throws -> RelayCredentials,
          fallback: @escaping @Sendable (RelayCredentials, Set<String>) -> RelayCredentials?,
          report: @escaping @Sendable (RelayEvent) -> Void,
@@ -188,7 +182,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
         self.connection = connection
         self.queue = queue
         self.upstreamBaseURL = upstreamBaseURL
-        self.intelligentRouter = intelligentRouter
         self.credentials = credentials
         self.fallback = fallback
         self.report = report
@@ -230,17 +223,10 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
             // retaining the old account across turns after the user selects a new one.
             if request.headers["upgrade"]?.lowercased() == "websocket" { fail(426); return }
             baselineRequest = request
-            routingTask = Task { [weak self, intelligentRouter] in
-                let routed = await intelligentRouter.route(request)
-                guard !Task.isCancelled, let self else { return }
-                self.queue.async { [self] in
-                    guard !closed else { return }
-                    routingTask = nil
-                    originalRequest = routed.request
-                    modelRouting = routed.decision
-                    startAttempt(routed.request, selected: selected)
-                }
-            }
+            let routed = MiniModelRouter.route(request)
+            originalRequest = routed.request
+            modelRouting = routed.decision
+            startAttempt(routed.request, selected: selected)
         } catch let failure as HTTPFailure { fail(failure.status) }
         catch { fail(400) }
     }
@@ -342,11 +328,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
                 if let decision = modelRouting {
                     modelRouting = ModelRoutingDecision(originalModel: decision.originalModel,
                         originalEffort: decision.originalEffort, selectedModel: decision.originalModel,
-                        selectedEffort: decision.originalEffort, reason: "upstream_unsupported",
-                        diagnostics: decision.diagnostics?.markingUpstreamRejected(
-                            originalModel: decision.originalModel, originalEffort: decision.originalEffort))
+                        selectedEffort: decision.originalEffort, reason: "upstream_unsupported")
                 }
-                intelligentRouter.retainOriginal(for: baseline)
                 originalRequest = baseline
                 session.finishTasksAndInvalidate()
                 startAttempt(baseline, selected: selected)
@@ -400,8 +383,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
         let code = error["code"] as? String ?? error["type"] as? String ?? ""
         if ["model_not_found", "model_not_available", "unsupported_model"].contains(code) { return true }
         let parameter = error["param"] as? String ?? ""
-        return ["model", "reasoning.effort"].contains(parameter)
-            && ["unsupported_value", "invalid_value", "unsupported_parameter"].contains(code)
+        let capabilityError = ["unsupported_value", "invalid_value", "unsupported_parameter", "invalid_request_error"].contains(code)
+        return parameter == "model" && capabilityError
     }
 
     private func fail(_ status: Int) {
@@ -417,8 +400,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
     }
 
     func close() {
-        routingTask?.cancel()
-        routingTask = nil
         guard !closed else { return }
         closed = true
         timeout?.cancel()

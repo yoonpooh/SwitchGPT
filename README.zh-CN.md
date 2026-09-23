@@ -14,14 +14,12 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 
 [下载 v0.2.5](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.5) · [最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.5 的主要更新
+## 当前源码（尚未发布）
 
-- **可选 JEV 模型选择：** 独立于账号切换，选择模型和推理级别。
-- **修复压缩请求处理：** 解压 zstd 后分类；无法安全切换时保留原始请求。
-- **改进图片历史处理：** 旧图片不再阻止无关的新文本请求分类。当前图片及相关追问会保守地保留原模型。
+- **mini 模型兼容路由：** 将 GPT-5.4 mini / low 请求转为 GPT-6 Luna / low，并支持 zstd 压缩请求。
 - **简化面板：** 减少临时用量查询错误提示和空状态区域的间距。
 
-JEV 默认关闭。在菜单中保存 API 密钥后启用。最新及上一条用户文本会发送至 TypeSafe，费用独立于 ChatGPT 订阅。凭据模式检查不能保证移除所有敏感信息。详见[英文说明](README.md#optional-automatic-model-selection)。
+其他模型和推理级别保持不变。此修改尚未包含在已发布的 0.2.5 应用中。
 
 ## 0.2.0 引入的核心功能
 

@@ -203,6 +203,37 @@ final class ModelRoutingTests: XCTestCase {
         }
     }
 
+    @MainActor func testUnsupportedLunaMappingRetriesOriginalMiniRequest() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let auth = root.appendingPathComponent("auth.json")
+        try credential("desktop").data.write(to: auth)
+        let upstream = StubModelServer(rejectLuna: true)
+        let upstreamPort = try await upstream.start()
+        defer { upstream.stop() }
+        let relay = ModelRelay(desktopAuth: auth, upstreamBaseURL: URL(string: "http://127.0.0.1:\(upstreamPort)")!)
+        relay.select(try RelayCredentials(credential("first")))
+        let port = try await relay.start(port: 0)
+        defer { relay.stop() }
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/backend-api/codex/responses")!)
+        request.httpMethod = "POST"
+        request.httpBody = Data(#"{"model":"gpt-5.4-mini","reasoning":{"effort":"low"},"input":"Hello"}"#.utf8)
+        request.setValue("Bearer desktop-token", forHTTPHeaderField: "Authorization")
+
+        let (body, response) = try await session.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(String(decoding: body, as: UTF8.self).contains("response.completed"))
+        let calls = upstream.requests
+        XCTAssertEqual(calls.count, 2)
+        let mapped = try XCTUnwrap(JSONSerialization.jsonObject(with: calls[0].body) as? [String: Any])
+        XCTAssertEqual(mapped["model"] as? String, "gpt-6-luna")
+        XCTAssertEqual((mapped["reasoning"] as? [String: Any])?["effort"] as? String, "low")
+        XCTAssertEqual(calls[1].body, request.httpBody)
+        XCTAssertEqual(calls.map { $0.headers["authorization"] }, ["Bearer first-token", "Bearer first-token"])
+    }
+
     private func directory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
@@ -223,11 +254,14 @@ private final class StubModelServer: @unchecked Sendable {
     private let limitedBody: String
     private let limitedStatus: Int
     private let pauseFirstResponse: Bool
+    private let rejectLuna: Bool
     private var resumeFirstResponse: (@Sendable () -> Void)?
-    init(limitedBody: String = "quota exhausted", limitedStatus: Int = 429, pauseFirstResponse: Bool = false) {
+    init(limitedBody: String = "quota exhausted", limitedStatus: Int = 429,
+         pauseFirstResponse: Bool = false, rejectLuna: Bool = false) {
         self.limitedBody = limitedBody
         self.limitedStatus = limitedStatus
         self.pauseFirstResponse = pauseFirstResponse
+        self.rejectLuna = rejectLuna
     }
     var requests: [RelayRequest] { lock.lock(); defer { lock.unlock() }; return captured }
 
@@ -262,7 +296,10 @@ private final class StubModelServer: @unchecked Sendable {
             guard let request = try? RelayRequest.parse(all) else { read(connection, previous: all); return }
             lock.lock(); captured.append(request); let isFirst = captured.count == 1; lock.unlock()
             let limited = request.headers["authorization"] == "Bearer second-token"
-            let body = limited ? limitedBody : "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":3,\"output_tokens\":1}}}\n\n"
+            let model = ((try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any])?["model"] as? String
+            let rejected = rejectLuna && model == "gpt-6-luna"
+            let body = rejected ? #"{"error":{"code":"unsupported_model"}}"#
+                : limited ? limitedBody : "data: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"input_tokens\":3,\"output_tokens\":1}}}\n\n"
             if pauseFirstResponse && isFirst && !limited {
                 let delta = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"still streaming\"}\n\n"
                 let head = "HTTP/1.1 200 Response\r\nContent-Type: text/event-stream\r\nContent-Length: \(delta.utf8.count + body.utf8.count)\r\nConnection: close\r\n\r\n\(delta)"
@@ -272,7 +309,7 @@ private final class StubModelServer: @unchecked Sendable {
                 connection.send(content: Data(head.utf8), completion: .contentProcessed { _ in })
                 return
             }
-            let response = "HTTP/1.1 \(limited ? limitedStatus : 200) Response\r\nContent-Type: text/event-stream\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
+            let response = "HTTP/1.1 \(rejected ? 400 : limited ? limitedStatus : 200) Response\r\nContent-Type: text/event-stream\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
             queue.asyncAfter(deadline: .now() + 0.1) {
                 connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
             }

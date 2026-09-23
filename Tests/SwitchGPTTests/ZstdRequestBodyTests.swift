@@ -49,19 +49,24 @@ final class ZstdRequestBodyTests: XCTestCase {
         XCTAssertNil(ZstdRequestBody.decode(try zstdFixture(Data(repeating: 97, count: ZstdRequestBody.decodedLimit + 1))))
     }
 
-    func testCompressedFallbackPreservesOriginalBodyAndHeaders() async throws {
-        let body = try zstdFixture(Data(#"{"model":"gpt-6-astra","reasoning":{"effort":"medium"},"input":"Rename this button"}"#.utf8))
+    func testCompressedMiniLowMappingAndUnrelatedRequest() throws {
+        let body = try zstdFixture(Data(#"{"model":"gpt-5.4-mini","reasoning":{"effort":"low"},"input":"Rename this button"}"#.utf8))
         let request = RelayRequest(method: "POST", target: "/backend-api/codex/responses",
             headers: ["content-encoding": "zstd", "content-length": String(body.count), "thread-id": "fixture"], body: body)
-        let disabled = await IntelligentModelRouter().route(request)
-        XCTAssertEqual(disabled.request.body, body)
-        XCTAssertEqual(disabled.request.headers, request.headers)
-        XCTAssertEqual(disabled.decision?.reason, "disabled")
-        let router = IntelligentModelRouter(classifier: { _, _ in JevRoutingAnswer(preset: "luna_max", confidence: 0.1) })
-        router.update(enabled: true, apiKey: "fixture")
-        let kept = await router.route(request)
-        XCTAssertEqual(kept.request.body, body)
-        XCTAssertEqual(kept.request.headers, request.headers)
-        XCTAssertEqual(kept.decision?.reason, "low_confidence")
+        let routed = MiniModelRouter.route(request)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: routed.request.body) as? [String: Any])
+        XCTAssertEqual(object["model"] as? String, "gpt-6-luna")
+        XCTAssertEqual((object["reasoning"] as? [String: Any])?["effort"] as? String, "low")
+        XCTAssertNil(routed.request.headers["content-encoding"])
+        XCTAssertNil(routed.request.headers["content-length"])
+        XCTAssertEqual(routed.decision?.changed, true)
+
+        let unchanged = try zstdFixture(Data(#"{"model":"gpt-6-astra","reasoning":{"effort":"medium"}}"#.utf8))
+        let unrelated = RelayRequest(method: "POST", target: request.target,
+            headers: ["content-encoding": "zstd"], body: unchanged)
+        let kept = MiniModelRouter.route(unrelated)
+        XCTAssertEqual(kept.request.body, unchanged)
+        XCTAssertEqual(kept.request.headers, unrelated.headers)
+        XCTAssertNil(kept.decision)
     }
 }
