@@ -87,8 +87,14 @@ final class AccountStore {
         accounts.first { RelayCredentials.fingerprint($0.id) == lastRequest?.accountFingerprint }
     }
     var needsRestart: Bool { routingPreferences.needsRestart(desktopLaunchedAt: desktopLaunchedAt) }
+    var desktopAccount: Account? {
+        guard let desktopID else { return nil }
+        // The same account can carry a different login subject (for example Apple vs. email sign-in).
+        return accounts.first { $0.id == desktopID }
+            ?? accounts.first { $0.id.components(separatedBy: "|")[0] == desktopID.components(separatedBy: "|")[0] }
+    }
     var desktopName: String {
-        accounts.first(where: { $0.id == desktopID }).map { displayName($0) } ?? L10n.text("desktop_account")
+        desktopAccount.map { displayName($0) } ?? L10n.text("desktop_account")
     }
     func restoreRouting() async {
         guard let data = try? Data(contentsOf: selectionURL),

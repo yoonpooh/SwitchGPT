@@ -53,4 +53,18 @@ final class AccountOrderTests: XCTestCase {
         store.busy = true
         XCTAssertFalse(store.reorder("a", onto: "c"))
     }
+
+    @MainActor func testDesktopAccountMatchesSameAccountWithDifferentLoginSubject() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = AccountStore(index: directory.appendingPathComponent("accounts.json"))
+        let other = Account(id: "other|google-oauth2|1", name: "other@example.com", savedAt: .now)
+        let saved = Account(id: "account|auth0|email", name: "user@example.com", savedAt: .now)
+        store.accounts = [other, saved]
+        store.desktopID = "account|apple|relay"
+        XCTAssertEqual(store.desktopAccount?.id, saved.id)
+        XCTAssertEqual(store.desktopName, "user@example.com")
+        store.desktopID = "missing|apple|relay"
+        XCTAssertNil(store.desktopAccount)
+    }
 }

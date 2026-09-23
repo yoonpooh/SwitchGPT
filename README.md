@@ -12,12 +12,11 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 
 Choose an account yourself, or let SwitchGPT move to another available account when a usage limit is reached.
 
-[Download v0.2.7](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.7) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[Download v0.2.8](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.8) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## What's new in 0.2.7
+## What's new in 0.2.8
 
-- **Preserve Codex model selection:** the obsolete GPT-5.4 mini to GPT-6 Luna compatibility mapping is removed. SwitchGPT now forwards model and reasoning choices unchanged.
-- **Smaller release:** the zstd decoder and bundled library used only by that mapping are removed.
+- **Desktop login name restored:** the desktop account is recognized even when it was signed in with a different method (for example Sign in with Apple) than the saved account, so the panel shows its name and photo instead of "Current signed-in account".
 
 ## Core features introduced in 0.2.0
 
@@ -45,7 +44,7 @@ This applies to Codex requests using the built-in `openai` provider on this Mac,
 
 Requirements: **Apple silicon, macOS 14 or later**, and the current ChatGPT desktop app installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate CLI installation is required.
 
-1. Download `SwitchGPT-v0.2.7-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.7).
+1. Download `SwitchGPT-v0.2.8-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.8).
 2. Verify the checksum below, extract the ZIP, and move **SwitchGPT.app** into **Applications**.
 3. Open SwitchGPT and click its menu bar icon. Choose **+** to add an account through browser sign-in. Repeat for each account you want to save.
 4. For initial account selection, turn automatic switching off in `⋯`, then click an account card. Enable automatic switching again to follow list order. If prompted, finish active work before restarting ChatGPT.
@@ -164,12 +163,12 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.2.7 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.2.8 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.7-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.7-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.8-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.8-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## Source layout

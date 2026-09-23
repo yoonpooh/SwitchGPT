@@ -48,7 +48,7 @@ struct AccountPanel: View {
                     .foregroundStyle(.secondary).help(L10n.text("routing_desktop_help"))
                 Spacer(minLength: 8)
                 HStack(spacing: 6) {
-                    if let account = store.accounts.first(where: { $0.id == store.desktopID }) {
+                    if let account = store.desktopAccount {
                         AccountAvatar(store: store, account: account, size: 18)
                     } else {
                         Image(systemName: "person.crop.circle.fill")
