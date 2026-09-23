@@ -6,15 +6,6 @@ struct RoutingStatusView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let decision = store.lastCompletedModelRouting {
-                HStack(spacing: 5) {
-                    Label(L10n.text("routing_last_model"), systemImage: "arrow.triangle.branch")
-                    Text(Self.modelRoutingSummary(decision))
-                        .lineLimit(1).truncationMode(.middle)
-                }
-                .font(.caption).foregroundStyle(.secondary)
-                .help(Self.modelRoutingSummary(decision))
-            }
             if store.selectedAccount != nil {
                 if store.needsRestart {
                     VStack(alignment: .leading, spacing: 8) {
@@ -36,20 +27,4 @@ struct RoutingStatusView: View {
         }
     }
 
-    static func modelRoutingSummary(_ decision: ModelRoutingDecision) -> String {
-        "\(modelName(decision.originalModel, effort: decision.originalEffort)) → \(modelName(decision.selectedModel, effort: decision.selectedEffort))"
-    }
-
-    private static func modelName(_ model: String?, effort: String?) -> String {
-        let raw = model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let suffix = raw.split(whereSeparator: { $0 == "-" || $0 == "_" }).last.map(String.init) ?? raw
-        let name: String
-        if suffix.isEmpty {
-            name = L10n.text("routing_unknown_model")
-        } else {
-            name = suffix.prefix(1).uppercased() + suffix.dropFirst()
-        }
-        let trimmedEffort = effort?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmedEffort.isEmpty ? name : "\(name) \(trimmedEffort)"
-    }
 }

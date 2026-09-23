@@ -13,7 +13,6 @@ struct RelayEvent: Codable, Sendable {
     var client: String?
     var finishedAt: Date?
     var quotaExhausted: Bool?
-    var modelRouting: ModelRoutingDecision?
 
     static func client(for request: RelayRequest) -> String {
         let origin = (request.headers["originator"]?.lowercased() ?? "").replacingOccurrences(of: " ", with: "_")
@@ -166,9 +165,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
     private var eventLine = Data()
     private var timeout: DispatchWorkItem?
     private var originalRequest: RelayRequest?
-    private var baselineRequest: RelayRequest?
-    private var modelRouting: ModelRoutingDecision?
-    private var usedModelFallback = false
     private var selected: RelayCredentials?
     private var attempted: Set<String> = []
     private var deferredResponse: HTTPURLResponse?
@@ -222,11 +218,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
             // Codex explicitly falls back to HTTP/SSE on 426. This avoids a WebSocket
             // retaining the old account across turns after the user selects a new one.
             if request.headers["upgrade"]?.lowercased() == "websocket" { fail(426); return }
-            baselineRequest = request
-            let routed = MiniModelRouter.route(request)
-            originalRequest = routed.request
-            modelRouting = routed.decision
-            startAttempt(routed.request, selected: selected)
+            originalRequest = request
+            startAttempt(request, selected: selected)
         } catch let failure as HTTPFailure { fail(failure.status) }
         catch { fail(400) }
     }
@@ -244,7 +237,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
             event = RelayEvent(accountFingerprint: selected.fingerprint,
                                path: request.target.components(separatedBy: "?")[0], model: body?["model"] as? String,
                                client: RelayEvent.client(for: request))
-            event?.modelRouting = modelRouting
             let configuration = URLSessionConfiguration.ephemeral
             configuration.httpCookieStorage = nil
             configuration.urlCache = nil
@@ -270,8 +262,7 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
         guard !closed, let response = response as? HTTPURLResponse else { completionHandler(.cancel); return }
         event?.status = response.statusCode
-        if originalRequest?.isModelRequest == true && (response.statusCode == 429 ||
-            (modelRouting?.changed == true && !usedModelFallback && [400, 403, 404, 422].contains(response.statusCode))) {
+        if originalRequest?.isModelRequest == true && response.statusCode == 429 {
             // Hold retryable error responses before any bytes reach Codex. Successful streams are never replayed.
             deferredResponse = response
         } else { sendHead(response) }
@@ -319,22 +310,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
         guard !closed else { return }
         event?.finishedAt = .now
         if let response = deferredResponse {
-            if error == nil, [400, 403, 404, 422].contains(response.statusCode),
-               !usedModelFallback, modelRouting?.changed == true,
-               Self.isUnsupportedRoute(deferredBody), let selected, let baseline = baselineRequest {
-                if let event { report(event) }
-                event = nil
-                usedModelFallback = true
-                if let decision = modelRouting {
-                    modelRouting = ModelRoutingDecision(originalModel: decision.originalModel,
-                        originalEffort: decision.originalEffort, selectedModel: decision.originalModel,
-                        selectedEffort: decision.originalEffort, reason: "upstream_unsupported")
-                }
-                originalRequest = baseline
-                session.finishTasksAndInvalidate()
-                startAttempt(baseline, selected: selected)
-                return
-            }
             if error == nil, response.statusCode == 429, QuotaFailure.isExhausted(deferredBody), let selected, let request = originalRequest {
                 event?.quotaExhausted = true
                 if let event { report(event) }
@@ -373,18 +348,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
             }
         }
         if eventLine.count > 4 * 1024 * 1024 { eventLine.removeAll() }
-    }
-
-    /// Retry only an explicit capability rejection, before forwarding any response bytes.
-    /// Authentication, quota, transport failures, and already-started streams are never replayed here.
-    static func isUnsupportedRoute(_ data: Data) -> Bool {
-        guard let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let error = value["error"] as? [String: Any] else { return false }
-        let code = error["code"] as? String ?? error["type"] as? String ?? ""
-        if ["model_not_found", "model_not_available", "unsupported_model"].contains(code) { return true }
-        let parameter = error["param"] as? String ?? ""
-        let capabilityError = ["unsupported_value", "invalid_value", "unsupported_parameter", "invalid_request_error"].contains(code)
-        return parameter == "model" && capabilityError
     }
 
     private func fail(_ status: Int) {

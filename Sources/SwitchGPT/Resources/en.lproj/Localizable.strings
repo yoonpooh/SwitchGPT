@@ -106,8 +106,6 @@
 "routing_restart_warning" = "Active tasks may be interrupted. Your desktop sign-in stays unchanged.";
 "routing_save_failed" = "The account is active, but its saved selection could not be updated.";
 "routing_auto_switched" = "Auto-switched";
-"routing_last_model" = "Last model route";
-"routing_unknown_model" = "Model";
 "reset_use" = "Reset";
 "reset_retry" = "Check result";
 "reset_confirm_title" = "Use a reset credit?";

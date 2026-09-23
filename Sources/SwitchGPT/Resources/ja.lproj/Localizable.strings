@@ -106,8 +106,6 @@
 "routing_restart_warning" = "実行中のタスクが中断される場合があります。ログインは維持されます。";
 "routing_save_failed" = "選択は適用されましたが、設定を保存できませんでした。";
 "routing_auto_switched" = "自動切替済み";
-"routing_last_model" = "直近のモデル経路";
-"routing_unknown_model" = "モデル";
 "reset_use" = "リセット";
 "reset_retry" = "結果を確認";
 "reset_confirm_title" = "リセット権を使用しますか？";

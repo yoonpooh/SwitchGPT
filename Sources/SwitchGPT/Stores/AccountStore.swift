@@ -13,7 +13,6 @@ final class AccountStore {
     var routingActive = false
     var routingPreferences = RoutingPreferences()
     var lastRequest: RelayEvent?
-    var lastCompletedModelRouting: ModelRoutingDecision?
     var lastAutomaticSwitch: Date?
     var desktopLaunchedAt: Date?
     var selectedExhausted = false
@@ -49,7 +48,6 @@ final class AccountStore {
         self.usageClient = usageClient
         self.resetLedger = ResetCreditLedger(file: self.index.deletingLastPathComponent().appendingPathComponent("reset-credit-attempts.json"))
         self.lastCompletedEventAt = nil
-        self.lastCompletedModelRouting = nil
         do {
             if index == nil { try Self.migrateAccountIndex(in: support) }
             if FileManager.default.fileExists(atPath: self.index.path) {
@@ -65,7 +63,6 @@ final class AccountStore {
                     .first { $0.completed && $0.status == 200 }
                 lastRequest = completed
                 lastCompletedEventAt = completed.map { $0.finishedAt ?? $0.date }
-                lastCompletedModelRouting = completed?.modelRouting?.isMiniMapping == true ? completed?.modelRouting : nil
             }
             refresh()
         } catch { message = L10n.text("list_read") }
@@ -295,7 +292,6 @@ final class AccountStore {
             let completedAt = event.finishedAt ?? event.date
             if lastCompletedEventAt == nil || completedAt >= lastCompletedEventAt! {
                 lastCompletedEventAt = completedAt
-                lastCompletedModelRouting = event.modelRouting?.isMiniMapping == true ? event.modelRouting : nil
             }
         }
         if event.status == 200 && event.completed {

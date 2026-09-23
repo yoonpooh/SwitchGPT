@@ -106,8 +106,6 @@
 "routing_restart_warning" = "进行中的任务可能中断，桌面登录保持不变。";
 "routing_save_failed" = "选择已应用，但无法保存设置。";
 "routing_auto_switched" = "已自动切换";
-"routing_last_model" = "最近模型路径";
-"routing_unknown_model" = "模型";
 "reset_use" = "重置";
 "reset_retry" = "确认结果";
 "reset_confirm_title" = "使用重置次数？";

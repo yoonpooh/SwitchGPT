@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/SwitchGPT.png" width="128" alt="SwitchGPT icon">
+  <img src="favicon.png" width="128" alt="SwitchGPT icon">
 </p>
 
 # SwitchGPT
@@ -12,12 +12,12 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 
 Choose an account yourself, or let SwitchGPT move to another available account when a usage limit is reached.
 
-[Download v0.2.6](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.6) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[Download v0.2.7](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.7) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## What's new in 0.2.6
+## What's new in 0.2.7
 
-- **JEV removed:** automatic model and reasoning selection, TypeSafe classification, and its settings are gone.
-- **Mini compatibility mapping:** GPT-5.4 mini requests at low effort use GPT-6 Luna at low effort, including zstd-compressed requests.
+- **Preserve Codex model selection:** the obsolete GPT-5.4 mini to GPT-6 Luna compatibility mapping is removed. SwitchGPT now forwards model and reasoning choices unchanged.
+- **Smaller release:** the zstd decoder and bundled library used only by that mapping are removed.
 
 ## Core features introduced in 0.2.0
 
@@ -45,7 +45,7 @@ This applies to Codex requests using the built-in `openai` provider on this Mac,
 
 Requirements: **Apple silicon, macOS 14 or later**, and the current ChatGPT desktop app installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate CLI installation is required.
 
-1. Download `SwitchGPT-v0.2.6-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.6).
+1. Download `SwitchGPT-v0.2.7-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.7).
 2. Verify the checksum below, extract the ZIP, and move **SwitchGPT.app** into **Applications**.
 3. Open SwitchGPT and click its menu bar icon. Choose **+** to add an account through browser sign-in. Repeat for each account you want to save.
 4. For initial account selection, turn automatic switching off in `⋯`, then click an account card. Enable automatic switching again to follow list order. If prompted, finish active work before restarting ChatGPT.
@@ -97,10 +97,6 @@ Dates follow the Mac's time zone and interface language. Reopen the app after ch
 
 Turn automatic switching off in `⋯` to keep using the selected account and receive its limit errors directly. In automatic mode, card order takes precedence over manual selection, and reordering applies to the next request. Quotas remain separate for each account.
 
-## Mini compatibility mapping
-
-GPT-5.4 mini requests with low reasoning effort use GPT-6 Luna with the same low effort. Other model and effort combinations stay unchanged. If the upstream service explicitly rejects the mapped model, SwitchGPT retries the original request before forwarding a response. Model availability still depends on the account and upstream service.
-
 ## Troubleshooting
 
 - **Requests fail after quitting SwitchGPT:** reopen it, or remove routing as described below.
@@ -122,7 +118,7 @@ Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth
 | Request metadata | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
 | Existing desktop credentials | `~/.codex/auth.json` — preserved |
 
-A managed block in `~/.codex/config.toml` sets `openai_base_url`. HTTP streaming lets subsequent requests use the selected account. Local logs contain an opaque account fingerprint, path, model, HTTP status, completion state, token counts, client type, timestamps, quota-exhaustion status, and mini mapping decisions. Prompts, response content, and authentication tokens are not logged.
+A managed block in `~/.codex/config.toml` sets `openai_base_url`. HTTP streaming lets subsequent requests use the selected account. Local logs contain an opaque account fingerprint, path, model, HTTP status, completion state, token counts, client type, timestamps, and quota-exhaustion status. Prompts, response content, and authentication tokens are not logged.
 
 To disconnect, finish active work, remove only the `BEGIN/END SwitchGPT model routing` block from `~/.codex/config.toml`, and restart ChatGPT. Preserve other settings. You can then quit or remove SwitchGPT; deleting the app bundle alone leaves the routing setting in place.
 
@@ -139,10 +135,6 @@ Current limitations:
 Do not include credentials, account lists, or screenshots exposing personal accounts in issues or commits. SwitchGPT is an independent utility and is not affiliated with or endorsed by OpenAI.
 
 ## Build from source
-
-The packaging script downloads checksum-pinned zstd 1.5.7 source on its first run,
-builds it for macOS 14, and embeds `libzstd` and its license in the app.
-End users do not need Homebrew. For local tests, install `brew install zstd`. The mini mapping decodes zstd request bodies up to 8 MiB and preserves the original request when decoding cannot proceed.
 
 Install Xcode with Swift 6 and a macOS SDK, and select its command-line tools. Then:
 
@@ -172,17 +164,18 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### Package a release
 
-The script builds for the host architecture. The published v0.2.6 artifact is an Apple silicon build.
+The script builds for the host architecture. The published v0.2.7 artifact is an Apple silicon build.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.6-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.6-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.7-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.7-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## Source layout
 
 ```text
+favicon.png                    Repository logo
 Assets/                         App and menu bar icons
 Sources/SwitchGPT/
   App/                          Menu bar app entry point

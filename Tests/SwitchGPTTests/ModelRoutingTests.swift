@@ -203,7 +203,7 @@ final class ModelRoutingTests: XCTestCase {
         }
     }
 
-    @MainActor func testUnsupportedLunaMappingRetriesOriginalMiniRequest() async throws {
+    @MainActor func testMiniRequestIsForwardedUnchangedWithoutModelRetry() async throws {
         let root = try directory()
         defer { try? FileManager.default.removeItem(at: root) }
         let auth = root.appendingPathComponent("auth.json")
@@ -226,12 +226,9 @@ final class ModelRoutingTests: XCTestCase {
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         XCTAssertTrue(String(decoding: body, as: UTF8.self).contains("response.completed"))
         let calls = upstream.requests
-        XCTAssertEqual(calls.count, 2)
-        let mapped = try XCTUnwrap(JSONSerialization.jsonObject(with: calls[0].body) as? [String: Any])
-        XCTAssertEqual(mapped["model"] as? String, "gpt-6-luna")
-        XCTAssertEqual((mapped["reasoning"] as? [String: Any])?["effort"] as? String, "low")
-        XCTAssertEqual(calls[1].body, request.httpBody)
-        XCTAssertEqual(calls.map { $0.headers["authorization"] }, ["Bearer first-token", "Bearer first-token"])
+        XCTAssertEqual(calls.count, 1)
+        XCTAssertEqual(calls[0].body, request.httpBody)
+        XCTAssertEqual(calls[0].headers["authorization"], "Bearer first-token")
     }
 
     private func directory() throws -> URL {

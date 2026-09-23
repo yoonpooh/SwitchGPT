@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Assets/SwitchGPT.png" width="128" alt="SwitchGPT アイコン">
+  <img src="favicon.png" width="128" alt="SwitchGPT アイコン">
 </p>
 
 # SwitchGPT
@@ -12,14 +12,12 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 アカウントを手動で選ぶことも、利用上限に達したら利用可能な別のアカウントへ自動で切り替えることもできます。
 
-[v0.2.6 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.6) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+[v0.2.7 をダウンロード](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.7) · [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)
 
-## 0.2.6 の主な変更
+## 0.2.7 の主な変更
 
-- **JEV の削除:** モデルと推論レベルの自動選択、TypeSafe 分類、関連設定を削除しました。
-- **mini モデルの互換ルーティング:** GPT-5.4 mini / low のリクエストを GPT-6 Luna / low に変更します。zstd 圧縮リクエストにも対応します。
-
-その他のモデルと推論レベルは維持します。
+- **Codex のモデル選択を維持:** 不要になった GPT-5.4 mini → GPT-6 Luna の互換ルーティングを削除しました。モデルと推論レベルを変更せずに転送します。
+- **リリースを軽量化:** このルーティング専用だった zstd デコーダーと同梱ライブラリを削除しました。
 
 ## 0.2.0 で導入した基本機能
 
@@ -47,7 +45,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 
 **Apple シリコン搭載 Mac、macOS 14 以降**と、インストール・ログイン済みの現行 ChatGPT デスクトップアプリが必要です。標準のファイル形式の認証情報 `~/.codex/auth.json` を使用してください。同梱の CLI を使うため、CLI の別途インストールは不要です。
 
-1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.6)から `SwitchGPT-v0.2.6-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
+1. [リリースページ](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.7)から `SwitchGPT-v0.2.7-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
 2. 下のコマンドでチェックサムを確認し、ZIP を展開して **SwitchGPT.app** を **アプリケーション** に移動します。
 3. SwitchGPT を開き、メニューバーアイコンをクリックします。**+** からブラウザでログインしてアカウントを追加します。保存するアカウントごとに繰り返してください。
 4. 初回は `⋯` で自動切り替えを無効にし、アカウントカードをクリックします。リスト順を使う場合は自動切り替えを再び有効にします。 ChatGPT の再起動を求められたら、進行中の作業を終えてから再起動してください。
@@ -141,7 +139,6 @@ Issue やコミットに認証情報、アカウント一覧、個人アカウ�
 Swift 6 と macOS SDK を含む Xcode をインストールし、そのコマンドラインツールを選択してから実行してください。
 
 ```sh
-brew install zstd
 git clone https://github.com/yoonpooh/SwitchGPT.git
 cd SwitchGPT
 ./script/build_and_run.sh --verify
@@ -167,17 +164,18 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ### リリースのパッケージ化
 
-スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.6 は Apple シリコン向けです。
+スクリプトはビルドを実行する Mac のアーキテクチャ向けにビルドします。公開済みの v0.2.7 は Apple シリコン向けです。
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.6-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.6-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.7-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.2.7-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ## ソース構成
 
 ```text
+favicon.png                    リポジトリのロゴ
 Assets/                         アプリとメニューバーのアイコン
 Sources/SwitchGPT/
   App/                          メニューバーアプリのエントリーポイント

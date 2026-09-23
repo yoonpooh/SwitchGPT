@@ -10,8 +10,7 @@ struct AccountPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
-            if store.lastCompletedModelRouting != nil
-                || (store.selectedAccount != nil && (store.needsRestart || store.selectedExhausted))
+            if (store.selectedAccount != nil && (store.needsRestart || store.selectedExhausted))
                 || (store.selectedAccount == nil && !store.accounts.isEmpty) {
                 RoutingStatusView(store: store, restart: confirmRestart)
             }
