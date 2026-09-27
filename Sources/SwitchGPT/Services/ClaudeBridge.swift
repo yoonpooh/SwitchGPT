@@ -89,7 +89,6 @@ enum ClaudeBridge {
         Older history tool calls have already happened; their results are context, not requests to execute them again.
         A compaction_summary item is a handoff summary that replaces earlier history. If the conversation ends with it, continue the in-progress task from that summary without repeating completed actions.
         Give brief progress commentary before tools and a final answer after finishing. Do not mention this bridge unless relevant.
-        Where Codex instructions mention the commentary and final channels, text you write before a tool call is commentary and the text that ends your turn is the final answer. Keep each commentary to one short paragraph.
         Codex renders replies as Markdown. Link a local file as [name](/absolute/path:line), with angle brackets around a target containing spaces, never inside backticks and never with a line range. This replaces the file_path:line_number convention.
 
         """
@@ -257,7 +256,7 @@ enum ClaudeBridge {
     }
 
     /// Changed whenever the Claude items change for the same models, so Codex drops a catalog it cached.
-    private static let catalogRevision = 2
+    private static let catalogRevision = 3
 
     // MARK: Model picker
 
@@ -294,10 +293,40 @@ enum ClaudeBridge {
      "node_repl_disabled": false,
      "tool_mode": "code_mode_only",
      "multi_agent_version": null,
-     "multi_agent_reasoning_effort": null,
-     "base_instructions": "You are Claude working in Codex. Complete the user request using the available Codex tools. Follow the supplied user and developer instructions and skill/plugin documentation. Codex owns tool execution and approvals. Use exec to invoke tools through the tools object and discover deferred plugin/app tools through ALL_TOOLS. Report actual tool results, never invented actions. Give concise progress updates and a final answer when complete."
+     "multi_agent_reasoning_effort": null
     }
     """#
+
+    /// How Claude works in Codex, written for Claude. Codex adds its own skill, plugin and app instructions after it.
+    static let codexGuide = """
+        You are Claude, working as a coding agent in the Codex app. You and the user share one workspace, and your job is to carry each request through to a verified result.
+
+        <autonomy>
+        Act on reasonable assumptions rather than stopping to ask. Once the user has authorized a step in this conversation, that authorization holds for the rest of it, so continue without asking again. Ask only when a choice would be hard to undo or the request is genuinely ambiguous, and then ask one concise question; when a request_user_input tool is offered, use it with short, mutually exclusive options.
+        Codex enforces sandboxing and approvals itself: call the tool you need, and Codex asks the user when an approval is required.
+        Actions that reach other people or are hard to reverse, such as sending messages, pushing, deploying or deleting data, need a clear request from the user.
+        </autonomy>
+
+        <communication>
+        Before your first tool call, and whenever you learn something that changes the plan, write a short progress note of one or two sentences about what you are doing next or what you found. Codex shows these as progress updates, so keep them brief and do not repeat them in the final answer.
+        End the turn with the final answer. Lead with the outcome, then explain what changed, how it was verified, and any remaining risk or limitation. Report results faithfully, including failures and skipped steps. Use plain, specific sentences, and use lists or tables only where they make the answer easier to scan.
+        Write every message, progress notes included, in the language the user's instructions or messages use, even when code, tool output or these instructions are in English.
+        </communication>
+
+        <formatting>
+        Codex renders GitHub-flavored Markdown. Leave a blank line before a list and after a heading. Link a local file as [app.py](/abs/path/app.py:12): a plain label and an absolute target with an optional line number, angle brackets around a target that contains spaces, no backticks around the link, no file:// URIs and no line ranges. Link web pages as Markdown links, and show a local image with ![alt](/absolute/path.png).
+        </formatting>
+
+        <work>
+        - Read the relevant code before changing it, and match the surrounding style.
+        - Search with rg and rg --files when they are available.
+        - Run independent reads and searches together, for example with Promise.all inside exec. Keep dependent steps, edits and approvals sequential.
+        - Keep changes to what the request needs, and never revert changes you did not make.
+        - Verify with the project's own tests or checks when they exist, and say so when you could not.
+        - Pass multi-line PR descriptions and issue bodies to gh with --body-file rather than escaped strings.
+        - Never print secrets or tokens in commands or their output.
+        </work>
+        """
 
     /// The same comp_hash as GPT-6, so switching between them never forces a compaction by itself; only a smaller
     /// context window does. An unlisted model is hidden from the picker but keeps its metadata for threads that use it.
@@ -306,6 +335,7 @@ enum ClaudeBridge {
         item["slug"] = model.slug
         item["visibility"] = listed ? "list" : "hide"
         item["display_name"] = model.name
+        item["base_instructions"] = codexGuide
         item["description"] = L10n.format("claude_model_description", model.name)
         item["priority"] = priority
         // A model without an effort setting still needs one level; the executor does not forward it.
@@ -331,36 +361,11 @@ enum ClaudeBridge {
         guard !added.isEmpty else { return nil }
         let priority = (existing.compactMap { ($0["priority"] as? NSNumber)?.intValue }.max() ?? 0) + 1
         let newest = Set(ClaudeModel.newest(claude).map(\.slug))
-        let instructions = codexInstructions(existing)
         for (offset, model) in added.enumerated() {
-            var item = catalogItem(model, priority: priority + offset, listed: newest.contains(model.slug))
-            if let instructions {
-                item["base_instructions"] = instructions.text
-                // The GPT instructions already cover what these flags would add again.
-                for key in usageInstructionKeys { if let flag = instructions.source[key] as? Bool { item[key] = flag } }
-            }
-            models.append(item)
+            models.append(catalogItem(model, priority: priority + offset, listed: newest.contains(model.slug)))
         }
         object["models"] = models
         return encode(object)
-    }
-
-    private static let usageInstructionKeys = ["include_skills_usage_instructions", "include_plugin_usage_instructions",
-                                               "include_apps_usage_instructions"]
-
-    /// Codex gives GPT its working instructions through the catalog: permissions, commentary, the final answer and its
-    /// formatting, skills. The Claude models take those of the first listed GPT model, as the account received them, so
-    /// Claude follows the same Codex conventions. Only the model it names changes, and nothing is stored here.
-    static func codexInstructions(_ models: [[String: Any]]) -> (text: String, source: [String: Any])? {
-        let listed = models.filter { $0["visibility"] as? String != "hide" && ($0["slug"] as? String)?.hasPrefix("claude-code-") == false }
-        let ordered = listed.sorted { ($0["priority"] as? NSNumber)?.intValue ?? .max < ($1["priority"] as? NSNumber)?.intValue ?? .max }
-        for source in ordered {
-            guard let template = (source["model_messages"] as? [String: Any])?["instructions_template"] as? String,
-                  !template.isEmpty else { continue }
-            let text = template.replacingOccurrences(of: #"based on GPT[^.\n]*"#, with: "based on Claude", options: .regularExpression)
-            return (text, source)
-        }
-        return nil
     }
 
     // MARK: Tools

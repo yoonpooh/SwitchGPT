@@ -214,23 +214,16 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertTrue(ClaudeBridge.catalogETag("W/\"a\"", models: claude).hasPrefix("W/\"a-switchgpt-claude-"))
     }
 
-    func testClaudeModelsTakeTheListedGPTInstructionsFromTheAccountCatalog() throws {
-        let body = Data(#"""
-        {"models":[{"slug":"gpt-hidden","priority":0,"visibility":"hide","model_messages":{"instructions_template":"hidden"}},
-                   {"slug":"gpt-6-luna","priority":7,"model_messages":{"instructions_template":"luna"}},
-                   {"slug":"gpt-6-astra","priority":3,"include_skills_usage_instructions":false,
-                    "model_messages":{"instructions_template":"You are Codex, an agent based on GPT-6. Work well."}}]}
-        """#.utf8)
+    func testClaudeModelsCarryTheirOwnGuideAndCodexUsageInstructions() throws {
+        let body = Data(#"{"models":[{"slug":"gpt-6-astra","priority":3,"include_skills_usage_instructions":false,"model_messages":{"instructions_template":"You are Codex, an agent based on GPT-6."}}]}"#.utf8)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(ClaudeBridge.addingCatalogItems(to: body, models: [.fallback]))) as? [String: Any])
         let claude = try XCTUnwrap((object["models"] as? [[String: Any]])?.last)
-        XCTAssertEqual(claude["base_instructions"] as? String, "You are Codex, an agent based on Claude. Work well.")
-        XCTAssertEqual(claude["include_skills_usage_instructions"] as? Bool, false)
-        XCTAssertEqual(claude["include_apps_usage_instructions"] as? Bool, true)
-        // Without GPT instructions the Claude models keep their own.
-        let plain = Data(#"{"models":[{"slug":"gpt-6-astra","priority":3}]}"#.utf8)
-        let fallback = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(ClaudeBridge.addingCatalogItems(to: plain, models: [.fallback]))) as? [String: Any])
-        let own = try XCTUnwrap((fallback["models"] as? [[String: Any]])?.last)
-        XCTAssertTrue((own["base_instructions"] as? String)?.hasPrefix("You are Claude working in Codex") == true)
+        // The GPT instructions are never copied; Codex adds its skill, plugin and app instructions to the guide.
+        XCTAssertEqual(claude["base_instructions"] as? String, ClaudeBridge.codexGuide)
+        XCTAssertFalse(ClaudeBridge.codexGuide.contains("GPT"))
+        for key in ["include_skills_usage_instructions", "include_plugin_usage_instructions", "include_apps_usage_instructions"] {
+            XCTAssertEqual(claude[key] as? Bool, true, key)
+        }
     }
 
     func testModelCatalogAsksClaudeCodeAgainOnlyAfterAnUpdate() async throws {
