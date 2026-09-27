@@ -463,7 +463,7 @@ final class ClaudeExecutor: @unchecked Sendable {
                 case "content_block_start":
                     let block = value["content_block"] as? [String: Any]
                     switch block?["type"] as? String {
-                    case "text": writer.startItem("message")
+                    case "text": writer.startMessage()
                     case "thinking": writer.startThinking()
                     case "tool_use":
                         writer.finishItem()
@@ -523,7 +523,7 @@ final class ClaudeExecutor: @unchecked Sendable {
                     writer.usage = ClaudeBridge.usage(context: 0, cached: 0, output: ClaudeBridge.integer(writer.usage?["output_tokens"]))
                 } else {
                     if !writer.markFinalAnswer(), let text = value["result"] as? String, !text.isEmpty {
-                        writer.startItem("message", phase: "final_answer")
+                        writer.startMessage(phase: "final_answer")
                         writer.delta(text)
                     }
                     writer.finishItem()
@@ -546,7 +546,6 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     private func failResponse(_ run: ClaudeRun, _ writer: ClaudeResponseWriter, _ message: String) {
-        writer.flushThought()
         writer.closeSearches()
         var failed = writer.response("failed")
         failed["error"] = ["code": run.failureCode ?? "bridge_error", "message": message]
@@ -723,9 +722,11 @@ final class ClaudeResponseWriter: @unchecked Sendable {
     private var items: [[String: Any]] = []
     /// Output indexes of this response's search cards still in progress, by WebSearch tool_use ID.
     private var searches: [String: Int] = [:]
-    private var active: (index: Int, reasoning: Bool, text: String)?
-    /// A thought not shown yet, held until its first sentence is known.
-    private var thought: String?
+    private var active: (index: Int, text: String)?
+    /// Whether a thinking block is open that has shown no text yet.
+    private var thinking = false
+    /// Whether the open message is a progress note from Claude's thinking, which is never the final answer.
+    private var note = false
     private var contextInput: Int?
     private var contextCached = 0
 
@@ -776,111 +777,53 @@ final class ClaudeResponseWriter: @unchecked Sendable {
         event("response.output_item.done", ["output_index": index, "item": item])
     }
 
-    func startItem(_ kind: String, phase: String = "commentary") {
+    func startMessage(phase: String = "commentary", note: Bool = false) {
         finishItem()
+        self.note = note
         let index = items.count
-        let reasoning = kind == "reasoning"
-        let id = (reasoning ? "rs_" : "msg_") + ClaudeBridge.identifier()
-        let item: [String: Any] = reasoning
-            ? ["id": id, "type": "reasoning", "summary": [Any]()]
-            : ["id": id, "type": "message", "role": "assistant", "status": "in_progress", "content": [Any](), "phase": phase]
+        let id = "msg_" + ClaudeBridge.identifier()
+        let item: [String: Any] = ["id": id, "type": "message", "role": "assistant", "status": "in_progress", "content": [Any](), "phase": phase]
         items.append(item)
-        active = (index, reasoning, "")
+        active = (index, "")
         event("response.output_item.added", ["output_index": index, "item": item])
-        if reasoning {
-            event("response.reasoning_summary_part.added", ["item_id": id, "output_index": index, "summary_index": 0, "part": contentPart(reasoning: true, text: "")])
-        } else {
-            event("response.content_part.added", ["item_id": id, "output_index": index, "content_index": 0, "part": contentPart(reasoning: false, text: "")])
-        }
+        event("response.content_part.added", ["item_id": id, "output_index": index, "content_index": 0, "part": contentPart("")])
     }
 
     func delta(_ text: String) {
-        if active == nil { startItem("message") }
+        if active == nil { startMessage() }
         guard let current = active, let id = items[current.index]["id"] else { return }
         active?.text += text
-        if current.reasoning {
-            event("response.reasoning_summary_text.delta", ["item_id": id, "output_index": current.index, "summary_index": 0, "delta": text])
-        } else {
-            event("response.output_text.delta", ["item_id": id, "output_index": current.index, "content_index": 0, "delta": text])
-        }
+        event("response.output_text.delta", ["item_id": id, "output_index": current.index, "content_index": 0, "delta": text])
     }
 
     func finishItem() {
-        flushThought()
+        thinking = false
         guard let current = active, let id = items[current.index]["id"] else { return }
         active = nil
-        let part = contentPart(reasoning: current.reasoning, text: current.text)
-        if current.reasoning {
-            items[current.index]["summary"] = [part]
-            event("response.reasoning_summary_text.done", ["item_id": id, "output_index": current.index, "summary_index": 0, "text": current.text])
-            event("response.reasoning_summary_part.done", ["item_id": id, "output_index": current.index, "summary_index": 0, "part": part])
-        } else {
-            items[current.index]["status"] = "completed"
-            items[current.index]["content"] = [part]
-            event("response.output_text.done", ["item_id": id, "output_index": current.index, "content_index": 0, "text": current.text])
-            event("response.content_part.done", ["item_id": id, "output_index": current.index, "content_index": 0, "part": part])
-        }
+        let part = contentPart(current.text)
+        items[current.index]["status"] = "completed"
+        items[current.index]["content"] = [part]
+        event("response.output_text.done", ["item_id": id, "output_index": current.index, "content_index": 0, "text": current.text])
+        event("response.content_part.done", ["item_id": id, "output_index": current.index, "content_index": 0, "part": part])
         event("response.output_item.done", ["output_index": current.index, "item": items[current.index]])
     }
 
-    static let titleLength = 60
-
-    /// Codex titles a reasoning summary by its leading bold line and, expanded, shows only what follows it. Claude's
-    /// thinking has no such line, so a thought is held until its first sentence can become the title, and the whole
-    /// thought stays the body. A thought that stays blank, as when Claude Code omits thinking text, never becomes an item.
+    /// Claude Code usually omits thinking text, and such a block adds no item. Text in it is a progress note written to
+    /// the user, which Codex would keep folded as reasoning, so it becomes the commentary a text block would give.
     func startThinking() {
         finishItem()
-        thought = ""
+        thinking = true
     }
 
     func think(_ text: String) {
-        guard let held = thought.map({ $0 + text }) else {
-            if active?.reasoning == true { delta(text) }
-            return
+        if thinking {
+            let visible = text.drop(while: \.isWhitespace)
+            guard !visible.isEmpty else { return }
+            startMessage(note: true)
+            delta(String(visible))
+        } else if note, active != nil {
+            delta(text)
         }
-        thought = held
-        if let title = Self.title(held, complete: false) { showThought(title) }
-    }
-
-    /// Shows a thought still held, as when its block or the response ends before its first sentence does.
-    func flushThought() {
-        guard let held = thought else { return }
-        if held.contains(where: { !$0.isWhitespace }) { showThought(Self.title(held, complete: true) ?? "") } else { thought = nil }
-    }
-
-    private func showThought(_ title: String) {
-        guard let held = thought else { return }
-        thought = nil
-        startItem("reasoning")
-        // Codex finds the title only at the very start.
-        let body = String(held.drop(while: \.isWhitespace))
-        delta(title.isEmpty ? body : "**\(title)**\n\n\(body)")
-    }
-
-    /// A thought's first sentence as a one-line title of at most titleLength characters. Empty when the thought already
-    /// starts with a bold title, nil while more of it is needed to tell.
-    static func title(_ thought: String, complete: Bool) -> String? {
-        let text = Array(thought.drop(while: \.isWhitespace))
-        if text.starts(with: "**") { return "" }
-        if !complete, "**".starts(with: text) { return nil }
-        var end: Int?
-        for (offset, character) in text.prefix(titleLength + 1).enumerated() {
-            if character.isNewline { end = offset; break }
-            guard ".!?。！？".contains(character) else { continue }
-            // A period inside "3.5" ends nothing; one at the very end may still be followed by more.
-            if offset + 1 < text.count {
-                if text[offset + 1].isWhitespace { end = offset + 1; break }
-            } else if complete { end = offset + 1 }
-        }
-        guard end != nil || complete || text.count > titleLength else { return nil }
-        var sentence = end.map { Array(text[..<$0]) } ?? text
-        if sentence.count > titleLength {
-            let space = sentence[..<titleLength].lastIndex(where: \.isWhitespace).flatMap { $0 >= titleLength / 2 ? $0 : nil }
-            sentence = Array(sentence[..<(space ?? titleLength - 1)]) + ["…"]
-        }
-        var line = String(sentence).replacingOccurrences(of: "*", with: "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        while let last = line.last, ".。".contains(last) { line.removeLast() }
-        return line
     }
 
     /// A Claude WebSearch as the web_search_call item Codex shows for its own hosted search.
@@ -915,12 +858,12 @@ final class ClaudeResponseWriter: @unchecked Sendable {
 
     /// Marks an open message as the final answer. Returns false when no message is open.
     func markFinalAnswer() -> Bool {
-        guard let current = active, !current.reasoning else { return false }
+        guard let current = active, !note else { return false }
         items[current.index]["phase"] = "final_answer"
         return true
     }
 
-    private func contentPart(reasoning: Bool, text: String) -> [String: Any] {
-        reasoning ? ["type": "summary_text", "text": text] : ["type": "output_text", "text": text, "annotations": [Any]()]
+    private func contentPart(_ text: String) -> [String: Any] {
+        ["type": "output_text", "text": text, "annotations": [Any]()]
     }
 }

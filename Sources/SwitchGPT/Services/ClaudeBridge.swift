@@ -89,6 +89,7 @@ enum ClaudeBridge {
         Older history tool calls have already happened; their results are context, not requests to execute them again.
         A compaction_summary item is a handoff summary that replaces earlier history. If the conversation ends with it, continue the in-progress task from that summary without repeating completed actions.
         Give brief progress commentary before tools and a final answer after finishing. Do not mention this bridge unless relevant.
+        Codex renders replies as Markdown. Link a local file as [name](/absolute/path:line), with angle brackets around a target containing spaces, never inside backticks and never with a line range. This replaces the file_path:line_number convention.
 
         """
 
