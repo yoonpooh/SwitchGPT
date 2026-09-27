@@ -23,6 +23,37 @@ struct ClaudeTool {
     var comparable: [String: Any] { ["kind": kind, "name": name, "namespace": namespace ?? NSNull(), "mcp": mcp] }
 }
 
+/// The Codex permission picker mirrored onto Claude Code's permission mode. Codex still executes and approves every tool call.
+enum ClaudePermissionMode: String {
+    case manual, auto, bypassPermissions, plan
+    /// A compaction run has no tools, so nothing is ever asked.
+    case dontAsk
+
+    /// Read from the latest permission and collaboration-mode instructions Codex sent, so a mode changed mid-thread applies.
+    /// Plan mode wins, then Codex's auto reviewer ("approve for me"), then full access; anything else asks, like Codex.
+    static func mirroring(_ inputs: [Any]) -> ClaudePermissionMode {
+        var permissions = "", collaboration = ""
+        for case let item as [String: Any] in inputs where item["role"] as? String == "developer" {
+            let content = item["content"] as? [Any] ?? [item["content"] ?? ""]
+            for text in content.compactMap({ $0 as? String ?? ($0 as? [String: Any])?["text"] as? String }) {
+                permissions = lastBlock(text, "permissions instructions") ?? permissions
+                collaboration = lastBlock(text, "collaboration_mode") ?? collaboration
+            }
+        }
+        if collaboration.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("# Plan Mode") { return .plan }
+        if permissions.contains("`approvals_reviewer` is `auto_review`") { return .auto }
+        if permissions.contains("`sandbox_mode` is `danger-full-access`") { return .bypassPermissions }
+        return .manual
+    }
+
+    /// The body of the last <tag> block in a text, so markers quoted outside a block or in an earlier block never count.
+    private static func lastBlock(_ text: String, _ tag: String) -> String? {
+        guard let open = text.range(of: "<" + tag + ">", options: .backwards) else { return nil }
+        let body = text[open.upperBound...]
+        return String(body.range(of: "</" + tag + ">").map { body[..<$0.lowerBound] } ?? body)
+    }
+}
+
 /// Codex Responses <-> Claude Code stream-json translation for Claude models. Pure functions only.
 enum ClaudeBridge {
     static let efforts: Set<String> = ["low", "medium", "high", "xhigh", "max"]
@@ -54,6 +85,12 @@ enum ClaudeBridge {
         Older history tool calls have already happened; their results are context, not requests to execute them again.
         A compaction_summary item is a handoff summary that replaces earlier history. If the conversation ends with it, continue the in-progress task from that summary without repeating completed actions.
         Give brief progress commentary before tools and a final answer after finishing. Do not mention this bridge unless relevant.
+
+        """
+
+    static let planModePrompt = """
+        Claude Code plan mode mirrors Codex Plan mode here. There is no plan file or ExitPlanMode tool: explore with the Codex tools \
+        without changing anything, and present the plan as the Codex collaboration_mode instructions describe.
 
         """
 

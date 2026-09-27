@@ -226,7 +226,12 @@ final class ClaudeExecutor: @unchecked Sendable {
             let params = data["params"] as? [String: Any] ?? [:]
             switch data["method"] as? String {
             case "tools/list":
-                sink.respond(status: 200, json: ClaudeBridge.encode(["tools": run.table.keys.sorted().compactMap { run.table[$0]?.mcp }]))
+                var tools = run.table.keys.sorted().compactMap { run.table[$0]?.mcp }
+                // Claude Code's plan mode runs only read-only tools. Codex Plan mode keeps every tool for exploration and
+                // forbids mutations by instruction, as it does for GPT; Claude models reach everything through exec, so
+                // without the hint Claude could not even read a file. Codex's sandbox and approvals still apply.
+                if run.permissionMode == .plan { tools = tools.map { $0.merging(["annotations": ["readOnlyHint": true]]) { $1 } } }
+                sink.respond(status: 200, json: ClaudeBridge.encode(["tools": tools]))
             case "tools/call":
                 invoke(run, name: params["name"] as? String ?? "", arguments: params["arguments"] as? [String: Any] ?? [:], sink: sink)
             default:
@@ -555,6 +560,7 @@ final class ClaudeRun: @unchecked Sendable {
     let model: ClaudeModel
     let data: [String: Any]
     let compacting: Bool
+    let permissionMode: ClaudePermissionMode
     var inputs: [Any]
     var table: [String: ClaudeTool]
     var events: [Event] = []
@@ -583,6 +589,7 @@ final class ClaudeRun: @unchecked Sendable {
         self.inputs = inputs
         self.table = table
         self.compacting = compacting
+        permissionMode = compacting ? .dontAsk : .mirroring(inputs)
     }
 
     var effort: String { compacting ? ClaudeBridge.compactionEffort : ClaudeBridge.effort(data) }
@@ -600,7 +607,9 @@ final class ClaudeRun: @unchecked Sendable {
     }
 
     func arguments(relay: URL?, config: URL) -> [String] {
-        var arguments = ["--restricted", "-p", "--model", model.cliModel]
+        // Claude Code refuses bypassPermissions in restricted mode. It still has no tools, settings or MCP servers of its own.
+        var arguments = permissionMode == .bypassPermissions ? [] : ["--restricted"]
+        arguments += ["-p", "--model", model.cliModel]
         if model.efforts.contains(effort) { arguments += ["--effort", effort] }
         arguments += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                          "--tools", "", "--setting-sources", "", "--strict-mcp-config"]
@@ -609,9 +618,11 @@ final class ClaudeRun: @unchecked Sendable {
             arguments += ["--mcp-config", ClaudeBridge.text(["mcpServers": ["codex": server]])]
         }
         let settings: [String: Any] = ["disableAllHooks": true, "enabledPlugins": [String: Any](), "autoMemoryEnabled": false]
-        arguments += ["--permission-mode", "dontAsk", "--permission-prompts", "none", "--disable-slash-commands", "--no-chrome",
+        let prompt = compacting ? ClaudeBridge.compactionSystemPrompt
+            : ClaudeBridge.systemPrompt + (permissionMode == .plan ? ClaudeBridge.planModePrompt : "")
+        arguments += ["--permission-mode", permissionMode.rawValue, "--permission-prompts", "none", "--disable-slash-commands", "--no-chrome",
                       "--no-session-persistence", "--system-prompt-snapshot", "off", "--settings", ClaudeBridge.text(settings),
-                      "--append-system-prompt", compacting ? ClaudeBridge.compactionSystemPrompt : ClaudeBridge.systemPrompt]
+                      "--append-system-prompt", prompt]
         if !table.isEmpty { arguments += ["--allowedTools", table.keys.sorted().map { "mcp__codex__" + $0 }.joined(separator: ",")] }
         return arguments
     }
