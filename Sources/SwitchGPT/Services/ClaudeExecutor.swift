@@ -478,7 +478,12 @@ final class ClaudeExecutor: @unchecked Sendable {
                     guard let delta = value["delta"] as? [String: Any] else { break }
                     switch delta["type"] as? String {
                     case "text_delta": if let text = delta["text"] as? String { writer.delta(text) }
-                    case "thinking_delta": if let text = delta["thinking"] as? String { writer.delta(text) }
+                    case "thinking_delta":
+                        // Claude's thinking usually arrives without text. Visible text in it is a progress note that Codex
+                        // would leave unfolded as reasoning, so it continues as the commentary a text block would give.
+                        guard let text = delta["thinking"] as? String, !(writer.thinking && text.allSatisfy(\.isWhitespace)) else { break }
+                        if writer.thinking { writer.startItem("message", note: true) }
+                        writer.delta(text)
                     case "input_json_delta": if let json = delta["partial_json"] as? String { run.searches[index]?.input += json }
                     default: break
                     }
@@ -723,6 +728,8 @@ final class ClaudeResponseWriter: @unchecked Sendable {
     /// Output indexes of this response's search cards still in progress, by WebSearch tool_use ID.
     private var searches: [String: Int] = [:]
     private var active: (index: Int, reasoning: Bool, text: String)?
+    /// Whether the open message is a progress note from Claude's thinking, which is never the final answer.
+    private var note = false
     private var contextInput: Int?
     private var contextCached = 0
 
@@ -773,8 +780,9 @@ final class ClaudeResponseWriter: @unchecked Sendable {
         event("response.output_item.done", ["output_index": index, "item": item])
     }
 
-    func startItem(_ kind: String, phase: String = "commentary") {
+    func startItem(_ kind: String, phase: String = "commentary", note: Bool = false) {
         finishItem()
+        self.note = note
         let index = items.count
         let reasoning = kind == "reasoning"
         let id = (reasoning ? "rs_" : "msg_") + ClaudeBridge.identifier()
@@ -851,10 +859,13 @@ final class ClaudeResponseWriter: @unchecked Sendable {
 
     /// Marks an open message as the final answer. Returns false when no message is open.
     func markFinalAnswer() -> Bool {
-        guard let current = active, !current.reasoning else { return false }
+        guard let current = active, !current.reasoning, !note else { return false }
         items[current.index]["phase"] = "final_answer"
         return true
     }
+
+    /// Whether the open item is Claude's thinking.
+    var thinking: Bool { active?.reasoning == true }
 
     private func contentPart(reasoning: Bool, text: String) -> [String: Any] {
         reasoning ? ["type": "summary_text", "text": text] : ["type": "output_text", "text": text, "annotations": [Any]()]
