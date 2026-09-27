@@ -88,6 +88,9 @@ struct AccountPanel: View {
             Menu {
                 Toggle(L10n.text("routing_auto_toggle"), isOn: Binding(
                     get: { store.routingPreferences.automatic }, set: { store.setAutomatic($0) }))
+                Toggle(L10n.text(store.claudeAvailable ? "claude_toggle" : "claude_missing"), isOn: Binding(
+                    get: { store.routingPreferences.claudeEnabled }, set: { toggleClaude($0) }))
+                    .disabled(!store.claudeAvailable && !store.routingPreferences.claudeEnabled)
                 Divider()
                 ForEach(store.accounts) { account in
                     Menu(store.displayName(account)) { accountActions(account) }
@@ -180,6 +183,18 @@ struct AccountPanel: View {
         alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn { Task { await store.restartDesktop() } }
+    }
+
+    private func toggleClaude(_ enabled: Bool) {
+        guard store.setClaudeEnabled(enabled), store.desktopRunning else { return }
+        // The model picker changes only after ChatGPT reloads its model list.
+        let alert = NSAlert()
+        alert.messageText = L10n.text(enabled ? "claude_restart_enable" : "claude_restart_disable")
+        alert.informativeText = L10n.text("claude_restart_detail")
+        alert.addButton(withTitle: L10n.text("claude_restart_action"))
+        alert.addButton(withTitle: L10n.text("claude_restart_later")).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { Task { await store.restartDesktop(clearingModelCache: true) } }
     }
 
     private func confirmReset(_ account: Account) {

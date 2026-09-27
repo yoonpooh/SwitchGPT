@@ -19,10 +19,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     func applicationWillTerminate(_ notification: Notification) {
         refreshTask?.cancel()
+        store.shutdown()
     }
 }
 
 @main
+enum Launcher {
+    @MainActor static func main() {
+        // Claude Code starts this executable as its private Codex tool relay; no UI is created.
+        let arguments = CommandLine.arguments
+        if arguments.count == 3, arguments[1] == ClaudeMCPRelay.flag { ClaudeMCPRelay.run(config: arguments[2]) }
+        SwitchGPTApp.main()
+    }
+}
+
 struct SwitchGPTApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     private static let menuIcon: NSImage = {

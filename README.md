@@ -96,6 +96,20 @@ Dates follow the Mac's time zone and interface language. Reopen the app after ch
 
 Turn automatic switching off in `⋯` to keep using the selected account and receive its limit errors directly. In automatic mode, card order takes precedence over manual selection, and reordering applies to the next request. Quotas remain separate for each account.
 
+## Claude Opus 5.5 (optional)
+
+Turn on **Use Claude Opus 5.5** in `⋯` to add Opus 5.5 to the ChatGPT model picker. It runs through the Claude Code CLI already signed in on this Mac (`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, or `/usr/local/bin/claude`); SwitchGPT reads no Anthropic credentials. The toggle is disabled when the CLI is not installed.
+
+- Opus requests use the same relay and desktop sign-in check, but never select an OpenAI account or spend its quota. Other models are unchanged.
+- While the toggle is off, SwitchGPT refuses Opus requests locally instead of sending them to OpenAI, and turning it off ends any running Opus task. Compressed requests (gzip, deflate, zstd) are handled the same way. zstd needs Homebrew's `zstd`; while the toggle is on, a request SwitchGPT cannot read is refused locally instead of being forwarded.
+- Claude Code gets no tools of its own. Each tool call is returned to Codex, which runs it under its current permissions and approvals, and the result goes back to the same Claude process.
+- Manual and automatic compaction produce a summary written by Opus.
+- A thread that used Opus can continue with a GPT model: SwitchGPT removes only the Opus-made items OpenAI would reject, and turns an Opus compaction summary into a readable message. The reverse is limited: a summary compacted by a GPT model is encrypted, so Opus continues from the messages after it and says when earlier context is missing.
+- OpenAI-hosted tools such as web search are not available to Opus; it is told which ones are missing.
+- Claude Code runs in an empty private folder, never in the thread's folder, so threads in protected folders such as Documents or without a project do not wait on a macOS permission prompt. Codex tools still run in the thread's folder. If Claude Code has not started within 90 seconds, or exits early, the Opus response fails with Claude Code's error.
+- If `~/.codex/config.toml` sets `model_catalog_json`, that list replaces the one SwitchGPT adds Opus to; SwitchGPT warns about it when you turn Opus on.
+- Toggling asks before restarting ChatGPT, because the model list refreshes only after a restart. SwitchGPT removes `~/.codex/models_cache.json` so ChatGPT fetches the updated list.
+
 ## Troubleshooting
 
 - **Requests fail after quitting SwitchGPT:** reopen it, or remove routing as described below.

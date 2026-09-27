@@ -35,15 +35,17 @@ final class ModelRelay: @unchecked Sendable {
     private let upstreamBaseURL: URL
     private let eventURL: URL?
     private let didRecord: @Sendable (RelayEvent) -> Void
+    let claude: ClaudeExecutor
 
     init(desktopAuth: URL, upstreamBaseURL: URL = URL(string: "https://chatgpt.com")!, eventURL: URL? = nil,
-         router: AccountRouter = AccountRouter(),
+         router: AccountRouter = AccountRouter(), claude: ClaudeExecutor = ClaudeExecutor(),
          didRecord: @escaping @Sendable (RelayEvent) -> Void = { _ in }) {
         self.desktopAuth = desktopAuth
         initialDesktopToken = Self.accessToken(at: desktopAuth)
         self.upstreamBaseURL = upstreamBaseURL
         self.eventURL = eventURL
         self.router = router
+        self.claude = claude
         self.didRecord = didRecord
     }
 
@@ -52,6 +54,14 @@ final class ModelRelay: @unchecked Sendable {
     }
 
     private func credentials(for request: RelayRequest) throws -> RelayCredentials {
+        let snapshot = try authorize(request)
+        guard request.isModelRequest else { return snapshot }
+        guard let selected = router.resolve() else { throw HTTPFailure(status: 429) }
+        return selected
+    }
+
+    /// Only the signed-in desktop may use the relay, including Claude requests that spend no OpenAI quota.
+    private func authorize(_ request: RelayRequest) throws -> RelayCredentials {
         guard let snapshot = router.selected, let authorization = request.headers["authorization"],
               authorization.hasPrefix("Bearer ") else { throw HTTPFailure(status: 401) }
         let token = String(authorization.dropFirst(7))
@@ -59,9 +69,7 @@ final class ModelRelay: @unchecked Sendable {
               token == initialDesktopToken || token == snapshot.accessToken || token == Self.accessToken(at: desktopAuth) else {
             throw HTTPFailure(status: 401)
         }
-        guard request.isModelRequest else { return snapshot }
-        guard let selected = router.resolve() else { throw HTTPFailure(status: 429) }
-        return selected
+        return snapshot
     }
 
     private static func accessToken(at file: URL) -> String? {
@@ -84,7 +92,10 @@ final class ModelRelay: @unchecked Sendable {
                     listener.stateUpdateHandler = { [weak self, weak listener] state in
                         switch state {
                         case .ready:
-                            if let port = listener?.port { startup.finish(.success(port.rawValue)) }
+                            if let port = listener?.port {
+                                self?.claude.relayPort = port.rawValue
+                                startup.finish(.success(port.rawValue))
+                            }
                         case .failed:
                             startup.finish(.failure(SwitchError(message: L10n.text("relay_start_failed"))))
                             self?.listener = nil
@@ -102,6 +113,7 @@ final class ModelRelay: @unchecked Sendable {
     }
 
     func stop() {
+        claude.stop()
         queue.async {
             self.listener?.cancel()
             self.listener = nil
@@ -112,10 +124,14 @@ final class ModelRelay: @unchecked Sendable {
 
     private func accept(_ connection: NWConnection) {
         let id = UUID()
-        let client = RelayConnection(connection: connection, queue: queue, upstreamBaseURL: upstreamBaseURL,
+        let client = RelayConnection(connection: connection, queue: queue, upstreamBaseURL: upstreamBaseURL, claude: claude,
                                      credentials: { [weak self] request in
                                          guard let self else { throw HTTPFailure(status: 503) }
                                          return try self.credentials(for: request)
+                                     },
+                                     authorize: { [weak self] request in
+                                         guard let self else { throw HTTPFailure(status: 503) }
+                                         _ = try self.authorize(request)
                                      },
                                      fallback: { [router] failed, tried in router.resolve(excluding: tried, exhausted: failed) },
                                      report: { [weak self] in self?.record($0) },
@@ -148,11 +164,13 @@ private final class RelayStartup: @unchecked Sendable {
     }
 }
 
-private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSink, @unchecked Sendable {
     private let connection: NWConnection
     private let queue: DispatchQueue
     private let upstreamBaseURL: URL
+    private let claude: ClaudeExecutor
     private let credentials: @Sendable (RelayRequest) throws -> RelayCredentials
+    private let authorize: @Sendable (RelayRequest) throws -> Void
     private let fallback: @Sendable (RelayCredentials, Set<String>) -> RelayCredentials?
     private let report: @Sendable (RelayEvent) -> Void
     private let onClose: @Sendable () -> Void
@@ -169,16 +187,22 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
     private var attempted: Set<String> = []
     private var deferredResponse: HTTPURLResponse?
     private var deferredBody = Data()
+    private var catalogResponse: HTTPURLResponse?
+    private var catalogBody = Data()
+    private var closeHandlers: [@Sendable () -> Void] = []
 
-    init(connection: NWConnection, queue: DispatchQueue, upstreamBaseURL: URL,
+    init(connection: NWConnection, queue: DispatchQueue, upstreamBaseURL: URL, claude: ClaudeExecutor,
          credentials: @escaping @Sendable (RelayRequest) throws -> RelayCredentials,
+         authorize: @escaping @Sendable (RelayRequest) throws -> Void,
          fallback: @escaping @Sendable (RelayCredentials, Set<String>) -> RelayCredentials?,
          report: @escaping @Sendable (RelayEvent) -> Void,
          onClose: @escaping @Sendable () -> Void) {
         self.connection = connection
         self.queue = queue
         self.upstreamBaseURL = upstreamBaseURL
+        self.claude = claude
         self.credentials = credentials
+        self.authorize = authorize
         self.fallback = fallback
         self.report = report
         self.onClose = onClose
@@ -214,13 +238,36 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
 
     private func forward(_ request: RelayRequest) {
         do {
+            if request.path == ClaudeBridge.relayPath {
+                // Claude's private MCP relay authenticates with the executor's per-launch token.
+                guard request.method == "POST" else { throw HTTPFailure(status: 405) }
+                claude.relay(request, sink: self)
+                return
+            }
+            var request = request
+            switch try ClaudeBridge.route(request, claudeEnabled: claude.enabled) {
+            case .claude(let decoded):
+                // Claude requests never select an account or reach OpenAI, even while Claude is turned off.
+                try authorize(request)
+                guard claude.enabled else {
+                    respond(status: 400, json: ClaudeBridge.errorBody(ClaudeBridge.disabledMessage))
+                    return
+                }
+                claude.respond(to: decoded, sink: self)
+                return
+            case .openAI(let forwarded):
+                request = forwarded
+            }
             let selected = try credentials(request)
             // Codex explicitly falls back to HTTP/SSE on 426. This avoids a WebSocket
             // retaining the old account across turns after the user selects a new one.
             if request.headers["upgrade"]?.lowercased() == "websocket" { fail(426); return }
+            // A cached catalog without Opus must not be revalidated while Claude is enabled.
+            if claude.enabled && request.isCatalogRequest { request = request.removingHeader("if-none-match") }
             originalRequest = request
             startAttempt(request, selected: selected)
         } catch let failure as HTTPFailure { fail(failure.status) }
+        catch let failure as ClaudeFailure { respond(status: failure.status, json: ClaudeBridge.errorBody(failure.message)) }
         catch { fail(400) }
     }
 
@@ -262,19 +309,22 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
         guard !closed, let response = response as? HTTPURLResponse else { completionHandler(.cancel); return }
         event?.status = response.statusCode
-        if originalRequest?.isModelRequest == true && response.statusCode == 429 {
+        if originalRequest?.isCatalogRequest == true && response.statusCode == 200 && claude.enabled {
+            catalogResponse = response
+        } else if originalRequest?.isModelRequest == true && response.statusCode == 429 {
             // Hold retryable error responses before any bytes reach Codex. Successful streams are never replayed.
             deferredResponse = response
         } else { sendHead(response) }
         completionHandler(.allow)
     }
 
-    private func sendHead(_ response: HTTPURLResponse) {
+    private func sendHead(_ response: HTTPURLResponse, etag: String? = nil) {
         responseStarted = true
         var head = "HTTP/1.1 \(response.statusCode) Response\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n"
         for (rawName, rawValue) in response.allHeaderFields {
-            guard let name = rawName as? String, let value = rawValue as? String,
-                  !["content-length", "transfer-encoding", "connection", "content-encoding", "set-cookie"].contains(name.lowercased()),
+            guard let name = rawName as? String, let original = rawValue as? String else { continue }
+            let value = name.lowercased() == "etag" ? etag ?? original : original
+            guard !["content-length", "transfer-encoding", "connection", "content-encoding", "set-cookie"].contains(name.lowercased()),
                   !name.contains("\r"), !name.contains("\n"), !value.contains("\r"), !value.contains("\n") else { continue }
             head += "\(name): \(value)\r\n"
         }
@@ -283,6 +333,16 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard !closed else { return }
+        if let response = catalogResponse {
+            catalogBody.append(data)
+            if catalogBody.count > 16 * 1024 * 1024 { // Too large to rewrite; pass it through unchanged.
+                catalogResponse = nil
+                sendHead(response)
+                sendChunk(catalogBody)
+                catalogBody.removeAll()
+            }
+            return
+        }
         if let response = deferredResponse {
             deferredBody.append(data)
             if deferredBody.count > 65_536 {
@@ -309,6 +369,14 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard !closed else { return }
         event?.finishedAt = .now
+        if let response = catalogResponse {
+            catalogResponse = nil
+            let updated = error == nil ? ClaudeBridge.addingCatalogItem(to: catalogBody) : nil
+            let etag = updated == nil ? nil : response.value(forHTTPHeaderField: "ETag").map(ClaudeBridge.catalogETag)
+            sendHead(response, etag: etag)
+            sendChunk(updated ?? catalogBody)
+            catalogBody.removeAll()
+        }
         if let response = deferredResponse {
             if error == nil, response.statusCode == 429, QuotaFailure.isExhausted(deferredBody), let selected, let request = originalRequest {
                 event?.quotaExhausted = true
@@ -370,6 +438,50 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, @unchecke
         session?.invalidateAndCancel()
         session = nil
         connection.cancel()
+        let handlers = closeHandlers
+        closeHandlers.removeAll()
+        for handler in handlers { handler() }
         onClose()
+    }
+
+    // MARK: ClaudeSink. Called from the Claude executor queue, in order.
+
+    func beginEventStream() {
+        queue.async { [self] in
+            guard !closed, !responseStarted else { return }
+            responseStarted = true
+            send(Data("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nTransfer-Encoding: chunked\r\n\r\n".utf8))
+        }
+    }
+
+    func write(_ data: Data) {
+        queue.async { [self] in
+            guard !closed, responseStarted else { return }
+            sendChunk(data)
+        }
+    }
+
+    func finish() {
+        queue.async { [self] in
+            guard !closed, responseStarted else { return }
+            send(Data("0\r\n\r\n".utf8), final: true)
+        }
+    }
+
+    func respond(status: Int, json: Data) {
+        queue.async { [self] in
+            guard !closed else { return }
+            guard !responseStarted else { close(); return }
+            responseStarted = true
+            var data = Data("HTTP/1.1 \(status) SwitchGPT\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: \(json.count)\r\n\r\n".utf8)
+            data.append(json)
+            send(data, final: true)
+        }
+    }
+
+    func observeClose(_ handler: @escaping @Sendable () -> Void) {
+        queue.async { [self] in
+            if closed { handler() } else { closeHandlers.append(handler) }
+        }
     }
 }

@@ -125,3 +125,13 @@
 "reset_failed" = "无法使用重置机会：%@";
 
 "routing_manual_badge" = "手动";
+
+"claude_model_description" = "通过本机已登录的 Claude Code CLI 运行 Opus 5.5，所有工具均由 Codex 执行。";
+"claude_toggle" = "使用 Claude Opus 5.5";
+"claude_missing" = "Claude Opus 5.5（未安装 Claude Code）";
+"claude_restart_enable" = "重新启动 ChatGPT 以显示 Opus 5.5？";
+"claude_restart_disable" = "重新启动 ChatGPT 以移除 Opus 5.5？";
+"claude_restart_detail" = "模型选择器将在重启后更新。进行中的任务可能中断，桌面登录保持不变。";
+"claude_restart_action" = "重启 ChatGPT";
+"claude_restart_later" = "稍后";
+"claude_catalog_override" = "config.toml 设置了 model_catalog_json 时不会显示 Opus 5.5。请删除该行，然后重启 ChatGPT。";

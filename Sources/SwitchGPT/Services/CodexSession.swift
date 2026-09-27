@@ -5,6 +5,10 @@ struct CodexSession {
     let home: URL
     init(home: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")) { self.home = home }
     var auth: URL { home.appendingPathComponent("auth.json") }
+    /// Codex refetches its model list when this cache is missing, picking up SwitchGPT's catalog changes.
+    func clearModelCache() {
+        try? FileManager.default.removeItem(at: home.appendingPathComponent("models_cache.json"))
+    }
     func read() throws -> Credential { try Credential(data: Data(contentsOf: auth)) }
     func validateStore() throws {
         let config = (try? String(contentsOf: home.appendingPathComponent("config.toml"), encoding: .utf8)) ?? ""

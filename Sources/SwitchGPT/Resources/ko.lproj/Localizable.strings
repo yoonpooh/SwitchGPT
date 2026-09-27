@@ -125,3 +125,13 @@
 "reset_failed" = "리셋권을 사용하지 못했습니다: %@";
 
 "routing_manual_badge" = "수동";
+
+"claude_model_description" = "이 Mac에 로그인된 Claude Code CLI로 실행하는 Opus 5.5입니다. 도구는 모두 Codex가 실행합니다.";
+"claude_toggle" = "Claude Opus 5.5 사용";
+"claude_missing" = "Claude Opus 5.5 (Claude Code 미설치)";
+"claude_restart_enable" = "Opus 5.5를 표시하려면 ChatGPT를 재시작할까요?";
+"claude_restart_disable" = "Opus 5.5를 목록에서 빼려면 ChatGPT를 재시작할까요?";
+"claude_restart_detail" = "모델 선택기는 재시작한 뒤 갱신됩니다. 진행 중인 작업이 중단될 수 있습니다. 데스크톱 로그인은 유지됩니다.";
+"claude_restart_action" = "ChatGPT 재시작";
+"claude_restart_later" = "나중에";
+"claude_catalog_override" = "config.toml에 model_catalog_json이 설정되어 있으면 Opus 5.5가 표시되지 않습니다. 그 줄을 지운 뒤 ChatGPT를 재시작하세요.";

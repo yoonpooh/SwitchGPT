@@ -125,3 +125,13 @@
 "reset_failed" = "Could not use a reset credit: %@";
 
 "routing_manual_badge" = "Manual";
+
+"claude_model_description" = "Opus 5.5 through the Claude Code CLI signed in on this Mac. Codex runs every tool.";
+"claude_toggle" = "Use Claude Opus 5.5";
+"claude_missing" = "Claude Opus 5.5 (Claude Code not installed)";
+"claude_restart_enable" = "Restart ChatGPT to show Opus 5.5?";
+"claude_restart_disable" = "Restart ChatGPT to remove Opus 5.5?";
+"claude_restart_detail" = "The model picker updates after a restart. Active tasks may be interrupted. Your desktop sign-in stays unchanged.";
+"claude_restart_action" = "Restart ChatGPT";
+"claude_restart_later" = "Later";
+"claude_catalog_override" = "Opus 5.5 will not appear while config.toml sets model_catalog_json. Remove that line, then restart ChatGPT.";

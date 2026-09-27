@@ -125,3 +125,13 @@
 "reset_failed" = "リセット権を使用できませんでした：%@";
 
 "routing_manual_badge" = "手動";
+
+"claude_model_description" = "このMacでサインイン済みのClaude Code CLIで実行するOpus 5.5です。ツールはすべてCodexが実行します。";
+"claude_toggle" = "Claude Opus 5.5を使用";
+"claude_missing" = "Claude Opus 5.5（Claude Code未インストール）";
+"claude_restart_enable" = "Opus 5.5を表示するためにChatGPTを再起動しますか？";
+"claude_restart_disable" = "Opus 5.5を一覧から外すためにChatGPTを再起動しますか？";
+"claude_restart_detail" = "モデル選択は再起動後に更新されます。実行中のタスクが中断される場合があります。ログインは維持されます。";
+"claude_restart_action" = "ChatGPTを再起動";
+"claude_restart_later" = "後で";
+"claude_catalog_override" = "config.toml で model_catalog_json が設定されていると Opus 5.5 は表示されません。その行を削除してから ChatGPT を再起動してください。";

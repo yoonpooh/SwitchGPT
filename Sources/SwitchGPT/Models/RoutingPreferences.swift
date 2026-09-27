@@ -4,17 +4,20 @@ struct RoutingPreferences: Codable {
     var automatic = true
     var configuredAt: Date?
     var desktopVerified = false
+    var claudeEnabled = false
 
     private enum CodingKeys: String, CodingKey {
         case automatic
         case configuredAt
         case desktopVerified
+        case claudeEnabled
     }
 
-    init(automatic: Bool = true, configuredAt: Date? = nil, desktopVerified: Bool = false) {
+    init(automatic: Bool = true, configuredAt: Date? = nil, desktopVerified: Bool = false, claudeEnabled: Bool = false) {
         self.automatic = automatic
         self.configuredAt = configuredAt
         self.desktopVerified = desktopVerified
+        self.claudeEnabled = claudeEnabled
     }
 
     /// Keep preferences written by older SwitchGPT versions readable. Stored
@@ -24,6 +27,7 @@ struct RoutingPreferences: Codable {
         automatic = try values.decodeIfPresent(Bool.self, forKey: .automatic) ?? true
         configuredAt = try values.decodeIfPresent(Date.self, forKey: .configuredAt)
         desktopVerified = try values.decodeIfPresent(Bool.self, forKey: .desktopVerified) ?? false
+        claudeEnabled = try values.decodeIfPresent(Bool.self, forKey: .claudeEnabled) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -31,6 +35,7 @@ struct RoutingPreferences: Codable {
         try values.encode(automatic, forKey: .automatic)
         try values.encodeIfPresent(configuredAt, forKey: .configuredAt)
         try values.encode(desktopVerified, forKey: .desktopVerified)
+        try values.encode(claudeEnabled, forKey: .claudeEnabled)
     }
 
     func needsRestart(desktopLaunchedAt: Date?) -> Bool {

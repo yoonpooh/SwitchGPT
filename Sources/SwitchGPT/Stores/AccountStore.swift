@@ -260,6 +260,26 @@ final class AccountStore {
         router.update(candidates, automatic: routingPreferences.automatic)
     }
 
+    var claudeAvailable: Bool { ClaudeCLI.locate() != nil }
+
+    func shutdown() { relay?.claude.shutdown() }
+    var desktopRunning: Bool { !NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex").isEmpty }
+
+    /// Returns true when the setting changed. Codex keeps its model list until it refetches the catalog.
+    @discardableResult
+    func setClaudeEnabled(_ enabled: Bool) -> Bool {
+        guard routingPreferences.claudeEnabled != enabled else { return false }
+        var updated = routingPreferences
+        updated.claudeEnabled = enabled
+        do {
+            try savePreferences(updated)
+            relay?.claude.setEnabled(enabled)
+            session.clearModelCache()
+            if enabled && RoutingConfiguration(home: session.home).overridesCatalog { message = L10n.text("claude_catalog_override") }
+            return true
+        } catch { message = error.localizedDescription; return false }
+    }
+
     func setAutomatic(_ enabled: Bool) {
         var updated = routingPreferences
         updated.automatic = enabled
@@ -313,7 +333,7 @@ final class AccountStore {
         }
     }
 
-    func restartDesktop() async {
+    func restartDesktop(clearingModelCache: Bool = false) async {
         guard !busy else { return }
         busy = true
         message = ""
@@ -321,6 +341,7 @@ final class AccountStore {
         do {
             let app = try session.appURL()
             try await session.stop(app: app)
+            if clearingModelCache { session.clearModelCache() }
             try await session.launch(app)
         } catch { message = error.localizedDescription }
     }
@@ -404,7 +425,10 @@ final class AccountStore {
                 Task { @MainActor [weak self] in self?.received(event) }
             })
             let isStarting = relay == nil
-            if isStarting { activeRelay.select(credentials) }
+            if isStarting {
+                activeRelay.select(credentials)
+                activeRelay.claude.setEnabled(routingPreferences.claudeEnabled)
+            }
             let configuration = RoutingConfiguration(home: session.home)
             var installed = false
             do {

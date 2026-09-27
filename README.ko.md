@@ -97,6 +97,20 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 
 `⋯`에서 자동 전환을 끄면 선택 계정을 계속 사용하며 해당 계정의 한도 오류를 그대로 반환합니다. 자동 모드에서는 카드 순서가 수동 선택보다 우선하며, 순서를 바꾸면 다음 요청에 반영됩니다. 계정별 한도는 각각 별도로 유지됩니다.
 
+## Claude Opus 5.5 (선택)
+
+`⋯`에서 **Claude Opus 5.5 사용**을 켜면 ChatGPT 모델 선택기에 Opus 5.5가 추가됩니다. 이 Mac에 이미 로그인된 Claude Code CLI(`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, `/usr/local/bin/claude`)로 실행하며, SwitchGPT는 Anthropic 인증 정보를 읽지 않습니다. CLI가 없으면 토글이 비활성화됩니다.
+
+- Opus 요청도 같은 중계와 데스크톱 로그인 확인을 거치지만, OpenAI 계정을 고르거나 한도를 쓰지 않습니다. 다른 모델은 그대로입니다.
+- 토글이 꺼져 있으면 Opus 요청을 OpenAI로 보내지 않고 SwitchGPT가 바로 거절하며, 끄는 즉시 진행 중인 Opus 작업도 끝냅니다. 압축된 요청(gzip, deflate, zstd)도 똑같이 처리합니다. zstd는 Homebrew의 `zstd`가 필요하며, 토글이 켜져 있을 때 SwitchGPT가 읽지 못한 요청은 넘기지 않고 바로 거절합니다.
+- Claude Code에는 자체 도구를 주지 않습니다. 도구 호출은 모두 Codex로 돌아가 현재 권한·승인 설정으로 실행되고, 결과는 같은 Claude 프로세스로 전달됩니다.
+- 수동·자동 압축 모두 Opus가 요약을 작성합니다.
+- Opus를 쓰던 스레드도 GPT 모델로 바꿔 이어 쓸 수 있습니다. OpenAI가 거절하는 Opus 항목만 걸러 내고, Opus가 쓴 압축 요약은 읽을 수 있는 메시지로 바꿔 보냅니다. 반대 방향은 제한이 있습니다. GPT 모델이 압축한 요약은 암호화되어 있어 Opus는 그 이후 메시지부터 이어 가며, 이전 맥락이 없으면 그렇다고 알립니다.
+- 웹 검색 같은 OpenAI 호스팅 도구는 Opus에서 쓸 수 없으며, 어떤 도구가 빠졌는지 Opus에게 알려 줍니다.
+- Claude Code는 스레드 폴더가 아닌 빈 전용 폴더에서 실행됩니다. 그래서 문서 폴더처럼 보호된 폴더의 스레드나 프로젝트 없는 새 채팅에서도 macOS 권한 창을 기다리지 않습니다. Codex 도구는 그대로 스레드 폴더에서 실행됩니다. Claude Code가 90초 안에 시작되지 않거나 도중에 종료되면 Opus 응답은 Claude Code의 오류 메시지와 함께 실패합니다.
+- `~/.codex/config.toml`에 `model_catalog_json`이 있으면 그 목록이 SwitchGPT가 Opus를 추가한 목록을 대신합니다. Opus를 켤 때 SwitchGPT가 이를 경고합니다.
+- 모델 목록은 재시작해야 갱신되므로, 토글을 바꾸면 ChatGPT 재시작 여부를 묻습니다. 새 목록을 받도록 `~/.codex/models_cache.json`을 지웁니다.
+
 ## 문제 해결
 
 - **SwitchGPT 종료 후 요청이 실패해요:** 다시 실행하거나 아래 연결 해제 절차를 진행하세요.

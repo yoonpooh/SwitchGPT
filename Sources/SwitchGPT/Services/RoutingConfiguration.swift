@@ -33,16 +33,27 @@ struct RoutingConfiguration {
         guard !original.contains(begin), !original.contains(end) else {
             throw SwitchError(message: L10n.text("routing_conflict"))
         }
-        for line in original.components(separatedBy: .newlines) {
-            let text = line.trimmingCharacters(in: .whitespaces)
-            if text.hasPrefix("[") { break }
-            if text.hasPrefix("#") { continue }
-            let key = text.components(separatedBy: "=")[0].trimmingCharacters(in: .whitespaces)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-            if key == "openai_base_url" {
-                throw SwitchError(message: L10n.text("routing_conflict"))
-            }
+        if topLevelKeys(original).contains("openai_base_url") {
+            throw SwitchError(message: L10n.text("routing_conflict"))
         }
         return block + original
+    }
+
+    /// A model_catalog_json override replaces the model list SwitchGPT adds Opus 5.5 to.
+    var overridesCatalog: Bool {
+        guard let text = try? String(contentsOf: home.appendingPathComponent("config.toml"), encoding: .utf8) else { return false }
+        return Self.topLevelKeys(text).contains("model_catalog_json")
+    }
+
+    static func topLevelKeys(_ config: String) -> [String] {
+        var keys: [String] = []
+        for line in config.components(separatedBy: .newlines) {
+            let text = line.trimmingCharacters(in: .whitespaces)
+            if text.hasPrefix("[") { break }
+            if text.hasPrefix("#") || !text.contains("=") { continue }
+            keys.append(text.components(separatedBy: "=")[0].trimmingCharacters(in: .whitespaces)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'")))
+        }
+        return keys
     }
 }

@@ -96,6 +96,20 @@ SwitchGPT 没有普通窗口或 Dock 图标。使用模型中继时，请保持�
 
 在 `⋯` 中关闭自动切换后，将继续使用所选账户并直接返回其额度错误。自动模式下，卡片顺序优先于手动选择，调整顺序会从下一个请求起生效。各账户额度仍各自独立。
 
+## Claude Opus 5.5（可选）
+
+在 `⋯` 中开启 **使用 Claude Opus 5.5** 后，ChatGPT 的模型选择器会增加 Opus 5.5。它通过本机已登录的 Claude Code CLI（`~/.local/bin/claude`、`/opt/homebrew/bin/claude` 或 `/usr/local/bin/claude`）运行，SwitchGPT 不读取 Anthropic 凭据。未安装 CLI 时该开关不可用。
+
+- Opus 请求同样经过本地中继和桌面登录校验，但不会选择 OpenAI 账户或消耗其额度。其他模型不受影响。
+- 开关关闭时，SwitchGPT 会在本地直接拒绝 Opus 请求，不会发往 OpenAI；关闭的同时也会结束正在运行的 Opus 任务。压缩请求（gzip、deflate、zstd）同样处理。zstd 需要 Homebrew 的 `zstd`；开关开启时，SwitchGPT 无法读取的请求会在本地直接拒绝，不会转发。
+- Claude Code 不使用自带工具。所有工具调用都交回 Codex，按当前权限与审批设置执行，结果再返回同一个 Claude 进程。
+- 手动和自动压缩都由 Opus 生成摘要。
+- 使用过 Opus 的线程也可以切换到 GPT 模型继续：SwitchGPT 只移除 OpenAI 会拒绝的 Opus 条目，并把 Opus 的压缩摘要转成可读消息。反方向有限制：GPT 模型压缩的摘要是加密的，Opus 只能从其后的消息继续，缺少早先上下文时会说明。
+- 网页搜索等 OpenAI 托管工具在 Opus 中不可用，Opus 会被告知缺少哪些工具。
+- Claude Code 在一个空的专用文件夹中运行，而不是线程所在文件夹，因此“文稿”等受保护文件夹中的线程或没有项目的新聊天不会卡在 macOS 权限提示上。Codex 工具仍在线程文件夹中运行。若 Claude Code 在 90 秒内未启动或中途退出，Opus 响应会附带 Claude Code 的错误信息失败。
+- 如果 `~/.codex/config.toml` 设置了 `model_catalog_json`，该列表会取代 SwitchGPT 添加了 Opus 的列表；开启 Opus 时 SwitchGPT 会给出提示。
+- 模型列表需重启后才会更新，因此切换时会询问是否重启 ChatGPT，并删除 `~/.codex/models_cache.json` 以获取新列表。
+
 ## 问题排查
 
 - **退出 SwitchGPT 后请求失败：** 重新打开它，或按下方说明解除中继连接。

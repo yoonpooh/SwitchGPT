@@ -8,8 +8,25 @@ struct RelayRequest: Sendable {
     let target: String
     let headers: [String: String]
     let body: Data
+    var path: String { target.components(separatedBy: "?")[0] }
     var isModelRequest: Bool {
-        method == "POST" && target.components(separatedBy: "?")[0] == "/backend-api/codex/responses"
+        method == "POST" && path == "/backend-api/codex/responses"
+    }
+    var isCatalogRequest: Bool {
+        method == "GET" && path == "/backend-api/codex/models"
+    }
+
+    func replacingBody(_ body: Data) -> RelayRequest {
+        var headers = headers
+        headers["content-encoding"] = nil
+        headers["content-length"] = String(body.count)
+        return RelayRequest(method: method, target: target, headers: headers, body: body)
+    }
+
+    func removingHeader(_ name: String) -> RelayRequest {
+        var headers = headers
+        headers[name] = nil
+        return RelayRequest(method: method, target: target, headers: headers, body: body)
     }
 
     static func parse(_ data: Data) throws -> RelayRequest? {
