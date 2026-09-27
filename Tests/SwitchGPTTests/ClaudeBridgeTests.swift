@@ -413,6 +413,37 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual((response.completed?["usage"] as? [String: Any])?["input_tokens"] as? Int, 0)
     }
 
+    @MainActor func testProgressNoteInThinkingStaysTitledReasoningAndNeverBecomesTheFinalAnswer() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        let note = "**Checking the file first**\n\nChecking the file first."
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "progress-note", "input": [
+            harness.environment, ["role": "user", "content": "PROGRESS_NOTE SIGNATURE_ONLY"]] as [Any]])
+        XCTAssertEqual(response.status, 200, response.text)
+        let output = try XCTUnwrap(response.completed?["output"] as? [[String: Any]])
+        // The note keeps its leading blank deltas out of the title; the thinking left empty adds no item.
+        XCTAssertEqual(output.map { $0["type"] as? String }, ["reasoning", "message"])
+        XCTAssertEqual(output.map { $0["phase"] as? String }, [nil, "final_answer"])
+        XCTAssertEqual((output[0]["summary"] as? [[String: Any]])?.map { $0["text"] as? String }, [note])
+        XCTAssertEqual(((output[1]["content"] as? [[String: Any]])?.first)?["text"] as? String, "Hello from Opus")
+        XCTAssertEqual(Self.streamedThought(response.text), note)
+        let events = response.text.components(separatedBy: "\n").compactMap { line -> [String: Any]? in
+            guard line.hasPrefix("data: ") else { return nil }
+            return try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any]
+        }
+        XCTAssertEqual(events.map { $0["sequence_number"] as? Int }, Array(0..<events.count))
+
+        // A note still held when Claude finishes without a text block is shown first; the result is the final answer.
+        let ending = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "progress-note-end", "input": [
+            harness.environment, ["role": "user", "content": "PROGRESS_NOTE NO_TEXT"]] as [Any]])
+        XCTAssertEqual(ending.status, 200, ending.text)
+        let ended = try XCTUnwrap(ending.completed?["output"] as? [[String: Any]])
+        XCTAssertEqual(ended.map { $0["type"] as? String }, ["reasoning", "message"])
+        XCTAssertEqual(ended.map { $0["phase"] as? String }, [nil, "final_answer"])
+        XCTAssertEqual((ended[0]["summary"] as? [[String: Any]])?.map { $0["text"] as? String }, [note])
+        XCTAssertEqual(((ended[1]["content"] as? [[String: Any]])?.first)?["text"] as? String, "Hello from Opus")
+    }
+
     @MainActor func testDisabledOrUnauthorizedOpusRequestsNeverReachClaude() async throws {
         let disabled = try await Harness(enabled: false)
         defer { disabled.stop() }
@@ -1134,6 +1165,16 @@ private final class Counter: @unchecked Sendable {
     if 'HOLD_ANSWER' in prompt: time.sleep(1.5)
     out({'type': 'stream_event', 'event': {'type': 'message_start', 'message': {'usage': {'input_tokens': 10, 'cache_read_input_tokens': 5, 'output_tokens': 1}}}})
     answer = 'Hello from Opus'
+    if 'PROGRESS_NOTE' in prompt:
+        # Claude writes a progress note inside its thinking block.
+        out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'thinking', 'thinking': ''}}})
+        for part in ['', '\n', 'Checking the file', ' first.']:
+            out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'thinking_delta', 'thinking': part}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_stop', 'index': 0}})
+    if 'SIGNATURE_ONLY' in prompt:
+        out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 1, 'content_block': {'type': 'thinking', 'thinking': ''}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'index': 1, 'delta': {'type': 'signature_delta', 'signature': 'sig'}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_stop', 'index': 1}})
     if 'THINK' in prompt:
         # Claude Code may omit a thought's text, leaving only its signature.
         out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'thinking', 'thinking': ''}}})
@@ -1171,8 +1212,9 @@ private final class Counter: @unchecked Sendable {
     if tools:
         out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'content_block': {'type': 'tool_use'}}})
         answer = 'result was ' + call('tools/call', {'name': tools[0], 'arguments': {'cmd': 'echo 42'}})['content'][0]['text']
-    out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'content_block': {'type': 'text'}}})
-    out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': answer}}})
+    if 'NO_TEXT' not in prompt:
+        out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'content_block': {'type': 'text'}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': answer}}})
     out({'type': 'result', 'is_error': False, 'result': answer})
     sys.stdin.read()
     """#
