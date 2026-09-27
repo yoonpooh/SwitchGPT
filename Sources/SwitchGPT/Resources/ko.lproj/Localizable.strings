@@ -135,3 +135,7 @@
 "claude_restart_action" = "ChatGPT 재시작";
 "claude_restart_later" = "나중에";
 "claude_catalog_override" = "config.toml에 model_catalog_json이 설정되어 있으면 Opus 5.5가 표시되지 않습니다. 그 줄을 지운 뒤 ChatGPT를 재시작하세요.";
+"claude_usage_help" = "이 Mac의 Claude Code에 로그인된 계정의 한도";
+"claude_scoped_weekly" = "%@ 주간";
+"claude_signed_out" = "Claude Code에 로그인되어 있지 않습니다. 터미널에서 claude를 실행해 로그인하세요.";
+"claude_token_expired" = "Claude Code 로그인 토큰이 만료되었습니다. Claude Code를 한 번 실행하면 갱신됩니다.";

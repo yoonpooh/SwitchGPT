@@ -24,9 +24,13 @@ final class AccountStore {
     var loadingUsage = false
     var profileImages: [String: NSImage] = [:]
     var emails: [String: String] = [:]
+    var claudeUsage: ClaudeAccountUsage?
+    var claudeUsageError: String?
+    var claudeNickname: String?
     private let vault: any CredentialVault
     private let session: CodexSession
     private let usageClient: UsageClient
+    private let claudeUsageClient: ClaudeUsageClient
     private let credentialRefresher: CredentialRefresher
     private let resetLedger: ResetCreditLedger
     private let index: URL
@@ -38,14 +42,16 @@ final class AccountStore {
     }
     private var selectionURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-selection.json") }
     private var preferencesURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-preferences.json") }
+    private var claudeAccountURL: URL { index.deletingLastPathComponent().appendingPathComponent("claude-account.json") }
 
-    init(index: URL? = nil, usageClient: UsageClient = UsageClient(), session: CodexSession = CodexSession(), vault: any CredentialVault = Vault(), tokenRefreshClient: TokenRefreshClient = TokenRefreshClient()) {
+    init(index: URL? = nil, usageClient: UsageClient = UsageClient(), claudeUsageClient: ClaudeUsageClient = ClaudeUsageClient(), session: CodexSession = CodexSession(), vault: any CredentialVault = Vault(), tokenRefreshClient: TokenRefreshClient = TokenRefreshClient()) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         self.index = index ?? support.appendingPathComponent("SwitchGPT/accounts.json")
         self.session = session
         self.vault = vault
         self.credentialRefresher = CredentialRefresher(client: tokenRefreshClient)
         self.usageClient = usageClient
+        self.claudeUsageClient = claudeUsageClient
         self.resetLedger = ResetCreditLedger(file: self.index.deletingLastPathComponent().appendingPathComponent("reset-credit-attempts.json"))
         self.lastCompletedEventAt = nil
         do {
@@ -56,6 +62,10 @@ final class AccountStore {
             if let data = try? Data(contentsOf: preferencesURL),
                let saved = try? JSONDecoder().decode(RoutingPreferences.self, from: data) {
                 routingPreferences = saved
+            }
+            if let data = try? Data(contentsOf: claudeAccountURL),
+               let saved = try? JSONDecoder().decode(ClaudeAccountSettings.self, from: data) {
+                claudeNickname = saved.nickname
             }
             let events = self.index.deletingLastPathComponent().appendingPathComponent("relay-events.jsonl")
             if let lines = try? String(contentsOf: events, encoding: .utf8).split(separator: "\n") {
@@ -104,6 +114,20 @@ final class AccountStore {
     }
     func email(_ account: Account) -> String { emails[account.id] ?? account.name }
     func displayName(_ account: Account) -> String { account.nickname ?? email(account) }
+    var claudeEmail: String { claudeUsage?.email ?? "Claude Code" }
+    var claudeDisplayName: String { claudeNickname ?? claudeEmail }
+    @discardableResult
+    func renameClaude(to name: String) -> Bool {
+        guard !busy else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let settings = ClaudeAccountSettings(nickname: trimmed.isEmpty ? nil : trimmed)
+        do {
+            try FileManager.default.createDirectory(at: claudeAccountURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(settings).write(to: claudeAccountURL, options: .atomic)
+            claudeNickname = settings.nickname
+            return true
+        } catch { message = L10n.text("rename_failed"); return false }
+    }
     @discardableResult
     func rename(_ account: Account, to name: String) -> Bool {
         guard !busy, let position = accounts.firstIndex(where: { $0.id == account.id }) else { return false }
@@ -118,6 +142,9 @@ final class AccountStore {
         loadingUsage = true
         defer { loadingUsage = false }
         refresh()
+        // The Claude Code account is independent of the ChatGPT accounts; query it alongside them.
+        let claudeClient = claudeAvailable ? claudeUsageClient : nil
+        async let claudeResult = claudeClient?.load()
         for account in accounts {
             do {
                 let initial = try credentialForUsage(account)
@@ -152,6 +179,11 @@ final class AccountStore {
         updateRouter()
         if routingActive { _ = router.resolve() }
         selectedExhausted = router.isCurrentExhausted()
+        switch await claudeResult {
+        case .success(let usage): claudeUsage = usage; claudeUsageError = nil
+        case .failure(let error): claudeUsage = nil; claudeUsageError = error.localizedDescription
+        case nil: claudeUsage = nil; claudeUsageError = nil
+        }
     }
 
     private func updateRoutingCredential(_ credential: Credential, account: Account) throws {

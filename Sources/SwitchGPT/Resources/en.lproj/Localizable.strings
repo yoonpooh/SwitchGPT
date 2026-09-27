@@ -135,3 +135,7 @@
 "claude_restart_action" = "Restart ChatGPT";
 "claude_restart_later" = "Later";
 "claude_catalog_override" = "Opus 5.5 will not appear while config.toml sets model_catalog_json. Remove that line, then restart ChatGPT.";
+"claude_usage_help" = "Limits of the Claude Code account signed in on this Mac";
+"claude_scoped_weekly" = "%@ weekly";
+"claude_signed_out" = "Claude Code is not signed in. Run claude in Terminal to sign in.";
+"claude_token_expired" = "The Claude Code sign-in token expired. Run Claude Code once to renew it.";

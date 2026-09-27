@@ -135,3 +135,7 @@
 "claude_restart_action" = "重启 ChatGPT";
 "claude_restart_later" = "稍后";
 "claude_catalog_override" = "config.toml 设置了 model_catalog_json 时不会显示 Opus 5.5。请删除该行，然后重启 ChatGPT。";
+"claude_usage_help" = "本机 Claude Code 已登录账号的使用额度";
+"claude_scoped_weekly" = "%@ 每周";
+"claude_signed_out" = "Claude Code 尚未登录。请在终端运行 claude 登录。";
+"claude_token_expired" = "Claude Code 登录令牌已过期。运行一次 Claude Code 即可续期。";

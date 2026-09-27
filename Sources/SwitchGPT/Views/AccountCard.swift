@@ -104,44 +104,58 @@ enum UsageBarTone: Equatable {
     }
 }
 
-private struct UsageWindowView: View {
-    let window: AccountUsage.Window
+struct UsageWindowView: View {
+    let label: String
+    let remaining: Double
+    let resetDate: Date?
+
+    init(window: AccountUsage.Window) {
+        self.init(label: window.label, remaining: window.remaining, resetDate: window.resetDate)
+    }
+
+    init(label: String, remaining: Double, resetDate: Date?) {
+        self.label = label
+        self.remaining = remaining
+        self.resetDate = resetDate
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(window.label)
+                Text(label)
                     .font(.system(size: 9))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
-                Text(compactDate(window.resetDate))
-                    .font(.system(size: 8))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .help(L10n.format("resets_at", L10n.date(window.resetDate)))
+                if let resetDate {
+                    Text(compactDate(resetDate))
+                        .font(.system(size: 8))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .help(L10n.format("resets_at", L10n.date(resetDate)))
+                }
             }
             .frame(width: 54, alignment: .leading)
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.primary.opacity(0.18))
-                    if window.remaining > 0 {
+                    if remaining > 0 {
                         Capsule()
                             .fill(barTint)
-                            .frame(width: geometry.size.width * window.remaining / 100)
+                            .frame(width: geometry.size.width * remaining / 100)
                     }
                 }
             }
             .frame(height: 4)
             .padding(.top, 4)
-            Text("\(Int(window.remaining.rounded(.up)))%")
+            Text("\(Int(remaining.rounded(.up)))%")
                 .font(.system(size: 9)).monospacedDigit().foregroundStyle(.secondary)
                 .frame(width: 30, alignment: .trailing)
-                .accessibilityLabel(L10n.format("remaining", Int(window.remaining.rounded(.up))))
+                .accessibilityLabel(L10n.format("remaining", Int(remaining.rounded(.up))))
         }
     }
 
     private var barTint: Color {
-        switch UsageBarTone.resolve(remaining: window.remaining) {
+        switch UsageBarTone.resolve(remaining: remaining) {
         case .normal: return .accentColor
         case .warning: return .orange
         case .critical: return .red

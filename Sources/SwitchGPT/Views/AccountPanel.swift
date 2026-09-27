@@ -37,6 +37,12 @@ struct AccountPanel: View {
                         } else { Rectangle().fill(.black) }
                     }
             }
+            if store.claudeAvailable {
+                Divider()
+                ClaudeUsageCard(store: store)
+                    .contentShape(Rectangle())
+                    .contextMenu { Button(L10n.text("edit_name"), action: editClaudeName) }
+            }
             if !store.message.isEmpty {
                 Label(store.message, systemImage: store.addingAccount ? "person.crop.circle" : "exclamationmark.circle")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -95,6 +101,9 @@ struct AccountPanel: View {
                 ForEach(store.accounts) { account in
                     Menu(store.displayName(account)) { accountActions(account) }
                 }
+                if store.claudeAvailable {
+                    Menu(store.claudeDisplayName) { Button(L10n.text("edit_name"), action: editClaudeName) }
+                }
                 Divider()
                 Button(L10n.text("quit"), action: quit)
             } label: {
@@ -105,7 +114,8 @@ struct AccountPanel: View {
     }
 
     private var maximumListHeight: CGFloat {
-        min(460, max(130, (NSScreen.main?.visibleFrame.height ?? 800) - (store.needsRestart ? 360 : 290)))
+        let reserved: CGFloat = (store.needsRestart ? 360 : 290) + (store.claudeAvailable ? 90 : 0)
+        return min(460, max(130, (NSScreen.main?.visibleFrame.height ?? 800) - reserved))
     }
 
     private var listOverflows: Bool { listHeight > maximumListHeight }
@@ -161,18 +171,27 @@ struct AccountPanel: View {
 
     private func editName(_ account: Account) {
         guard !store.busy else { return }
+        if let name = askName(current: account.nickname, placeholder: store.email(account)) { store.rename(account, to: name) }
+    }
+
+    private func editClaudeName() {
+        guard !store.busy else { return }
+        if let name = askName(current: store.claudeNickname, placeholder: store.claudeEmail) { store.renameClaude(to: name) }
+    }
+
+    private func askName(current: String?, placeholder: String) -> String? {
         let alert = NSAlert()
         alert.messageText = L10n.text("edit_name")
         alert.informativeText = L10n.text("edit_name_hint")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        field.stringValue = account.nickname ?? ""
-        field.placeholderString = store.email(account)
+        field.stringValue = current ?? ""
+        field.placeholderString = placeholder
         alert.accessoryView = field
         alert.addButton(withTitle: L10n.text("save"))
         alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
         alert.window.initialFirstResponder = field
         NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn { store.rename(account, to: field.stringValue) }
+        return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
     }
 
     private func confirmRestart() {
