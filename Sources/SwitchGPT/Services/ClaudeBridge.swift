@@ -47,6 +47,8 @@ enum ClaudeBridge {
         MCP tool descriptions identify the original Codex tool names. Call the matching MCP tool to use it.
         For a custom tool, put the exact raw code or other payload in its input string, without Markdown fences.
         Codex exec provides tools/ALL_TOOLS for nested plugin, MCP, browser and computer tools. Use their returned documentation.
+        Edit files only with the Codex apply_patch tool (tools.apply_patch inside exec when it is not offered directly), so Codex records the change and shows it to the user.
+        Never create or modify files through shell redirection, sed -i, Python, Node or other scripts; Codex cannot see those edits.
         Your own process runs in an empty private directory. Work in the cwd from the latest Codex environment_context instead.
         Codex hosted tools listed in unavailable_hosted_tools cannot be called here. If one is needed, say so and use the available tools instead.
         Older history tool calls have already happened; their results are context, not requests to execute them again.
