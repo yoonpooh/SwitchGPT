@@ -294,10 +294,11 @@ enum ClaudeBridge {
     """#
 
     /// The same comp_hash as GPT-6, so switching between them never forces a compaction by itself; only a smaller
-    /// context window does.
-    static func catalogItem(_ model: ClaudeModel, priority: Int) -> [String: Any] {
+    /// context window does. An unlisted model is hidden from the picker but keeps its metadata for threads that use it.
+    static func catalogItem(_ model: ClaudeModel, priority: Int, listed: Bool = true) -> [String: Any] {
         var item = (try? JSONSerialization.jsonObject(with: Data(catalogJSON.utf8))) as? [String: Any] ?? [:]
         item["slug"] = model.slug
+        item["visibility"] = listed ? "list" : "hide"
         item["display_name"] = model.name
         item["description"] = L10n.format("claude_model_description", model.name)
         item["priority"] = priority
@@ -313,7 +314,8 @@ enum ClaudeBridge {
         return item
     }
 
-    /// Adds the Claude models after the account's own models. Returns nil when the body is left unchanged.
+    /// Adds the Claude models after the account's own models, listing only the newest of each family in the picker.
+    /// Returns nil when the body is left unchanged.
     static func addingCatalogItems(to body: Data, models claude: [ClaudeModel]) -> Data? {
         guard var object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
               var models = object["models"] as? [Any] else { return nil }
@@ -322,7 +324,10 @@ enum ClaudeBridge {
         let added = claude.filter { !listed.contains($0.slug) }
         guard !added.isEmpty else { return nil }
         let priority = (existing.compactMap { ($0["priority"] as? NSNumber)?.intValue }.max() ?? 0) + 1
-        for (offset, model) in added.enumerated() { models.append(catalogItem(model, priority: priority + offset)) }
+        let newest = Set(ClaudeModel.newest(claude).map(\.slug))
+        for (offset, model) in added.enumerated() {
+            models.append(catalogItem(model, priority: priority + offset, listed: newest.contains(model.slug)))
+        }
         object["models"] = models
         return encode(object)
     }

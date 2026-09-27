@@ -128,6 +128,28 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(ClaudeModel(option: ["value": "claude-opus-6", "description": "Something new"])?.name, "Opus 6")
     }
 
+    func testPickerListsOnlyTheNewestModelOfEachFamily() throws {
+        let slugs = ["opus-5-5", "fable-5-1", "sonnet-5", "haiku-4-5", "opus-5", "fable-5", "opus-4-8", "opus-4-7", "opus-4-6", "sonnet-4-6"]
+        let models = slugs.map { ClaudeModel(slug: ClaudeModel.prefix + $0, name: ClaudeModel.name($0), cliModel: "claude-" + $0,
+                                             efforts: [], contextWindow: 167_000) }
+        XCTAssertEqual(ClaudeModel.newest(models).map(\.name), ["Opus 5.5", "Fable 5.1", "Sonnet 5", "Haiku 4.5"])
+        XCTAssertEqual(ClaudeModel.newest(models.reversed()).map(\.name), ["Haiku 4.5", "Sonnet 5", "Fable 5.1", "Opus 5.5"])
+        // Earlier versions stay in the catalog with their metadata, hidden from the picker, so a thread that uses one
+        // keeps its context window and compaction settings.
+        let body = Data(#"{"models":[{"slug":"gpt-6-astra","priority":3}]}"#.utf8)
+        let updated = try XCTUnwrap(ClaudeBridge.addingCatalogItems(to: body, models: models))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: updated) as? [String: Any])
+        let items = try XCTUnwrap(object["models"] as? [[String: Any]]).dropFirst()
+        XCTAssertEqual(items.map { $0["slug"] as? String }, models.map(\.slug))
+        XCTAssertEqual(items.filter { $0["visibility"] as? String == "list" }.map { $0["display_name"] as? String },
+                       ["Opus 5.5", "Fable 5.1", "Sonnet 5", "Haiku 4.5"])
+        let hidden = try XCTUnwrap(items.first { $0["slug"] as? String == "claude-code-opus-4-8" })
+        XCTAssertEqual(hidden["visibility"] as? String, "hide")
+        XCTAssertEqual(hidden["context_window"] as? Int, 167_000)
+        XCTAssertEqual(hidden["comp_hash"] as? String, "3000")
+        XCTAssertEqual(ClaudeModelCatalog(models: models).model(for: "claude-code-opus-4-8")?.cliModel, "claude-opus-4-8")
+    }
+
     func testCatalogAddsEachClaudeModelOnceAfterAccountModels() throws {
         let claude = [ClaudeModel.fallback,
                       ClaudeModel(slug: "claude-code-haiku-4-5", name: "Haiku 4.5", cliModel: "claude-haiku-4-5-20251001", efforts: [],

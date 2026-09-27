@@ -50,6 +50,20 @@ struct ClaudeModel: Codable, Equatable, Sendable {
         ClaudeModel(slug: slug, name: name, cliModel: cliModel, efforts: efforts, contextWindow: contextWindow)
     }
 
+    /// "claude-code-opus-5-5" -> ("opus", [5, 5]).
+    var family: (name: String, version: [Int]) {
+        let parts = slug.dropFirst(Self.prefix.count).split(separator: "-")
+        return (parts.filter { Int($0) == nil }.joined(separator: "-"), parts.compactMap { Int($0) })
+    }
+
+    /// Claude Code also offers every earlier version of a model; keeps only the newest of each family, in order.
+    static func newest(_ models: [ClaudeModel]) -> [ClaudeModel] {
+        models.filter { model in
+            let own = model.family
+            return !models.contains { $0.family.name == own.name && own.version.lexicographicallyPrecedes($0.family.version) }
+        }
+    }
+
     /// "claude-haiku-4-5-20251001" -> "haiku-4-5", "claude-opus-5-5[1m]" -> "opus-5-5".
     static func base(_ model: String) -> String {
         var base = model.lowercased()
