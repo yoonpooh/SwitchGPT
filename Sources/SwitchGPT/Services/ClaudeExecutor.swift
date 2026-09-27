@@ -463,7 +463,7 @@ final class ClaudeExecutor: @unchecked Sendable {
                 case "content_block_start":
                     let block = value["content_block"] as? [String: Any]
                     switch block?["type"] as? String {
-                    case "text": writer.startMessage()
+                    case "text": writer.startText()
                     case "thinking": writer.startThinking()
                     case "tool_use":
                         writer.finishItem()
@@ -546,6 +546,7 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     private func failResponse(_ run: ClaudeRun, _ writer: ClaudeResponseWriter, _ message: String) {
+        writer.finishItem()
         writer.closeSearches()
         var failed = writer.response("failed")
         failed["error"] = ["code": run.failureCode ?? "bridge_error", "message": message]
@@ -727,6 +728,10 @@ final class ClaudeResponseWriter: @unchecked Sendable {
     private var thinking = false
     /// Whether the open message is a progress note from Claude's thinking, which is never the final answer.
     private var note = false
+    /// A text block not shown yet, held until it reads like the final answer or ends.
+    private var held: String?
+    /// Whether the open message was shown as the final answer before Claude's turn ended.
+    private var guessed = false
     private var contextInput: Int?
     private var contextCached = 0
 
@@ -790,16 +795,51 @@ final class ClaudeResponseWriter: @unchecked Sendable {
     }
 
     func delta(_ text: String) {
+        if let pending = held.map({ $0 + text }) {
+            held = pending
+            guard Self.readsFinal(pending) else { return }
+            held = nil
+            startMessage(phase: "final_answer")
+            guessed = true
+            send(pending)
+            return
+        }
         if active == nil { startMessage() }
+        send(text)
+    }
+
+    private func send(_ text: String) {
         guard let current = active, let id = items[current.index]["id"] else { return }
         active?.text += text
         event("response.output_text.delta", ["item_id": id, "output_index": current.index, "content_index": 0, "delta": text])
     }
 
+    static let finalLength = 400
+
+    /// Codex sets a final answer apart from the work before it, and only by the phase it starts with. A Claude text
+    /// block turns out to be the final answer only when no tool call follows it, so a block is held until it runs past
+    /// a paragraph or finalLength characters, as progress commentary rarely does, and then streams as the final answer.
+    /// A block that ends sooner is shown once its turn ends or a tool call follows.
+    func startText() {
+        finishItem()
+        held = ""
+    }
+
+    static func readsFinal(_ text: String) -> Bool {
+        text.contains("\n\n") || text.count >= finalLength
+    }
+
     func finishItem() {
         thinking = false
+        if let pending = held {
+            held = nil
+            if pending.contains(where: { !$0.isWhitespace }) { startMessage(); send(pending) }
+        }
         guard let current = active, let id = items[current.index]["id"] else { return }
         active = nil
+        // A tool call followed after all, so the message was work in progress.
+        if guessed { items[current.index]["phase"] = "commentary" }
+        guessed = false
         let part = contentPart(current.text)
         items[current.index]["status"] = "completed"
         items[current.index]["content"] = [part]
@@ -858,8 +898,16 @@ final class ClaudeResponseWriter: @unchecked Sendable {
 
     /// Marks an open message as the final answer. Returns false when no message is open.
     func markFinalAnswer() -> Bool {
+        if let pending = held {
+            held = nil
+            guard pending.contains(where: { !$0.isWhitespace }) else { return false }
+            startMessage(phase: "final_answer")
+            send(pending)
+            return true
+        }
         guard let current = active, !note else { return false }
         items[current.index]["phase"] = "final_answer"
+        guessed = false
         return true
     }
 

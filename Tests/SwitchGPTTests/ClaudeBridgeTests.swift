@@ -178,6 +178,25 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertTrue(ClaudeBridge.catalogETag("W/\"a\"", models: claude).hasPrefix("W/\"a-switchgpt-claude-"))
     }
 
+    func testClaudeModelsTakeTheListedGPTInstructionsFromTheAccountCatalog() throws {
+        let body = Data(#"""
+        {"models":[{"slug":"gpt-hidden","priority":0,"visibility":"hide","model_messages":{"instructions_template":"hidden"}},
+                   {"slug":"gpt-6-luna","priority":7,"model_messages":{"instructions_template":"luna"}},
+                   {"slug":"gpt-6-astra","priority":3,"include_skills_usage_instructions":false,
+                    "model_messages":{"instructions_template":"You are Codex, an agent based on GPT-6. Work well."}}]}
+        """#.utf8)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(ClaudeBridge.addingCatalogItems(to: body, models: [.fallback]))) as? [String: Any])
+        let claude = try XCTUnwrap((object["models"] as? [[String: Any]])?.last)
+        XCTAssertEqual(claude["base_instructions"] as? String, "You are Codex, an agent based on Claude. Work well.")
+        XCTAssertEqual(claude["include_skills_usage_instructions"] as? Bool, false)
+        XCTAssertEqual(claude["include_apps_usage_instructions"] as? Bool, true)
+        // Without GPT instructions the Claude models keep their own.
+        let plain = Data(#"{"models":[{"slug":"gpt-6-astra","priority":3}]}"#.utf8)
+        let fallback = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(ClaudeBridge.addingCatalogItems(to: plain, models: [.fallback]))) as? [String: Any])
+        let own = try XCTUnwrap((fallback["models"] as? [[String: Any]])?.last)
+        XCTAssertTrue((own["base_instructions"] as? String)?.hasPrefix("You are Claude working in Codex") == true)
+    }
+
     func testModelCatalogAsksClaudeCodeAgainOnlyAfterAnUpdate() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -442,6 +461,47 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(ended.map { $0["type"] as? String }, ["message", "message"])
         XCTAssertEqual(ended.map { $0["phase"] as? String }, ["commentary", "final_answer"])
         XCTAssertEqual(ended.map { (($0["content"] as? [[String: Any]])?.first)?["text"] as? String }, texts)
+    }
+
+    @MainActor func testTextStreamsAsTheFinalAnswerOnceItReadsLikeOneAndIsCommentaryBeforeATool() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        func added(_ text: String) -> [String?] {
+            Self.events(text).filter { $0["type"] as? String == "response.output_item.added" }.map { ($0["item"] as? [String: Any])?["phase"] as? String }
+        }
+        // Past its first paragraph a text is the final answer, and the rest streams as it arrives.
+        let long = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "long-answer", "input": [
+            harness.environment, ["role": "user", "content": "LONG_ANSWER"]] as [Any]])
+        XCTAssertEqual(long.status, 200, long.text)
+        XCTAssertEqual(added(long.text), ["final_answer"])
+        let deltas = Self.events(long.text).filter { $0["type"] as? String == "response.output_text.delta" }.compactMap { $0["delta"] as? String }
+        XCTAssertEqual(deltas, ["First paragraph.\n\nSecond ", "paragraph."])
+        XCTAssertEqual((long.completed?["output"] as? [[String: Any]])?.map { $0["phase"] as? String }, ["final_answer"])
+
+        // A short text waits for the turn to end, so it never starts as work in progress.
+        let short = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "short-answer", "input": [
+            harness.environment, ["role": "user", "content": "short"]] as [Any]])
+        XCTAssertEqual(added(short.text), ["final_answer"])
+
+        // Text before a tool call is commentary, including one first taken for the final answer.
+        let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object", "properties": ["cmd": ["type": "string"]]]]]
+        let noted = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "note-first", "tools": tools, "input": [
+            harness.environment, ["role": "user", "content": "NOTE_FIRST"]] as [Any]])
+        XCTAssertEqual(noted.status, 200, noted.text)
+        XCTAssertEqual(added(noted.text), ["commentary", "final_answer", nil])
+        let output = try XCTUnwrap(noted.completed?["output"] as? [[String: Any]])
+        XCTAssertEqual(output.map { $0["type"] as? String }, ["message", "message", "function_call"])
+        XCTAssertEqual(output.prefix(2).map { $0["phase"] as? String }, ["commentary", "commentary"])
+        XCTAssertEqual(output.prefix(2).map { (($0["content"] as? [[String: Any]])?.first)?["text"] as? String }, ["Checking.", "Step one.\n\nStep two."])
+        let done = Self.events(noted.text).filter { $0["type"] as? String == "response.output_item.done" && $0["output_index"] as? Int == 1 }
+        XCTAssertEqual(done.map { ($0["item"] as? [String: Any])?["phase"] as? String }, ["commentary"])
+    }
+
+    private static func events(_ text: String) -> [[String: Any]] {
+        text.components(separatedBy: "\n").compactMap { line -> [String: Any]? in
+            guard line.hasPrefix("data: ") else { return nil }
+            return try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any]
+        }
     }
 
     @MainActor func testDisabledOrUnauthorizedOpusRequestsNeverReachClaude() async throws {
@@ -1134,11 +1194,23 @@ private final class Counter: @unchecked Sendable {
         out({'type': 'user', 'message': {'role': 'user', 'content': [{'type': 'tool_result', 'tool_use_id': 'toolu_search', 'content': 'Links: swift.org', 'is_error': failed}]}})
         answer = 'The search failed' if failed else 'Swift 6.4, per swift.org'
     if tools:
+        if 'NOTE_FIRST' in prompt:
+            # Text before the tool call: one short, one long enough to be taken for the final answer.
+            for note in ['Checking.', 'Step one.\n\nStep two.']:
+                out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'content_block': {'type': 'text'}}})
+                for part in [note[:6], note[6:]]:
+                    out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': part}}})
+                out({'type': 'stream_event', 'event': {'type': 'content_block_stop'}})
         out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'content_block': {'type': 'tool_use'}}})
         answer = 'result was ' + call('tools/call', {'name': tools[0], 'arguments': {'cmd': 'echo 42'}})['content'][0]['text']
+    parts = [answer]
+    if 'LONG_ANSWER' in prompt:
+        parts = ['First para', 'graph.\n', '\nSecond ', 'paragraph.']
+        answer = ''.join(parts)
     if 'NO_TEXT' not in prompt:
         out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'content_block': {'type': 'text'}}})
-        out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': answer}}})
+        for part in parts:
+            out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': part}}})
     out({'type': 'result', 'is_error': False, 'result': answer})
     sys.stdin.read()
     """#

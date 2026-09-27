@@ -89,6 +89,7 @@ enum ClaudeBridge {
         Older history tool calls have already happened; their results are context, not requests to execute them again.
         A compaction_summary item is a handoff summary that replaces earlier history. If the conversation ends with it, continue the in-progress task from that summary without repeating completed actions.
         Give brief progress commentary before tools and a final answer after finishing. Do not mention this bridge unless relevant.
+        Where Codex instructions mention the commentary and final channels, text you write before a tool call is commentary and the text that ends your turn is the final answer. Keep each commentary to one short paragraph.
         Codex renders replies as Markdown. Link a local file as [name](/absolute/path:line), with angle brackets around a target containing spaces, never inside backticks and never with a line range. This replaces the file_path:line_number convention.
 
         """
@@ -249,10 +250,14 @@ enum ClaudeBridge {
 
     /// The Claude models are listed under a distinct validator, so an unchanged upstream list never hides a changed Claude list.
     static func catalogETag(_ etag: String, models: [ClaudeModel]) -> String {
-        let suffix = "-switchgpt-claude-" + String(digest(models.map { [$0.slug, $0.name, $0.cliModel, $0.efforts, $0.contextWindow] as [Any] }).prefix(8))
+        let listed = models.map { [$0.slug, $0.name, $0.cliModel, $0.efforts, $0.contextWindow] as [Any] }
+        let suffix = "-switchgpt-claude-" + String(digest([catalogRevision, listed] as [Any]).prefix(8))
         guard etag.hasSuffix("\""), etag.count >= 2 else { return etag + suffix }
         return String(etag.dropLast()) + suffix + "\""
     }
+
+    /// Changed whenever the Claude items change for the same models, so Codex drops a catalog it cached.
+    private static let catalogRevision = 2
 
     // MARK: Model picker
 
@@ -326,11 +331,36 @@ enum ClaudeBridge {
         guard !added.isEmpty else { return nil }
         let priority = (existing.compactMap { ($0["priority"] as? NSNumber)?.intValue }.max() ?? 0) + 1
         let newest = Set(ClaudeModel.newest(claude).map(\.slug))
+        let instructions = codexInstructions(existing)
         for (offset, model) in added.enumerated() {
-            models.append(catalogItem(model, priority: priority + offset, listed: newest.contains(model.slug)))
+            var item = catalogItem(model, priority: priority + offset, listed: newest.contains(model.slug))
+            if let instructions {
+                item["base_instructions"] = instructions.text
+                // The GPT instructions already cover what these flags would add again.
+                for key in usageInstructionKeys { if let flag = instructions.source[key] as? Bool { item[key] = flag } }
+            }
+            models.append(item)
         }
         object["models"] = models
         return encode(object)
+    }
+
+    private static let usageInstructionKeys = ["include_skills_usage_instructions", "include_plugin_usage_instructions",
+                                               "include_apps_usage_instructions"]
+
+    /// Codex gives GPT its working instructions through the catalog: permissions, commentary, the final answer and its
+    /// formatting, skills. The Claude models take those of the first listed GPT model, as the account received them, so
+    /// Claude follows the same Codex conventions. Only the model it names changes, and nothing is stored here.
+    static func codexInstructions(_ models: [[String: Any]]) -> (text: String, source: [String: Any])? {
+        let listed = models.filter { $0["visibility"] as? String != "hide" && ($0["slug"] as? String)?.hasPrefix("claude-code-") == false }
+        let ordered = listed.sorted { ($0["priority"] as? NSNumber)?.intValue ?? .max < ($1["priority"] as? NSNumber)?.intValue ?? .max }
+        for source in ordered {
+            guard let template = (source["model_messages"] as? [String: Any])?["instructions_template"] as? String,
+                  !template.isEmpty else { continue }
+            let text = template.replacingOccurrences(of: #"based on GPT[^.\n]*"#, with: "based on Claude", options: .regularExpression)
+            return (text, source)
+        }
+        return nil
     }
 
     // MARK: Tools
