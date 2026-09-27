@@ -586,6 +586,27 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(searches(failed).map { $0["status"] as? String }, ["failed"])
     }
 
+    @MainActor func testSideConversationRunsBesideItsParent() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        // A forked thread such as /side keeps its parent's prompt_cache_key and session-id; only the thread differs.
+        @MainActor func send(_ thread: String) async throws -> (Int, String) {
+            let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "parent",
+                                                   "input": [harness.environment, ["role": "user", "content": "HOLD_ANSWER in " + thread]]],
+                                                  headers: ["session-id": "parent", "thread-id": thread,
+                                                            "x-codex-turn-metadata": #"{"thread_id":"\#(thread)","session_id":"parent"}"#])
+            return (response.status, response.text)
+        }
+        async let parent = send("parent")
+        try await Task.sleep(nanoseconds: 300_000_000)
+        async let side = send("side")
+        let (first, second) = try await (parent, side)
+        XCTAssertEqual(first.0, 200, first.1)
+        XCTAssertEqual(second.0, 200, second.1)
+        XCTAssertTrue(first.1.contains("Hello from Opus") && second.1.contains("Hello from Opus"))
+        XCTAssertEqual(try harness.launches().count, 2)
+    }
+
     @MainActor func testClaudeThatExitsEarlyReportsItsError() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
@@ -1030,6 +1051,7 @@ private final class Counter: @unchecked Sendable {
     search = '--tools' in args and 'WebSearch' in args[args.index('--tools') + 1]
     out({'type': 'system', 'subtype': 'init', 'tools': ['mcp__codex__' + t for t in tools] + (['WebSearch'] if search else [])})
     if 'STALL_NOW' in prompt: time.sleep(300)
+    if 'HOLD_ANSWER' in prompt: time.sleep(1.5)
     out({'type': 'stream_event', 'event': {'type': 'message_start', 'message': {'usage': {'input_tokens': 10, 'cache_read_input_tokens': 5, 'output_tokens': 1}}}})
     answer = 'Hello from Opus'
     if search and 'SEARCH_WEB' in prompt:

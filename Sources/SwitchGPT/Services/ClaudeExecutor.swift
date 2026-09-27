@@ -109,8 +109,10 @@ final class ClaudeExecutor: @unchecked Sendable {
         }
         let metadata = request.headers["x-codex-turn-metadata"]
             .flatMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
-        let candidates = [data["prompt_cache_key"] as? String, request.headers["thread-id"], request.headers["session-id"],
-                          request.headers["session_id"], metadata?["thread_id"] as? String, metadata?["session_id"] as? String]
+        // The thread comes first: a forked thread such as /side keeps its parent's prompt_cache_key and session-id,
+        // and must not reach (or end) the parent's Claude process.
+        let candidates = [metadata?["thread_id"] as? String, request.headers["thread-id"], data["prompt_cache_key"] as? String,
+                          request.headers["session-id"], request.headers["session_id"], metadata?["session_id"] as? String]
         guard let key = candidates.compactMap({ $0 }).first(where: { !$0.isEmpty }) else {
             throw ClaudeFailure(status: 400, message: "Codex did not identify the conversation; send the message again")
         }
