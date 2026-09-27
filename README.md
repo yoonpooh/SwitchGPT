@@ -2,32 +2,80 @@
   <img src="favicon.png" width="128" alt="SwitchGPT icon">
 </p>
 
-# SwitchGPT
+<h1 align="center">SwitchGPT</h1>
 
-**English** · [한국어](README.ko.md) · [日本語](README.ja.md) · [简体中文](README.zh-CN.md)
+<p align="center">
+  <strong>Keep your plugins and Remote connection. Switch only the account running your models.</strong>
+</p>
 
-**Keep your plugins and Remote connection. Switch only the account running your models.**
+<p align="center">
+  <a href="https://github.com/yoonpooh/SwitchGPT/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/yoonpooh/SwitchGPT?label=release"></a>
+  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-000000?logo=apple">
+  <img alt="Apple silicon" src="https://img.shields.io/badge/Apple%20silicon-arm64-555555">
+  <img alt="Swift 6" src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white">
+</p>
 
-SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed in while choosing which account handles Codex model requests. Your connected plugins, including GitHub, and Remote access to this Mac keep using their existing sign-in while you use the remaining quota of your saved accounts.
+<p align="center">
+  <strong>English</strong> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a> · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-Choose an account yourself, or let SwitchGPT move to another available account when a usage limit is reached.
+<p align="center">
+  <a href="https://github.com/yoonpooh/SwitchGPT/releases/latest">Download</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#claude-opus-55-optional">Claude Opus 5.5</a> ·
+  <a href="#troubleshooting">Troubleshooting</a> ·
+  <a href="https://github.com/yoonpooh/SwitchGPT/releases">Changelog</a>
+</p>
 
-[Download v0.2.8](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.8) · [Latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest)
+---
 
-## What's new in 0.2.8
+SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed in while choosing which account handles Codex model requests. Plugins such as GitHub and Remote access to this Mac keep their existing sign-in, while model requests use the remaining quota of your saved accounts. You can also add **Claude Opus 5.5** to the model picker through the Claude Code CLI already signed in on your Mac.
 
-- **Desktop login name restored:** the desktop account is recognized even when it was signed in with a different method (for example Sign in with Apple) than the saved account, so the panel shows its name and photo instead of "Current signed-in account".
+## Contents
 
-## Core features introduced in 0.2.0
+- [Features](#features)
+- [What's new in 0.3.0](#whats-new-in-030)
+- [How it works](#how-it-works)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Usage](#usage)
+- [Automatic switching](#automatic-switching)
+- [Claude Opus 5.5 (optional)](#claude-opus-55-optional)
+- [Privacy and local data](#privacy-and-local-data)
+- [Troubleshooting](#troubleshooting)
+- [Uninstall](#uninstall)
+- [Limitations](#limitations)
+- [Development](#development)
+- [Contributing](#contributing)
+- [Disclaimer](#disclaimer)
 
-- **Keep desktop sign-in:** choosing a model account preserves the desktop credentials used for existing plugin connections and Remote access.
-- **Switch without restarting:** after initial setup, account changes apply to new model requests. A successful response already in progress finishes with its original account.
-- **Switch automatically at the limit:** when either the 5-hour or weekly quota is exhausted, select an available account in your saved list order.
-- **See selection and actual usage separately:** the panel shows the next request account, the account that last completed a response, and your desktop sign-in.
+## Features
 
-Account cards also show remaining usage, reset times, plan badges, available profile photos, and reset credits. Rename accounts, drag to reorder them, and manage them from one compact panel. Credentials are stored in macOS Keychain. The interface supports English, Korean, Japanese, and Simplified Chinese.
+- **Keep desktop sign-in** — choosing a model account preserves the desktop credentials used by plugin connections and Remote access.
+- **Switch without restarting** — after initial setup, account changes apply to the next model request. Responses already in progress finish with their original account.
+- **Switch automatically at the limit** — when the 5-hour or weekly quota is exhausted, SwitchGPT selects the next available account in your list order.
+- **See what actually ran** — the panel separates the next request account, the account that last completed a response, and your desktop sign-in.
+- **Usage at a glance** — remaining usage, reset times, plan badges, profile photos, and reset credits for every saved account.
+- **Optional Claude Opus 5.5** — run Opus 5.5 from the ChatGPT model picker through Claude Code, with every tool call executed by Codex.
+- **Local and private** — credentials stay in macOS Keychain, and requests go directly to OpenAI through a local relay. There is no SwitchGPT server.
+- **Localized** — English, Korean, Japanese, and Simplified Chinese.
 
-## How the accounts work
+## What's new in 0.3.0
+
+- **Claude Opus 5.5 (optional):** turn on **Use Claude Opus 5.5** in `⋯` to add Opus 5.5 to the ChatGPT model picker. It runs through your signed-in Claude Code CLI, never spends OpenAI quota, and returns every tool call to Codex so your existing permissions and approvals apply. See [Claude Opus 5.5](#claude-opus-55-optional).
+
+Earlier changes are listed on the [Releases page](https://github.com/yoonpooh/SwitchGPT/releases).
+
+## How it works
+
+```mermaid
+flowchart LR
+    Desktop["ChatGPT desktop<br/>(signed in as account A)"] -->|Codex model requests| Relay["SwitchGPT relay<br/>127.0.0.1:19565"]
+    Relay -->|GPT models| OpenAI["OpenAI<br/>(selected account B, C, …)"]
+    Relay -.->|Opus 5.5, optional| Claude["Claude Code CLI<br/>(tool calls return to Codex)"]
+    Desktop --> Plugins["Plugins & Remote<br/>(unchanged, account A)"]
+```
 
 | Connection | Account used |
 | --- | --- |
@@ -35,34 +83,38 @@ Account cards also show remaining usage, reset times, plan badges, available pro
 | Connected plugins, such as GitHub | The service account already connected to the app |
 | Remote access to this Mac | Your existing desktop sign-in and Remote setup |
 | Codex model requests on this Mac | The account selected in SwitchGPT |
+| Opus 5.5 requests (optional) | The Claude Code CLI sign-in on this Mac |
 
-For example, keep desktop account A signed in with its existing GitHub connection and Remote setup, and run model requests with saved account B. If B reaches its limit, automatic switching can select C without changing desktop sign-in or reconnecting plugins.
+For example, keep desktop account A signed in with its GitHub connection and Remote setup, and run model requests with saved account B. When B reaches its limit, automatic switching can select C without changing desktop sign-in or reconnecting plugins.
 
-This applies to Codex requests using the built-in `openai` provider on this Mac, including Remote requests executed on this Mac. It does not change ordinary Chat conversations, separate providers, or model requests executed on other computers or in the cloud.
+Routing applies to Codex requests that use the built-in `openai` provider on this Mac, including Remote requests executed on this Mac. It does not change ordinary Chat conversations, separate providers, or model requests executed on other computers or in the cloud.
 
-## Install and connect
+## Requirements
 
-Requirements: **Apple silicon, macOS 14 or later**, and the current ChatGPT desktop app installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate CLI installation is required.
+- Apple silicon Mac running **macOS 14 or later**
+- The current **ChatGPT desktop app**, installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate Codex CLI installation is required.
+- Optional: the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI, installed and signed in, to use Claude Opus 5.5
 
-1. Download `SwitchGPT-v0.2.8-macos-arm64.zip` and `SHA256SUMS.txt` from the [release page](https://github.com/yoonpooh/SwitchGPT/releases/tag/v0.2.8).
-2. Verify the checksum below, extract the ZIP, and move **SwitchGPT.app** into **Applications**.
-3. Open SwitchGPT and click its menu bar icon. Choose **+** to add an account through browser sign-in. Repeat for each account you want to save.
-4. For initial account selection, turn automatic switching off in `⋯`, then click an account card. Enable automatic switching again to follow list order. If prompted, finish active work before restarting ChatGPT.
-5. Send a Codex request in the desktop app and confirm that the response completes.
+## Installation
 
-With the ZIP and checksum file in the same directory:
+### Download
 
-```sh
-shasum -a 256 -c SHA256SUMS.txt
-```
+1. Download `SwitchGPT-v0.3.0-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
+2. With both files in the same directory, verify the checksum:
 
-SwitchGPT has no regular window or Dock icon. Keep it running in the menu bar while using model routing.
+   ```sh
+   shasum -a 256 -c SHA256SUMS.txt
+   ```
 
-### First launch and updates
+3. Extract the ZIP and move **SwitchGPT.app** into **Applications**.
 
-The release is **signed ad hoc and is not notarized by Apple**. If macOS blocks it, verify the download, try opening the app, then use **System Settings → Privacy & Security → Open Anyway** if offered. Follow [Apple's instructions](https://support.apple.com/en-ca/guide/mac-help/mh40616/mac). Managed Macs may restrict this option.
+### First launch
 
-To update, finish active model responses, quit SwitchGPT from `⋯`, replace the app in Applications, and open it again. Saved accounts and Keychain entries are kept outside the app bundle. When upgrading from 0.1.x, follow the initial connection steps if prompted.
+The release is **signed ad hoc and is not notarized by Apple**. If macOS blocks it, verify the download, try opening the app, then use **System Settings → Privacy & Security → Open Anyway** if offered. See [Apple's instructions](https://support.apple.com/en-ca/guide/mac-help/mh40616/mac). Managed Macs may restrict this option.
+
+### Update
+
+Finish active model responses, quit SwitchGPT from `⋯`, replace the app in Applications, and open it again. Saved accounts and Keychain entries live outside the app bundle and are kept. When upgrading from 0.1.x, follow the initial connection steps if prompted.
 
 ### Ask ChatGPT to install it
 
@@ -72,82 +124,113 @@ Paste this into a ChatGPT session with local file and terminal tools:
 Install the latest SwitchGPT release from https://github.com/yoonpooh/SwitchGPT on this Mac. Check that the release supports my Mac, download the app ZIP and its published SHA256SUMS.txt, and verify the checksum before installing. Preserve all saved accounts and Keychain entries. If SwitchGPT is running, wait for active model responses to finish before quitting it, replacing the app in /Applications, and opening it again. Do not sign in, switch accounts, or restart ChatGPT for me. If macOS blocks first launch, guide me through Apple's per-app Open Anyway steps without disabling system security settings.
 ```
 
-If local tools are unavailable, use the manual steps above.
+## Quick start
 
-## Use the panel
+1. Open SwitchGPT and click its menu bar icon. SwitchGPT has no regular window or Dock icon.
+2. Choose **+** to add an account through browser sign-in. Repeat for each account you want to save.
+3. For initial account selection, turn automatic switching off in `⋯`, then click an account card. Turn automatic switching on again to follow list order.
+4. If prompted, finish active work and restart ChatGPT. This is needed only for the initial connection.
+5. Send a Codex request in the desktop app and confirm that the response completes.
 
-- **Selected account:** highlighted in the list. Click to change it in manual mode.
-- **Desktop sign-in:** your desktop account, shown separately in the footer.
-- **Automatic switching:** enabled by default in `⋯`; the header shows Auto or Manual.
-- **Refresh:** retrieve usage and reset availability. Usage also refreshes 60 seconds after each refresh completes, even with the panel closed; login, switching, and overlapping refreshes are skipped.
-- **Manage accounts:** drag cards to set their order; use `⋯` or right-click to rename or remove a saved account. An empty display name restores its email. Removing it from the list does not delete the OpenAI account itself.
+Keep SwitchGPT running in the menu bar while model routing is enabled.
 
-Select **Reset** on an account card and confirm the account and consumption of one credit. The button is disabled when a reset cannot currently be used or usage data is stale. Afterward, usage and credit counts are fetched again, and automatic mode reapplies account priority. If a response or follow-up refresh fails, **Check result** continues the same request. Pending request IDs survive app restarts, and credits are never consumed automatically.
+## Usage
 
-Dates follow the Mac's time zone and interface language. Reopen the app after changing the Mac's preferred language. Unsupported languages fall back to English; Chinese language variants use Simplified Chinese.
+- **Selected account** — highlighted in the list. Click a card to change it in manual mode.
+- **Desktop sign-in** — your desktop account, shown separately in the footer.
+- **Automatic switching** — on by default in `⋯`; the header shows Auto or Manual.
+- **Refresh** — retrieves usage and reset availability. Usage also refreshes 60 seconds after each refresh completes, even with the panel closed; login, switching, and overlapping refreshes are skipped.
+- **Manage accounts** — drag cards to reorder; use `⋯` or right-click to rename or remove a saved account. An empty display name restores its email. Removing an account from the list does not delete the OpenAI account.
+
+### Reset credits
+
+Select **Reset** on an account card and confirm the account and consumption of one credit. The button is disabled when a reset cannot be used or usage data is stale. Afterward, usage and credit counts are fetched again, and automatic mode reapplies account priority. If a response or follow-up refresh fails, **Check result** continues the same request. Pending request IDs survive app restarts, and credits are never consumed automatically.
+
+### Language and dates
+
+Dates follow the Mac's time zone and interface language. Reopen the app after changing the Mac's preferred language. Unsupported languages fall back to English; Chinese variants use Simplified Chinese.
 
 ## Automatic switching
 
-1. In automatic mode, prefer the first account in list order with recently confirmed available quota. If account 1 recovers while account 3 is in use, use account 1 from the next model request after a quota check confirms recovery. A scheduled reset time passing is not enough to return to an account.
-2. If the server rejects a model request with `usage_limit_reached`, retry on an available account before forwarding a response, at most once per account for that request.
+1. Prefer the first account in list order with recently confirmed available quota. If account 1 recovers while account 3 is in use, account 1 is used from the next request after a quota check confirms recovery. A scheduled reset time passing is not enough to return to an account.
+2. If the server rejects a request with `usage_limit_reached`, retry on an available account before forwarding a response, at most once per account for that request.
 3. Successful responses already streaming finish with their original account and are not replayed.
-4. Temporary rate limits and authentication errors are returned without switching. Failed or stale usage checks make an account ineligible as an automatic alternative.
-5. If the selected account is exhausted and no available alternative can be confirmed, stop the request. Wait for quota to reset or select/add an available account. Reset credits are never consumed automatically.
+4. Temporary rate limits and authentication errors are returned without switching. Accounts with failed or stale usage checks are not chosen as alternatives.
+5. If the selected account is exhausted and no available alternative can be confirmed, the request stops. Wait for quota to reset, or select or add an available account. Reset credits are never consumed automatically.
 
 Turn automatic switching off in `⋯` to keep using the selected account and receive its limit errors directly. In automatic mode, card order takes precedence over manual selection, and reordering applies to the next request. Quotas remain separate for each account.
 
 ## Claude Opus 5.5 (optional)
 
-Turn on **Use Claude Opus 5.5** in `⋯` to add Opus 5.5 to the ChatGPT model picker. It runs through the Claude Code CLI already signed in on this Mac (`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, or `/usr/local/bin/claude`); SwitchGPT reads no Anthropic credentials. The toggle is disabled when the CLI is not installed.
+Turn on **Use Claude Opus 5.5** in `⋯` to add Opus 5.5 to the ChatGPT model picker. It runs through the Claude Code CLI already signed in on this Mac (`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, or `/usr/local/bin/claude`). SwitchGPT reads no Anthropic credentials, and the toggle is disabled when the CLI is not installed.
 
-- Opus requests use the same relay and desktop sign-in check, but never select an OpenAI account or spend its quota. Other models are unchanged.
+Toggling asks before restarting ChatGPT, because the model list refreshes only after a restart. SwitchGPT removes `~/.codex/models_cache.json` so ChatGPT fetches the updated list.
+
+- **No OpenAI quota** — Opus requests pass through the same relay and desktop sign-in check but never select an OpenAI account or spend its quota. Other models are unchanged.
+- **Codex runs every tool** — Claude Code gets no tools of its own. Each tool call is returned to Codex, which runs it under its current permissions and approvals, and the result goes back to the same Claude process.
+- **Compaction** — manual and automatic compaction produce a summary written by Opus.
+- **Switching models mid-thread** — a thread that used Opus can continue with a GPT model: SwitchGPT removes only the Opus-made items OpenAI would reject and turns an Opus compaction summary into a readable message. The reverse is limited: a GPT compaction summary is encrypted, so Opus continues from the messages after it and says when earlier context is missing.
+- **Hosted tools** — OpenAI-hosted tools such as web search are not available to Opus; it is told which ones are missing.
+
+<details>
+<summary>Implementation details</summary>
+
 - While the toggle is off, SwitchGPT refuses Opus requests locally instead of sending them to OpenAI, and turning it off ends any running Opus task. Compressed requests (gzip, deflate, zstd) are handled the same way. zstd needs Homebrew's `zstd`; while the toggle is on, a request SwitchGPT cannot read is refused locally instead of being forwarded.
-- Claude Code gets no tools of its own. Each tool call is returned to Codex, which runs it under its current permissions and approvals, and the result goes back to the same Claude process.
-- Manual and automatic compaction produce a summary written by Opus.
-- A thread that used Opus can continue with a GPT model: SwitchGPT removes only the Opus-made items OpenAI would reject, and turns an Opus compaction summary into a readable message. The reverse is limited: a summary compacted by a GPT model is encrypted, so Opus continues from the messages after it and says when earlier context is missing.
-- OpenAI-hosted tools such as web search are not available to Opus; it is told which ones are missing.
-- Claude Code runs in an empty private folder, never in the thread's folder, so threads in protected folders such as Documents or without a project do not wait on a macOS permission prompt. Codex tools still run in the thread's folder. If Claude Code has not started within 90 seconds, or exits early, the Opus response fails with Claude Code's error.
-- If `~/.codex/config.toml` sets `model_catalog_json`, that list replaces the one SwitchGPT adds Opus to; SwitchGPT warns about it when you turn Opus on.
-- Toggling asks before restarting ChatGPT, because the model list refreshes only after a restart. SwitchGPT removes `~/.codex/models_cache.json` so ChatGPT fetches the updated list.
+- Claude Code runs in an empty private folder, never in the thread's folder, so threads in protected folders such as Documents, or without a project, do not wait on a macOS permission prompt. Codex tools still run in the thread's folder.
+- If Claude Code has not started within 90 seconds, or exits early, the Opus response fails with Claude Code's error.
+- If `~/.codex/config.toml` sets `model_catalog_json`, that list replaces the one SwitchGPT adds Opus to. SwitchGPT warns about it when you turn Opus on.
 
-## Troubleshooting
+</details>
 
-- **Requests fail after quitting SwitchGPT:** reopen it, or remove routing as described below.
-- **Initial connection stays pending:** use the restart button if shown, then complete a real desktop Codex request. Usage refreshes and CLI requests do not verify the desktop connection.
-- **An account needs to sign in again:** add it again through the browser. Saved accounts refresh automatically. Sign in again if the refresh token has expired or been revoked.
-- **Usage is unavailable:** missing information is shown as unknown, not zero remaining.
-- **An existing custom endpoint is configured:** SwitchGPT reports a conflict instead of overwriting another relay's setting.
+## Privacy and local data
 
-## Data and compatibility
-
-Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth.json` unchanged, and reads the selected model account's credentials into memory. SwitchGPT sends model requests directly to OpenAI through a relay at `127.0.0.1:19565`; there is no external SwitchGPT server.
+Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth.json` unchanged and reads the selected model account's credentials into memory. Model requests go directly to OpenAI through a relay at `127.0.0.1:19565`; there is no external SwitchGPT server.
 
 | Local data | Location |
 | --- | --- |
 | Account list and order | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | Selected model account | `~/Library/Application Support/SwitchGPT/routing-selection.json` |
-| Automatic switching and connection status | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
+| Automatic switching, Opus, and connection status | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
 | Pending reset request IDs | `~/Library/Application Support/SwitchGPT/reset-credit-attempts.json` (with a `.lock` file for concurrent saves) |
 | Request metadata | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
 | Existing desktop credentials | `~/.codex/auth.json` — preserved |
 
-A managed block in `~/.codex/config.toml` sets `openai_base_url`. HTTP streaming lets subsequent requests use the selected account. Local logs contain an opaque account fingerprint, path, model, HTTP status, completion state, token counts, client type, timestamps, and quota-exhaustion status. Prompts, response content, and authentication tokens are not logged.
+A managed block in `~/.codex/config.toml` sets `openai_base_url`. HTTP streaming lets subsequent requests use the selected account. Local logs contain an opaque account fingerprint, path, model, HTTP status, completion state, token counts, client type, timestamps, and quota-exhaustion status. **Prompts, response content, and authentication tokens are not logged.**
 
-To disconnect, finish active work, remove only the `BEGIN/END SwitchGPT model routing` block from `~/.codex/config.toml`, and restart ChatGPT. Preserve other settings. You can then quit or remove SwitchGPT; deleting the app bundle alone leaves the routing setting in place.
+Usage is retrieved from OpenAI's private `chatgpt.com/backend-api/wham/` endpoints, which may change. Legacy account lists are copied into the current location if no current list exists; original files and Keychain entries are preserved.
 
-Usage is retrieved from OpenAI's private `chatgpt.com/backend-api/wham/` endpoints. These endpoints and desktop behavior may change. Legacy account lists are copied into the current location if no current list exists; original files and Keychain entries are preserved.
+## Troubleshooting
 
-Current limitations:
+| Symptom | What to do |
+| --- | --- |
+| Requests fail after quitting SwitchGPT | Reopen it, or [uninstall routing](#uninstall). |
+| Initial connection stays pending | Use the restart button if shown, then complete a real desktop Codex request. Usage refreshes and CLI requests do not verify the desktop connection. |
+| An account needs to sign in again | Add it again through the browser. Saved accounts refresh automatically; sign in again if the refresh token has expired or been revoked. |
+| Usage shows as unknown | Missing information is shown as unknown, never as zero remaining. Try **Refresh**. |
+| A custom endpoint conflict is reported | SwitchGPT does not overwrite another relay's `openai_base_url`. Remove the other setting first if you want SwitchGPT to manage routing. |
+| Opus 5.5 does not appear in the model picker | Restart ChatGPT after toggling, and remove `model_catalog_json` from `~/.codex/config.toml` if set. |
+| The Opus toggle is disabled | Install and sign in to the Claude Code CLI at one of the supported paths. |
 
-- The release includes an Apple silicon build only; Intel is not verified.
-- API-key authentication, keyring/auto credential storage, a custom `CODEX_HOME`, and configuring other Remote hosts are not supported. Remote access into this Mac keeps using its existing setup.
+## Uninstall
+
+1. Finish active work.
+2. Remove only the `BEGIN/END SwitchGPT model routing` block from `~/.codex/config.toml`, preserving other settings.
+3. Restart ChatGPT.
+4. Quit SwitchGPT from `⋯` and delete the app. Optionally remove `~/Library/Application Support/SwitchGPT` and the SwitchGPT Keychain entries.
+
+Deleting the app bundle alone leaves the routing setting in place, and model requests will fail until the block is removed.
+
+## Limitations
+
+- Only an Apple silicon build is published; Intel is not verified.
+- API-key authentication, keyring/auto credential storage, a custom `CODEX_HOME`, and configuring other Remote hosts are not supported. Remote access into this Mac keeps its existing setup.
 - Routing also applies to CLI sessions using this Mac's built-in `openai` provider and configuration.
-- There is no built-in app updater. The active desktop session relies on Codex for token refresh; SwitchGPT synchronizes its latest credentials.
+- There is no built-in updater. The active desktop session relies on Codex for token refresh; SwitchGPT synchronizes its latest credentials.
 - Successful builds do not establish compatibility with every desktop or macOS version. Live plugin and Remote behavior require separate verification.
 
-Do not include credentials, account lists, or screenshots exposing personal accounts in issues or commits. SwitchGPT is an independent utility and is not affiliated with or endorsed by OpenAI.
+## Development
 
-## Build from source
+### Build from source
 
 Install Xcode with Swift 6 and a macOS SDK, and select its command-line tools. Then:
 
@@ -157,48 +240,58 @@ cd SwitchGPT
 ./script/build_and_run.sh --verify
 ```
 
-This builds a local app at `dist/SwitchGPT.app` and signs it ad hoc. If SwitchGPT is not already running, it briefly launches the build, verifies its exact process, and stops it again. If an installed copy is running, verification does not launch a competing relay on port 19565. It does not install the app into Applications. To install your build, quit SwitchGPT and move the generated app into Applications using Finder.
-
-Available commands:
+This builds `dist/SwitchGPT.app` and signs it ad hoc. If SwitchGPT is not already running, it briefly launches the build, verifies its exact process, and stops it again. If an installed copy is running, verification does not launch a competing relay on port 19565. It does not install the app into Applications.
 
 ```sh
 ./script/build_and_run.sh           # Build and launch a debug app
 ./script/build_and_run.sh --verify  # Build/sign; launch briefly only when no copy is running
 ./script/build_and_run.sh --build   # Build a debug app without launching
 ./script/build_and_run.sh --release # Build an optimized app without launching
-swift test                         # Run the test suite
+swift test                          # Run the test suite
 ```
 
-Keep the checkout outside iCloud Drive when possible. If a synchronized folder causes a code-signing error about Finder information or resource forks, run tests using an isolated build directory:
+Keep the checkout outside iCloud Drive when possible. If a synchronized folder causes a code-signing error about Finder information or resource forks, use an isolated build directory:
 
 ```sh
 swift test --scratch-path /tmp/switchgpt-tests
 ```
 
+Tests use synthetic credentials and temporary files; they do not perform a live account switch, redeem usage resets, or call Claude Code. Live authentication and server compatibility need separate verification.
+
 ### Package a release
 
-The script builds for the host architecture. The published v0.2.8 artifact is an Apple silicon build.
+The script builds for the host architecture. Published artifacts are Apple silicon builds.
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.2.8-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.2.8-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.3.0-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.3.0-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
-## Source layout
+### Project structure
 
 ```text
-favicon.png                    Repository logo
+favicon.png                     Repository logo
 Assets/                         App and menu bar icons
 Sources/SwitchGPT/
   App/                          Menu bar app entry point
-  Models/                       Accounts, usage models, localization helper
-  Resources/                    English, Korean, Chinese, Japanese strings
-  Services/                     Login, Keychain, usage, and desktop session handling
+  Models/                       Accounts, usage, routing preferences, localization helper
+  Resources/                    English, Korean, Japanese, Simplified Chinese strings
+  Services/                     Relay, routing, login, Keychain, usage, Claude Code bridge
   Stores/                       Account state and ordering
   Views/                        Account panel and usage display
-Tests/SwitchGPTTests/            Credential, login, server, ordering, and localization tests
-script/build_and_run.sh          Build and app packaging entry point
+Tests/SwitchGPTTests/           Unit tests
+script/build_and_run.sh         Build and app packaging entry point
 ```
 
-Tests use synthetic credentials and temporary files; they do not perform a live account switch or redeem usage resets. Live authentication and server compatibility need separate verification.
+## Contributing
+
+Issues and pull requests are welcome. Before opening one:
+
+- Run `swift test` and make sure it passes.
+- Keep user-facing strings localized in all four `Localizable.strings` files, and update every README translation when documentation changes.
+- **Never include credentials, account lists, or screenshots exposing personal accounts** in issues, pull requests, or commits.
+
+## Disclaimer
+
+SwitchGPT is an independent utility and is not affiliated with or endorsed by OpenAI or Anthropic. ChatGPT, Codex, Claude, and Claude Code are trademarks of their respective owners. SwitchGPT relies on private endpoints and desktop behavior that may change without notice; use it at your own risk.
