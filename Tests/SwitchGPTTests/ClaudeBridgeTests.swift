@@ -109,6 +109,44 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(ClaudeBridge.standingPrompt(["input": [Any]()]), "")
     }
 
+    func testVerbosityComesFromTheRequestThenConfig() {
+        let config = "model = \"x\"\nmodel_verbosity = \"high\" # chosen in Codex\n[profiles.p]\nmodel_verbosity = \"low\"\n"
+        XCTAssertEqual(ClaudeBridge.configuredVerbosity(config), "high")
+        // Only the top level counts, and an unknown value is no setting.
+        XCTAssertNil(ClaudeBridge.configuredVerbosity("[profiles.p]\nmodel_verbosity = \"low\"\n"))
+        XCTAssertNil(ClaudeBridge.configuredVerbosity("model_verbosity = \"loud\"\n"))
+        XCTAssertEqual(ClaudeBridge.configuredVerbosity("model_verbosity='LOW'"), "low")
+        // The request wins, and the config is not read then.
+        XCTAssertEqual(ClaudeBridge.verbosity(["text": ["verbosity": "low"]], config: { XCTFail("config read"); return config }), "low")
+        XCTAssertEqual(ClaudeBridge.verbosity(["text": ["verbosity": "odd"]], config: { config }), "high")
+        XCTAssertEqual(ClaudeBridge.verbosity([:], config: { config }), "high")
+        XCTAssertNil(ClaudeBridge.verbosity([:], config: { nil }))
+    }
+
+    func testLowVerbosityOverridesTheCodexLengthGuidanceLast() throws {
+        let data: [String: Any] = ["instructions": ClaudeBridge.codexGuide,
+                                   "input": [["type": "message", "role": "user", "content": [["type": "input_text", "text": "# AGENTS.md instructions\n\nWrite all responses in Korean."]]]] as [Any]]
+        func prompt(_ verbosity: String?) -> String {
+            ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: [:], verbosity: verbosity)
+                .arguments(relay: nil, config: URL(fileURLWithPath: "/tmp/relay.json"))
+                .drop { $0 != "--append-system-prompt" }.dropFirst().first ?? ""
+        }
+        let low = prompt("low")
+        let guide = try XCTUnwrap(low.range(of: "<communication>")).lowerBound
+        let agents = try XCTUnwrap(low.range(of: "Write all responses in Korean")).lowerBound
+        let brief = try XCTUnwrap(low.range(of: "# Output verbosity: low")).lowerBound
+        XCTAssertTrue(guide < agents && agents < brief)
+        XCTAssertTrue(low.contains("Keep each progress note to one short sentence."))
+        XCTAssertTrue(prompt("high").contains("# Output verbosity: high"))
+        // Medium, or no setting, keeps today's prompt.
+        XCTAssertEqual(prompt("medium"), prompt(nil))
+        XCTAssertFalse(prompt(nil).contains("Output verbosity"))
+        // A compaction run writes a summary, not an answer.
+        let compaction = ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: [:], compacting: true, verbosity: "low")
+            .arguments(relay: nil, config: URL(fileURLWithPath: "/tmp/relay.json"))
+        XCTAssertFalse(compaction.contains { $0.contains("Output verbosity") })
+    }
+
     func testPromptNamesHostedToolsAndDropsUnreadableGPTState() throws {
         let data: [String: Any] = ["tools": [["type": "function", "name": "exec"], ["type": "web_search"], ["type": "tool_search"],
                                              ["type": "web_search"]] as [Any],
@@ -786,6 +824,23 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(efforts, ["xhigh", "low"])
     }
 
+    @MainActor func testChangedVerbosityRestartsClaudeAndConfigFillsInAMissingOne() async throws {
+        let harness = try await Harness(enabled: true, codexConfig: "model_verbosity = \"high\"\n")
+        defer { harness.stop() }
+        let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object"]]]
+        var input: [Any] = [harness.environment, ["role": "user", "content": "run it"]]
+        let first = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "verbosity",
+                                            "text": ["verbosity": "low"]])
+        let call = try XCTUnwrap((first.completed?["output"] as? [[String: Any]])?.first { $0["type"] as? String == "function_call" }, first.text)
+        input += [call, ["type": "function_call_output", "call_id": try XCTUnwrap(call["call_id"] as? String), "output": "42"]]
+        // Only the verbosity changes; without one in the request, config.toml decides.
+        let second = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "verbosity"])
+        XCTAssertEqual(second.status, 200, second.text)
+        let prompts = try harness.launches().map { arguments in arguments.firstIndex(of: "--append-system-prompt").map { arguments[$0 + 1] } ?? "" }
+        XCTAssertEqual(prompts.map { $0.contains("# Output verbosity: low") }, [true, false])
+        XCTAssertEqual(prompts.map { $0.contains("# Output verbosity: high") }, [false, true])
+    }
+
     @MainActor func testClaudeRunsInTheCodexPermissionModeAndRestartsWhenItChanges() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
@@ -1061,7 +1116,7 @@ private final class Counter: @unchecked Sendable {
 
     init(enabled: Bool, claude: URL? = nil, relayExecutable: URL = URL(fileURLWithPath: "/usr/bin/true"),
          stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, models: [ClaudeModel]? = nil,
-         catalog: ClaudeModelCatalog? = nil) async throws {
+         catalog: ClaudeModelCatalog? = nil, codexConfig: String? = nil) async throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
         let fake = claude ?? root.appendingPathComponent("claude")
@@ -1072,7 +1127,7 @@ private final class Counter: @unchecked Sendable {
         try Data(#"{"tokens":{"access_token":"desktop-token"}}"#.utf8).write(to: auth)
         let upstreamPort = try await upstream.start()
         let executor = ClaudeExecutor(claudeExecutable: { fake }, models: catalog ?? ClaudeModelCatalog(models: models),
-                                      relayExecutable: relayExecutable, stallLimit: stallLimit, startLimit: startLimit)
+                                      relayExecutable: relayExecutable, codexConfig: { codexConfig }, stallLimit: stallLimit, startLimit: startLimit)
         executor.setEnabled(enabled)
         relay = ModelRelay(desktopAuth: auth, upstreamBaseURL: URL(string: "http://127.0.0.1:\(upstreamPort)")!, claude: executor)
         let claims = Data(#"{"sub":"first-subject"}"#.utf8).base64EncodedString()
