@@ -34,7 +34,7 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 ## Contents
 
 - [Features](#features)
-- [What's new in 0.3.0](#whats-new-in-030)
+- [What's new in 0.4.0](#whats-new-in-040)
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -61,9 +61,13 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 - **Local and private** — credentials stay in macOS Keychain, and requests go directly to OpenAI through a local relay. There is no SwitchGPT server.
 - **Localized** — English, Korean, Japanese, and Simplified Chinese.
 
-## What's new in 0.3.0
+## What's new in 0.4.0
 
-- **Claude models (optional):** turn on **Use Claude models** in `⋯` to add the models your Claude Code CLI offers to the ChatGPT model picker. They run through your signed-in Claude Code CLI, never spend OpenAI quota, and return every tool call to Codex so your existing permissions and approvals apply. See [Claude models](#claude-models-optional).
+- **Every Claude Code model:** the picker lists the newest model of each family your Claude Code CLI offers, such as Fable 5.1, Opus 5.5, Sonnet 5, and Haiku 4.5, with context windows that match Claude Code's auto-compact threshold. The toggle is now **Use Claude models**. See [Claude models](#claude-models-optional).
+- **Claude plan limits:** a Claude card below the ChatGPT accounts shows the 5-hour and weekly limits as Claude Code reports them, without a model call. ChatGPT plan badges now tell Pro and Pro 20x apart.
+- **Web search for Claude models:** while Codex offers web search, Claude models search the live web with Claude Code's WebSearch, shown as Codex web search cards.
+- **Codex permission mode:** Claude Code follows the permission mode chosen in Codex: ask for approval, auto review, full access, or plan mode.
+- **Better Claude replies in Codex:** final answers stream as they are written, progress notes appear as commentary, and file edits go through `apply_patch` so Codex shows their diffs. Codex instructions and AGENTS.md stay in Claude's system prompt, and `/side` conversations run beside their parent.
 
 Earlier changes are listed on the [Releases page](https://github.com/yoonpooh/SwitchGPT/releases).
 
@@ -99,7 +103,7 @@ Routing applies to Codex requests that use the built-in `openai` provider on thi
 
 ### Download
 
-1. Download `SwitchGPT-v0.3.0-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
+1. Download `SwitchGPT-v0.4.0-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
 2. With both files in the same directory, verify the checksum:
 
    ```sh
@@ -268,8 +272,8 @@ The script builds for the host architecture. Published artifacts are Apple silic
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.3.0-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.3.0-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.0-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.0-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### Project structure

@@ -34,7 +34,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 ## 目录
 
 - [功能特性](#功能特性)
-- [0.3.0 新功能](#030-新功能)
+- [0.4.0 新功能](#040-新功能)
 - [工作原理](#工作原理)
 - [系统要求](#系统要求)
 - [安装](#安装)
@@ -61,9 +61,13 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 - **完全本地** — 认证信息保存在 macOS 钥匙串中，请求经本地中继直接发往 OpenAI。没有 SwitchGPT 服务器。
 - **多语言** — 英语、韩语、日语和简体中文。
 
-## 0.3.0 新功能
+## 0.4.0 新功能
 
-- **Claude 模型（可选）：** 在 `⋯` 中开启 **使用 Claude 模型**，即可把 Claude Code CLI 提供的模型加入 ChatGPT 模型选择器。它们通过已登录的 Claude Code CLI 运行，不消耗 OpenAI 额度；所有工具调用都交回 Codex，沿用现有的权限与审批设置。详见 [Claude 模型](#claude-模型可选)。
+- **所有 Claude Code 模型：** 模型选择器列出 Claude Code CLI 提供的各系列最新模型（如 Fable 5.1、Opus 5.5、Sonnet 5、Haiku 4.5），上下文窗口与 Claude Code 的自动压缩阈值一致。菜单项改名为 **使用 Claude 模型**。详见 [Claude 模型](#claude-模型可选)。
+- **Claude 套餐限额：** ChatGPT 账户下方的 Claude 卡片显示 Claude Code 报告的 5 小时和每周限额，无需调用模型。ChatGPT 套餐徽章区分 Pro 与 Pro 20x。
+- **Claude 模型网页搜索：** 当 Codex 提供网页搜索时，Claude 模型通过 Claude Code 的 WebSearch 搜索实时网页，并显示为 Codex 网页搜索卡片。
+- **跟随 Codex 权限模式：** Claude Code 使用在 Codex 中选择的权限模式（请求批准、自动审核、完全访问、计划模式）。
+- **改进 Claude 在 Codex 中的回复：** 最终回答边写边流式显示，进度说明显示为评论，文件编辑通过 `apply_patch` 完成，因此 Codex 会显示差异。Codex 指令和 AGENTS.md 保留在 Claude 的系统提示中，`/side` 对话与其父对话并行运行。
 
 更早的变更请查看[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)。
 
@@ -99,7 +103,7 @@ flowchart LR
 
 ### 下载
 
-1. 从[最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)下载 `SwitchGPT-v0.3.0-macos-arm64.zip` 和 `SHA256SUMS.txt`。
+1. 从[最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)下载 `SwitchGPT-v0.4.0-macos-arm64.zip` 和 `SHA256SUMS.txt`。
 2. 将两个文件放在同一文件夹中，验证校验和：
 
    ```sh
@@ -268,8 +272,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.3.0-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.3.0-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.0-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.0-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### 项目结构

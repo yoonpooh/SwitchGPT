@@ -34,7 +34,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 ## 目次
 
 - [主な機能](#主な機能)
-- [0.3.0 の新機能](#030-の新機能)
+- [0.4.0 の新機能](#040-の新機能)
 - [仕組み](#仕組み)
 - [動作要件](#動作要件)
 - [インストール](#インストール)
@@ -61,9 +61,13 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 - **ローカルで完結** — 認証情報は macOS キーチェーンに保存し、リクエストはローカル中継から OpenAI へ直接送ります。SwitchGPT のサーバーはありません。
 - **多言語対応** — 英語、韓国語、日本語、中国語（簡体字）。
 
-## 0.3.0 の新機能
+## 0.4.0 の新機能
 
-- **Claude モデル（任意）：** `⋯` の **Claudeモデルを使用** をオンにすると、Claude Code CLI が提供するモデルが ChatGPT のモデル選択に追加されます。サインイン済みの Claude Code CLI で実行するため OpenAI の利用枠を消費せず、すべてのツール呼び出しは Codex に戻され、既存の権限・承認設定がそのまま適用されます。[Claude モデル](#claude-モデル任意) を参照してください。
+- **すべての Claude Code モデル：** Claude Code CLI が提供するモデルのうち各系列の最新モデル（Fable 5.1、Opus 5.5、Sonnet 5、Haiku 4.5 など）をモデル選択に表示し、コンテキストウィンドウは Claude Code の自動圧縮しきい値に合わせます。メニュー名は **Claudeモデルを使用** になりました。[Claude モデル](#claude-モデル任意) を参照してください。
+- **Claude プランの利用上限：** ChatGPT アカウントの下の Claude カードに、Claude Code が報告する 5 時間・週間の上限をモデル呼び出しなしで表示します。ChatGPT のプランバッジは Pro と Pro 20x を区別します。
+- **Claude モデルの Web 検索：** Codex で Web 検索が有効なとき、Claude モデルは Claude Code の WebSearch でリアルタイムの Web を検索し、Codex の Web 検索カードとして表示します。
+- **Codex の権限モードに連動：** Claude Code は Codex で選んだ権限モード（承認を求める、自動レビュー、フルアクセス、プランモード）に従います。
+- **Codex での Claude の応答を改善：** 最終回答は書かれるそばからストリーミングされ、進捗メモはコメンタリーとして表示されます。ファイル編集は `apply_patch` で行うため Codex に差分が表示されます。Codex の指示と AGENTS.md は Claude のシステムプロンプトに保持され、`/side` の会話は親の会話と並行して実行されます。
 
 以前の変更は[リリースページ](https://github.com/yoonpooh/SwitchGPT/releases)で確認できます。
 
@@ -99,7 +103,7 @@ flowchart LR
 
 ### ダウンロード
 
-1. [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)から `SwitchGPT-v0.3.0-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
+1. [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)から `SwitchGPT-v0.4.0-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
 2. 両方のファイルを同じフォルダに置き、チェックサムを確認します。
 
    ```sh
@@ -268,8 +272,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.3.0-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.3.0-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.0-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.0-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### プロジェクト構成
