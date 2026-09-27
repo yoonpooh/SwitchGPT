@@ -53,7 +53,8 @@ final class ClaudeBridgeTests: XCTestCase {
         let content = ClaudeBridge.promptContent(data, compacting: false)
         XCTAssertEqual(content.count, 2)
         let envelope = try XCTUnwrap(content[0]["text"] as? String)
-        XCTAssertTrue(envelope.hasPrefix("{\"instructions\":\"Be brief\",\"conversation\":"))
+        XCTAssertTrue(envelope.hasPrefix("{\"conversation\":"))
+        XCTAssertFalse(envelope.contains("Be brief"))
         XCTAssertTrue(envelope.contains("\"compaction_summary\""))
         XCTAssertTrue(envelope.contains("earlier summary"))
         XCTAssertTrue(envelope.contains("[Attached image 1]"))
@@ -71,6 +72,41 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertFalse(prompt.contains("secret rules"))
         XCTAssertFalse(prompt.contains("compaction_trigger"))
         XCTAssertTrue(ClaudeBridge.decodeSummary(["encrypted_content": "opaque"]).contains("cannot be read"))
+    }
+
+    func testCodexInstructionsAndAgentsMdMoveToTheSystemPrompt() throws {
+        let agents = "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nWrite all responses in Korean.\n</INSTRUCTIONS>"
+        let nested = "# AGENTS.md instructions for /repo/app\n\n<INSTRUCTIONS>\nUse tabs.\n</INSTRUCTIONS>"
+        let data: [String: Any] = ["instructions": "Be brief", "input": [
+            ["type": "message", "role": "user", "content": [["type": "input_text", "text": agents],
+                                                            ["type": "input_text", "text": "<environment_context>cwd</environment_context>"]]],
+            ["type": "message", "role": "user", "content": [["type": "input_text", "text": "hello"]]],
+            ["type": "message", "role": "user", "content": [["type": "input_text", "text": nested]]],
+            ["type": "message", "role": "user", "content": [["type": "input_text", "text": agents]]],
+            // Only Codex's own blocks move, never a heading the assistant quoted.
+            ["type": "message", "role": "assistant", "content": [["type": "output_text", "text": "# AGENTS.md instructions quoted"]]]
+        ] as [Any]]
+        let envelope = try XCTUnwrap(ClaudeBridge.promptContent(data, compacting: false).first?["text"] as? String)
+        XCTAssertFalse(envelope.contains("Write all responses in Korean"))
+        XCTAssertFalse(envelope.contains("Use tabs"))
+        XCTAssertTrue(envelope.contains("<environment_context>cwd</environment_context>"))
+        XCTAssertTrue(envelope.contains("hello"))
+        XCTAssertTrue(envelope.contains("quoted"))
+        let conversation = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(envelope.utf8)) as? [String: Any])?["conversation"] as? [Any])
+        XCTAssertEqual(conversation.count, 3)
+
+        let prompt = ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: [:])
+            .arguments(relay: nil, config: URL(fileURLWithPath: "/tmp/relay.json"))
+            .drop { $0 != "--append-system-prompt" }.dropFirst().first ?? ""
+        XCTAssertTrue(prompt.hasPrefix(ClaudeBridge.systemPrompt))
+        let instructions = try XCTUnwrap(prompt.range(of: "Be brief")).lowerBound
+        let korean = try XCTUnwrap(prompt.range(of: "Write all responses in Korean")).lowerBound
+        let tabs = try XCTUnwrap(prompt.range(of: "Use tabs")).lowerBound
+        XCTAssertTrue(instructions < korean && korean < tabs)
+        XCTAssertEqual(prompt.components(separatedBy: "Write all responses in Korean").count, 2)
+        XCTAssertTrue(prompt.contains("An explicit later request from the user takes precedence."))
+        // Without either, nothing is added.
+        XCTAssertEqual(ClaudeBridge.standingPrompt(["input": [Any]()]), "")
     }
 
     func testPromptNamesHostedToolsAndDropsUnreadableGPTState() throws {

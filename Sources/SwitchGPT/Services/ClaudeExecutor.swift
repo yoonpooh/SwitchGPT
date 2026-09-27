@@ -683,7 +683,7 @@ final class ClaudeRun: @unchecked Sendable {
         }
         let settings: [String: Any] = ["disableAllHooks": true, "enabledPlugins": [String: Any](), "autoMemoryEnabled": false]
         let prompt = compacting ? ClaudeBridge.compactionSystemPrompt
-            : ClaudeBridge.systemPrompt + (permissionMode == .plan ? ClaudeBridge.planModePrompt : "")
+            : ClaudeBridge.systemPrompt + (permissionMode == .plan ? ClaudeBridge.planModePrompt : "") + ClaudeBridge.standingPrompt(data)
         arguments += ["--permission-mode", permissionMode.rawValue, "--permission-prompts", "none", "--disable-slash-commands", "--no-chrome",
                       "--no-session-persistence", "--system-prompt-snapshot", "off", "--settings", ClaudeBridge.text(settings),
                       "--append-system-prompt", prompt]
