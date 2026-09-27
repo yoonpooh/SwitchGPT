@@ -80,7 +80,10 @@ final class ClaudeBridgeTests: XCTestCase {
                                              ["type": "compaction", "encrypted_content": "gAAAA-openai"]] as [Any]]
         XCTAssertEqual(ClaudeBridge.hostedTools(data["tools"]), ["tool_search", "web_search"])
         let envelope = try XCTUnwrap(ClaudeBridge.promptContent(data, compacting: false).first?["text"] as? String)
-        XCTAssertTrue(envelope.hasSuffix(#","unavailable_hosted_tools":["tool_search","web_search"]}"#))
+        // Web search is not missing: Claude Code's WebSearch stands in for it.
+        XCTAssertTrue(ClaudeBridge.webSearch(data["tools"]))
+        XCTAssertFalse(ClaudeBridge.webSearch([["type": "tool_search"]] as [Any]))
+        XCTAssertTrue(envelope.hasSuffix(#","unavailable_hosted_tools":["tool_search"]}"#))
         XCTAssertTrue(envelope.contains("plan"))
         XCTAssertFalse(envelope.contains("gAAAA"))
         XCTAssertTrue(envelope.contains("tell the user"))
@@ -262,15 +265,47 @@ final class ClaudeBridgeTests: XCTestCase {
             ["type": "reasoning", "id": "rs_gpt", "summary": [Any](), "encrypted_content": "gAAAA"],
             ["type": "compaction", "encrypted_content": ClaudeBridge.compactionPrefix + "earlier work"],
             ["type": "compaction", "encrypted_content": "gAAAA-openai"],
-            ["type": "message", "role": "assistant", "id": "msg_claude", "content": [["type": "output_text", "text": "hi"]]]
+            ["type": "message", "role": "assistant", "id": "msg_claude", "content": [["type": "output_text", "text": "hi"]]],
+            ["type": "web_search_call", "id": ClaudeBridge.searchPrefix + "1", "status": "completed", "action": ["type": "search", "query": "q"]],
+            ["type": "web_search_call", "id": "ws_gpt", "status": "completed", "action": ["type": "search", "query": "q"]]
         ]
         let cleaned = try XCTUnwrap(ClaudeBridge.openAIInput(input)).map { try XCTUnwrap($0 as? [String: Any]) }
-        XCTAssertEqual(cleaned.map { $0["id"] as? String }, [nil, nil, "fc_3", "ctc_4", "rs_gpt", nil, nil, "msg_claude"])
+        XCTAssertEqual(cleaned.map { $0["id"] as? String }, [nil, nil, "fc_3", "ctc_4", "rs_gpt", nil, nil, "msg_claude", "ws_gpt"])
         XCTAssertEqual(Array(cleaned.prefix(4).map { $0["call_id"] as? String }), ["codex_claude_1", "codex_claude_2", "call_3", "call_4"])
         XCTAssertEqual(cleaned[5]["role"] as? String, "user")
         XCTAssertTrue(ClaudeBridge.text(cleaned[5]).contains("earlier work"))
         XCTAssertEqual(cleaned[6]["encrypted_content"] as? String, "gAAAA-openai")
-        XCTAssertNil(ClaudeBridge.openAIInput(Array(input[2...3]) + [input[5], input[7], input[8]]))
+        XCTAssertNil(ClaudeBridge.openAIInput(Array(input[2...3]) + [input[5], input[7], input[8], input[10]]))
+    }
+
+    func testClaudeCodeGetsWebSearchOnlyWhileCodexOffersIt() throws {
+        let tools: [Any] = [["type": "function", "name": "exec"], ["type": "web_search"]]
+        let table = try ClaudeBridge.toolTable(tools)
+        let alias = try XCTUnwrap(table.keys.first)
+        func arguments(_ data: [String: Any], table: [String: ClaudeTool], compacting: Bool = false) -> [String] {
+            ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: table, compacting: compacting)
+                .arguments(relay: URL(fileURLWithPath: "/usr/bin/true"), config: URL(fileURLWithPath: "/tmp/relay.json"))
+        }
+        func value(_ arguments: [String], _ flag: String) -> String? { arguments.firstIndex(of: flag).map { arguments[$0 + 1] } }
+        let search = arguments(["tools": tools], table: table)
+        XCTAssertEqual(value(search, "--tools"), "WebSearch")
+        XCTAssertEqual(value(search, "--allowedTools"), "mcp__codex__" + alias + ",WebSearch")
+        XCTAssertTrue(search.contains("--restricted"))
+        let plain = arguments(["tools": [tools[0]]], table: table)
+        XCTAssertEqual(value(plain, "--tools"), "")
+        XCTAssertEqual(value(plain, "--allowedTools"), "mcp__codex__" + alias)
+        let compaction = arguments(["tools": [Any]()], table: [:], compacting: true)
+        XCTAssertEqual(value(compaction, "--tools"), "")
+        XCTAssertNil(value(compaction, "--allowedTools"))
+
+        // Codex's default cached mode still gets WebSearch; a domain filter WebSearch cannot enforce does not.
+        let cached: [Any] = [["type": "web_search", "external_web_access": false]]
+        XCTAssertEqual(value(arguments(["tools": cached], table: [:]), "--tools"), "WebSearch")
+        let filtered: [Any] = [["type": "web_search", "filters": ["allowed_domains": ["swift.org"]]]]
+        XCTAssertFalse(ClaudeBridge.webSearch(filtered))
+        XCTAssertEqual(value(arguments(["tools": filtered], table: [:]), "--tools"), "")
+        let envelope = try XCTUnwrap(ClaudeBridge.promptContent(["tools": filtered, "input": [Any]()], compacting: false).first?["text"] as? String)
+        XCTAssertTrue(envelope.hasSuffix(#","unavailable_hosted_tools":["web_search"]}"#))
     }
 
     func testCatalogETagIsDistinctFromUpstream() {
@@ -489,6 +524,68 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(anonymous.status, 400)
     }
 
+    @MainActor func testClaudeWebSearchShowsAsCodexSearchCard() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        let input: [Any] = [harness.environment, ["role": "user", "content": "SEARCH_WEB for the Swift release"]]
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "search", "input": input,
+                                               "tools": [["type": "web_search"]]])
+        XCTAssertEqual(response.status, 200, response.text)
+        let output = try XCTUnwrap(response.completed?["output"] as? [[String: Any]])
+        XCTAssertEqual(output.map { $0["type"] as? String }, ["web_search_call", "message"])
+        XCTAssertTrue((output[0]["id"] as? String)?.hasPrefix(ClaudeBridge.searchPrefix) == true)
+        XCTAssertEqual(output[0]["status"] as? String, "completed")
+        XCTAssertEqual((output[0]["action"] as? [String: Any])?["query"] as? String, "swift release")
+        XCTAssertEqual(output[1]["phase"] as? String, "final_answer")
+        XCTAssertTrue(response.text.contains("Swift 6.4, per swift.org"))
+        // The card appears while Claude Code is still searching.
+        let added = response.text.components(separatedBy: "\n").compactMap { line -> [String: Any]? in
+            guard line.hasPrefix("data: ") else { return nil }
+            return try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any]
+        }.filter { $0["type"] as? String == "response.output_item.added" }.compactMap { $0["item"] as? [String: Any] }
+        XCTAssertEqual(added.first?["type"] as? String, "web_search_call")
+        XCTAssertEqual(added.first?["status"] as? String, "in_progress")
+
+        // Without Codex web search, Claude Code gets no tool of its own.
+        let plain = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "no-search", "input": input])
+        XCTAssertEqual(plain.status, 200, plain.text)
+        XCTAssertEqual((plain.completed?["output"] as? [[String: Any]])?.map { $0["type"] as? String }, ["message"])
+        let launches = try harness.launches()
+        XCTAssertEqual(launches.count, 2)
+        XCTAssertEqual(launches[0].firstIndex(of: "--tools").map { launches[0][$0 + 1] }, "WebSearch")
+        XCTAssertEqual(launches[1].firstIndex(of: "--tools").map { launches[1][$0 + 1] }, "")
+        XCTAssertFalse(launches[1].contains("--allowedTools"))
+    }
+
+    @MainActor func testSearchBesideCodexToolCallShowsOneFinishedCard() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object", "properties": ["cmd": ["type": "string"]]]],
+                            ["type": "web_search"]]
+        var input: [Any] = [harness.environment, ["role": "user", "content": "SEARCH_WEB WITH_TOOL"]]
+        func searches(_ response: (status: Int, text: String, completed: [String: Any]?)) -> [[String: Any]] {
+            (response.completed?["output"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "web_search_call" }
+        }
+        // The tool call pauses the response while the search is still running; no card is left unfinished.
+        let first = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "pause", "input": input, "tools": tools])
+        XCTAssertEqual(first.status, 200, first.text)
+        XCTAssertTrue(searches(first).isEmpty)
+        XCTAssertFalse(first.text.contains("web_search_call"))
+        let call = try XCTUnwrap((first.completed?["output"] as? [[String: Any]])?.first { $0["type"] as? String == "function_call" })
+        input += [call, ["type": "function_call_output", "call_id": try XCTUnwrap(call["call_id"] as? String), "output": "42"]]
+        // Its results arrive in the next response, which shows the finished search.
+        let second = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "pause", "input": input, "tools": tools])
+        XCTAssertEqual(second.status, 200, second.text)
+        XCTAssertEqual(searches(second).map { $0["status"] as? String }, ["completed"])
+        XCTAssertEqual((searches(second).first?["action"] as? [String: Any])?["query"] as? String, "swift release")
+        XCTAssertEqual(try harness.launches().count, 1)
+
+        let failed = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "fail", "tools": [["type": "web_search"]],
+                                             "input": [harness.environment, ["role": "user", "content": "SEARCH_WEB SEARCH_FAILS"]]])
+        XCTAssertEqual(failed.status, 200, failed.text)
+        XCTAssertEqual(searches(failed).map { $0["status"] as? String }, ["failed"])
+    }
+
     @MainActor func testClaudeThatExitsEarlyReportsItsError() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
@@ -687,6 +784,28 @@ final class ClaudeBridgeTests: XCTestCase {
             let launched = try JSONDecoder().decode([String].self, from: Data(try XCTUnwrap(launches.split(separator: "\n").last).utf8))
             XCTAssertEqual(launched.firstIndex(of: "--permission-mode").map { launched[$0 + 1] }, mode)
         }
+    }
+
+    /// The real CLI must report exactly the relay tools plus WebSearch, and stream the search as a card.
+    @MainActor func testLiveClaudeWebSearchBecomesSearchCard() async throws {
+        let relayPath = ProcessInfo.processInfo.environment["SWITCHGPT_LIVE_RELAY"] ?? ""
+        try XCTSkipIf(relayPath.isEmpty, "Set SWITCHGPT_LIVE_RELAY to run against the real Claude Code CLI")
+        let claude = try XCTUnwrap(ClaudeCLI.locate())
+        let harness = try await Harness(enabled: true, claude: claude, relayExecutable: URL(fileURLWithPath: relayPath))
+        defer { harness.stop() }
+        let tools: [Any] = [["type": "function", "name": "exec_command", "description": "Run a shell command",
+                             "parameters": ["type": "object", "properties": ["cmd": ["type": "string"]], "required": ["cmd"]]],
+                            ["type": "web_search", "external_web_access": false]] // Codex's default cached mode.
+        let input: [Any] = [harness.environment, ["role": "user", "content": [["type": "input_text",
+            "text": "Search the web exactly once for the latest stable Swift release, then answer in one sentence with its source."]]]]
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "tools": tools, "prompt_cache_key": "live-search",
+                                               "reasoning": ["effort": "low"], "input": input])
+        XCTAssertEqual(response.status, 200, response.text)
+        let output = try XCTUnwrap(response.completed?["output"] as? [[String: Any]], response.text)
+        let search = try XCTUnwrap(output.first { $0["type"] as? String == "web_search_call" }, response.text)
+        XCTAssertEqual(search["status"] as? String, "completed")
+        XCTAssertFalse(((search["action"] as? [String: Any])?["query"] as? String ?? "").isEmpty)
+        XCTAssertEqual(output.last?["phase"] as? String, "final_answer")
     }
 
     private func temporaryDirectory() throws -> URL {
@@ -908,10 +1027,27 @@ private final class Counter: @unchecked Sendable {
         listed = call('tools/list', {})['tools']
         with open(os.path.join(home, 'tools.jsonl'), 'a') as f: f.write(json.dumps(listed) + '\n')
         tools = [t['name'] for t in listed]
-    out({'type': 'system', 'subtype': 'init', 'tools': ['mcp__codex__' + t for t in tools]})
+    search = '--tools' in args and 'WebSearch' in args[args.index('--tools') + 1]
+    out({'type': 'system', 'subtype': 'init', 'tools': ['mcp__codex__' + t for t in tools] + (['WebSearch'] if search else [])})
     if 'STALL_NOW' in prompt: time.sleep(300)
     out({'type': 'stream_event', 'event': {'type': 'message_start', 'message': {'usage': {'input_tokens': 10, 'cache_read_input_tokens': 5, 'output_tokens': 1}}}})
     answer = 'Hello from Opus'
+    if search and 'SEARCH_WEB' in prompt:
+        out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'tool_use', 'id': 'toolu_search', 'name': 'WebSearch', 'input': {}}}})
+        for part in ['{"query": "swift', ' release"}']:
+            out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'input_json_delta', 'partial_json': part}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_stop', 'index': 0}})
+        if tools and 'WITH_TOOL' in prompt:
+            # A Codex tool call runs beside the search and reaches Codex before the search results.
+            out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 1, 'content_block': {'type': 'tool_use', 'id': 'toolu_mcp', 'name': 'mcp__codex__' + tools[0], 'input': {}}}})
+            out({'type': 'stream_event', 'event': {'type': 'message_stop'}})
+            call('tools/call', {'name': tools[0], 'arguments': {'cmd': 'echo 42'}})
+            tools = []
+        else:
+            out({'type': 'stream_event', 'event': {'type': 'message_stop'}})
+        failed = 'SEARCH_FAILS' in prompt
+        out({'type': 'user', 'message': {'role': 'user', 'content': [{'type': 'tool_result', 'tool_use_id': 'toolu_search', 'content': 'Links: swift.org', 'is_error': failed}]}})
+        answer = 'The search failed' if failed else 'Swift 6.4, per swift.org'
     if tools:
         out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'content_block': {'type': 'tool_use'}}})
         answer = 'result was ' + call('tools/call', {'name': tools[0], 'arguments': {'cmd': 'echo 42'}})['content'][0]['text']

@@ -126,7 +126,7 @@
 
 "routing_manual_badge" = "手动";
 
-"claude_model_description" = "通过本机已登录的 Claude Code CLI 运行 %@，所有工具均由 Codex 执行。";
+"claude_model_description" = "通过本机已登录的 Claude Code CLI 运行 %@，除网页搜索外，所有工具均由 Codex 执行。";
 "claude_toggle" = "使用 Claude 模型";
 "claude_missing" = "Claude 模型（未安装 Claude Code）";
 "claude_restart_enable" = "重新启动 ChatGPT 以显示 Claude 模型？";

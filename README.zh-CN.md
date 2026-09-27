@@ -169,10 +169,11 @@ flowchart LR
 SwitchGPT 会向 Claude Code 查询可用模型（例如 Fable 5.1、Opus 5.5、Sonnet 5、Haiku 4.5），并分别以 `claude-code-<模型>` 列出。Claude Code 更新后或每 6 小时，列表会在不调用模型的情况下重新获取，并在下次重启 ChatGPT 后出现在选择器中。每个模型以 Claude Code 的自动压缩阈值作为上下文窗口（1M 模型为 967K，Haiku 为 167K），因此 Codex 会先于 Claude Code 压缩线程，包括刚切换到窗口更小的模型时。
 
 - **不消耗 OpenAI 额度** — Claude 请求同样经过本地中继和桌面登录校验，但不会选择 OpenAI 账户或消耗其额度。其他模型不受影响。
-- **所有工具由 Codex 执行** — Claude Code 不使用自带工具。所有工具调用都交回 Codex，按当前权限与审批设置执行，结果再返回同一个 Claude 进程。
+- **除网页搜索外，所有工具由 Codex 执行** — 除网页搜索外，Claude Code 不使用自带工具。其他工具调用都交回 Codex，按当前权限与审批设置执行，结果再返回同一个 Claude 进程。
 - **压缩** — 手动和自动压缩都由当前使用的 Claude 模型生成摘要。
 - **线程中途切换模型** — 在 Claude 模型之间切换会用完整历史启动新的 Claude 进程，也可以切换到 GPT 模型继续：SwitchGPT 只移除 OpenAI 会拒绝的 Claude 条目，并把 Claude 的压缩摘要转成可读消息。反方向有限制：GPT 模型压缩的摘要是加密的，Claude 只能从其后的消息继续，缺少早先上下文时会说明。
-- **托管工具** — 网页搜索等 OpenAI 托管工具在 Claude 模型中不可用，Claude 会被告知缺少哪些工具。
+- **网页搜索** — Codex 开启网页搜索时，Claude 模型使用 Claude Code 自带的 WebSearch。搜索在 Anthropic 服务器上运行，计入 Claude 套餐用量，每次搜索都显示为 Codex 网页搜索卡片。同一对话改用 GPT 模型继续时，这些卡片不会发送给 OpenAI，回答中写明的来源保持不变。即使在 Codex 默认的 cached 模式下也始终搜索实时网页；若附带无法执行的域名限制，则不使用网页搜索。
+- **托管工具** — 其他 OpenAI 托管工具在 Claude 模型中不可用，Claude 会被告知缺少哪些工具。
 
 <details>
 <summary>实现细节</summary>

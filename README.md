@@ -169,10 +169,11 @@ Toggling asks before restarting ChatGPT, because the model list refreshes only a
 SwitchGPT asks Claude Code which models it offers, such as Fable 5.1, Opus 5.5, Sonnet 5, and Haiku 4.5, and lists each one as `claude-code-<model>`. The list is refreshed without a model call when Claude Code is updated and every 6 hours, and reaches the picker after the next ChatGPT restart. Each model reports Claude Code's auto-compact threshold as its context window (967K for 1M-context models, 167K for Haiku), so Codex compacts a thread before Claude Code would, including right after switching to a model with a smaller window.
 
 - **No OpenAI quota** — Claude requests pass through the same relay and desktop sign-in check but never select an OpenAI account or spend its quota. Other models are unchanged.
-- **Codex runs every tool** — Claude Code gets no tools of its own. Each tool call is returned to Codex, which runs it under its current permissions and approvals, and the result goes back to the same Claude process.
+- **Codex runs every tool except web search** — Claude Code gets no tools of its own apart from web search. Every other tool call is returned to Codex, which runs it under its current permissions and approvals, and the result goes back to the same Claude process.
 - **Compaction** — manual and automatic compaction produce a summary written by the Claude model in use.
 - **Switching models mid-thread** — a thread can move between Claude models, which starts a fresh Claude process with the full history, or continue with a GPT model: SwitchGPT removes only the Claude-made items OpenAI would reject and turns a Claude compaction summary into a readable message. The reverse is limited: a GPT compaction summary is encrypted, so Claude continues from the messages after it and says when earlier context is missing.
-- **Hosted tools** — OpenAI-hosted tools such as web search are not available to Claude models; it is told which ones are missing.
+- **Web search** — while Codex offers web search, Claude models use Claude Code's own WebSearch. It runs on Anthropic's servers and counts toward your Claude plan, and each search appears as a Codex web search card. If the thread continues with a GPT model, those cards are left out of what OpenAI receives; the answers keep their sources. It always searches the live web, also in Codex's default cached mode; with a domain filter it cannot enforce, web search stays unavailable.
+- **Hosted tools** — other OpenAI-hosted tools are not available to Claude models; it is told which ones are missing.
 
 <details>
 <summary>Implementation details</summary>

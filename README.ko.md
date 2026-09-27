@@ -169,10 +169,11 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 SwitchGPT는 Claude Code에 제공 모델(예: Fable 5.1, Opus 5.5, Sonnet 5, Haiku 4.5)을 물어 각각 `claude-code-<모델>`로 추가합니다. 목록은 Claude Code가 업데이트되거나 6시간이 지나면 모델 호출 없이 다시 조회하며, 다음 ChatGPT 재시작 때 선택기에 반영됩니다. 각 모델의 컨텍스트 창은 Claude Code의 자동 압축 기준(1M 모델은 967K, Haiku는 167K)으로 알리므로, 창이 더 작은 모델로 바꾼 직후를 포함해 Claude Code보다 Codex가 먼저 스레드를 압축합니다.
 
 - **OpenAI 한도 사용 안 함** — Claude 요청도 같은 중계와 데스크톱 로그인 확인을 거치지만, OpenAI 계정을 고르거나 한도를 쓰지 않습니다. 다른 모델은 그대로입니다.
-- **도구는 모두 Codex가 실행** — Claude Code에는 자체 도구를 주지 않습니다. 도구 호출은 모두 Codex로 돌아가 현재 권한·승인 설정으로 실행되고, 결과는 같은 Claude 프로세스로 전달됩니다.
+- **웹 검색을 뺀 도구는 모두 Codex가 실행** — Claude Code에는 웹 검색 외의 자체 도구를 주지 않습니다. 그 밖의 도구 호출은 모두 Codex로 돌아가 현재 권한·승인 설정으로 실행되고, 결과는 같은 Claude 프로세스로 전달됩니다.
 - **압축** — 수동·자동 압축 모두 사용 중인 Claude 모델이 요약을 작성합니다.
 - **스레드 중간 모델 변경** — Claude 모델끼리 바꾸면 전체 기록으로 새 Claude 프로세스를 시작하고, GPT 모델로 바꿔 이어 쓸 수도 있습니다. OpenAI가 거절하는 Claude 항목만 걸러 내고, Claude가 쓴 압축 요약은 읽을 수 있는 메시지로 바꿔 보냅니다. 반대 방향은 제한이 있습니다. GPT 모델이 압축한 요약은 암호화되어 있어 Claude는 그 이후 메시지부터 이어 가며, 이전 맥락이 없으면 그렇다고 알립니다.
-- **호스팅 도구** — 웹 검색 같은 OpenAI 호스팅 도구는 Claude 모델에서 쓸 수 없으며, 어떤 도구가 빠졌는지 Claude에게 알려 줍니다.
+- **웹 검색** — Codex에서 웹 검색이 켜져 있으면 Claude 모델은 Claude Code 자체 WebSearch를 씁니다. 검색은 Anthropic 서버에서 실행되어 Claude 요금제 사용량에 포함되고, 검색할 때마다 Codex 웹 검색 카드로 표시됩니다. 같은 대화를 GPT 모델로 이어 가면 이 카드는 OpenAI로 보내지 않으며, 답변에 적힌 출처는 그대로 남습니다. Codex 기본값인 cached 모드에서도 항상 실시간 웹을 검색하며, 지킬 수 없는 도메인 제한이 붙으면 웹 검색을 쓰지 않습니다.
+- **호스팅 도구** — 그 밖의 OpenAI 호스팅 도구는 Claude 모델에서 쓸 수 없으며, 어떤 도구가 빠졌는지 Claude에게 알려 줍니다.
 
 <details>
 <summary>세부 동작</summary>

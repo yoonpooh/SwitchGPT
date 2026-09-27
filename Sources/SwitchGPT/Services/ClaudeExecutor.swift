@@ -9,7 +9,7 @@ protocol ClaudeSink: AnyObject, Sendable {
     func observeClose(_ handler: @escaping @Sendable () -> Void)
 }
 
-/// Runs Claude models through the Claude Code CLI signed in on this Mac while Codex executes every tool.
+/// Runs Claude models through the Claude Code CLI signed in on this Mac while Codex executes every tool except web search.
 /// Claude's private MCP relay parks it at a tool boundary; that call becomes a real Codex tool call,
 /// and the next Codex request returns the result to the same Claude process.
 final class ClaudeExecutor: @unchecked Sendable {
@@ -144,6 +144,7 @@ final class ClaudeExecutor: @unchecked Sendable {
                 || ClaudeBridge.digest(Self.roles(inputs)) != ClaudeBridge.digest(Self.roles(current.inputs))
                 || ClaudeBridge.digest(data["instructions"]) != ClaudeBridge.digest(current.data["instructions"])
                 || ClaudeBridge.tableDigest(table) != ClaudeBridge.tableDigest(current.table)
+                || ClaudeBridge.webSearch(data["tools"]) != current.search
             if !answered || changed || (turnID != nil && current.turnID != nil && turnID != current.turnID) {
                 // Codex moved on (new message, new turn, another model, changed context or tools): replay its complete,
                 // authoritative history in a fresh CLI. Never smuggle a steering message inside a tool result.
@@ -287,7 +288,7 @@ final class ClaudeExecutor: @unchecked Sendable {
             let process = Process()
             process.executableURL = executable
             process.arguments = run.arguments(relay: relayExecutable, config: config)
-            // Claude Code has no tools of its own, so it never needs the Codex folder. Starting it there would make it
+            // Claude Code has no local tools of its own, so it never needs the Codex folder. Starting it there would make it
             // read a protected folder such as Documents, where macOS blocks it behind a permission prompt.
             process.currentDirectoryURL = scratch
             var environment = ClaudeCLI.environment(executable: executable)
@@ -347,13 +348,19 @@ final class ClaudeExecutor: @unchecked Sendable {
         switch event["type"] as? String {
         case "system" where event["subtype"] as? String == "init":
             run.initialized = true
-            let tools = Set(event["tools"] as? [String] ?? [])
-            if tools != Set(run.table.keys.map { "mcp__codex__" + $0 }) {
-                cancel(run, "Claude tool isolation failed: expected only Codex relay tools")
+            if Set(event["tools"] as? [String] ?? []) != Set(run.allowedTools) {
+                cancel(run, "Claude tool isolation failed: expected only Codex relay tools and WebSearch")
             }
         case "stream_event":
             guard let value = event["event"] as? [String: Any] else { return }
             run.events.append(.stream(value))
+            pump(run)
+        case "user" where run.search:
+            // Claude Code ran a tool: the results of a WebSearch complete its card.
+            let content = (event["message"] as? [String: Any])?["content"] as? [Any] ?? []
+            for case let block as [String: Any] in content where block["type"] as? String == "tool_result" {
+                if let id = block["tool_use_id"] as? String { run.events.append(.toolResult(id, failed: block["is_error"] as? Bool == true)) }
+            }
             pump(run)
         case "result":
             run.collected = true
@@ -449,19 +456,55 @@ final class ClaudeExecutor: @unchecked Sendable {
             case .stream(let value):
                 writer.trackUsage(value, run: run)
                 guard !run.compacting else { continue }
-                if value["type"] as? String == "content_block_start" {
-                    switch (value["content_block"] as? [String: Any])?["type"] as? String {
+                let index = ClaudeBridge.integer(value["index"])
+                switch value["type"] as? String {
+                case "content_block_start":
+                    let block = value["content_block"] as? [String: Any]
+                    switch block?["type"] as? String {
                     case "text": writer.startItem("message")
                     case "thinking": writer.startItem("reasoning")
-                    case "tool_use": writer.finishItem()
+                    case "tool_use":
+                        writer.finishItem()
+                        let name = block?["name"] as? String ?? ""
+                        if name.hasPrefix("mcp__codex__") { run.codexCallInMessage = true }
+                        if run.search, name == ClaudeBridge.searchTool, let id = block?["id"] as? String {
+                            run.searches[index] = (id, "")
+                        }
                     default: break
                     }
-                } else if value["type"] as? String == "content_block_delta", let delta = value["delta"] as? [String: Any] {
-                    if delta["type"] as? String == "text_delta", let text = delta["text"] as? String { writer.delta(text) }
-                    else if delta["type"] as? String == "thinking_delta", let text = delta["thinking"] as? String { writer.delta(text) }
+                case "content_block_delta":
+                    guard let delta = value["delta"] as? [String: Any] else { break }
+                    switch delta["type"] as? String {
+                    case "text_delta": if let text = delta["text"] as? String { writer.delta(text) }
+                    case "thinking_delta": if let text = delta["thinking"] as? String { writer.delta(text) }
+                    case "input_json_delta": if let json = delta["partial_json"] as? String { run.searches[index]?.input += json }
+                    default: break
+                    }
+                case "content_block_stop":
+                    // The query is complete only now. Its card waits for the end of the message.
+                    guard let search = run.searches.removeValue(forKey: index) else { break }
+                    let input = (try? JSONSerialization.jsonObject(with: Data(search.input.utf8))) as? [String: Any]
+                    run.pendingSearches[search.id] = input?["query"] as? String ?? ""
+                    run.unshownSearches.append(search.id)
+                case "message_start":
+                    run.codexCallInMessage = false
+                case "message_stop":
+                    // A Codex tool call in the same message pauses this response before the search can finish, so
+                    // such a search gets no in-progress card here, only a finished one once its results arrive.
+                    if !run.codexCallInMessage {
+                        for id in run.unshownSearches { if let query = run.pendingSearches[id] { writer.startSearch(id, query: query) } }
+                    }
+                    run.unshownSearches.removeAll()
+                default: break
                 }
+            case .toolResult(let id, let failed):
+                // Any other tool result belongs to a Codex tool call, which Codex already shows.
+                guard let query = run.pendingSearches.removeValue(forKey: id) else { break }
+                writer.finishSearch(id, query: query, status: failed ? "failed" : "completed")
             case .call(let pending):
                 writer.finishItem()
+                // Only reached by a search whose message had no Codex call, e.g. one Claude Code never finished.
+                writer.closeSearches()
                 writer.addItem(pending.item)
                 run.waiting.insert(pending.callID)
                 if writer.usage == nil { writer.usage = run.lastUsage }
@@ -482,6 +525,7 @@ final class ClaudeExecutor: @unchecked Sendable {
                         writer.delta(text)
                     }
                     writer.finishItem()
+                    writer.closeSearches()
                     if writer.usage == nil { writer.usage = run.lastUsage }
                 }
                 writer.event("response.completed", ["response": writer.response("completed")])
@@ -500,6 +544,7 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     private func failResponse(_ run: ClaudeRun, _ writer: ClaudeResponseWriter, _ message: String) {
+        writer.closeSearches()
         var failed = writer.response("failed")
         failed["error"] = ["code": run.failureCode ?? "bridge_error", "message": message]
         writer.event("response.failed", ["response": failed])
@@ -550,6 +595,8 @@ final class ClaudeRun: @unchecked Sendable {
     enum Event {
         case stream([String: Any])
         case call(ClaudePending)
+        /// Claude Code returned the result of a tool call, by tool_use ID.
+        case toolResult(String, failed: Bool)
         case result([String: Any])
         case error(String)
     }
@@ -561,9 +608,19 @@ final class ClaudeRun: @unchecked Sendable {
     let data: [String: Any]
     let compacting: Bool
     let permissionMode: ClaudePermissionMode
+    /// Claude Code's WebSearch is allowed, because Codex offers web search.
+    let search: Bool
     var inputs: [Any]
     var table: [String: ClaudeTool]
     var events: [Event] = []
+    /// WebSearch calls being streamed, by content block index: the tool_use ID and the input JSON so far.
+    var searches: [Int: (id: String, input: String)] = [:]
+    /// Queries of the WebSearch calls waiting for results, by tool_use ID. They may outlast a paused response.
+    var pendingSearches: [String: String] = [:]
+    /// WebSearch calls of the current message whose card is not shown yet, in order.
+    var unshownSearches: [String] = []
+    /// The current Claude message also calls a Codex tool, which pauses the response.
+    var codexCallInMessage = false
     var calls: [String: ClaudePending] = [:]
     var waiting: Set<String> = []
     var writer: ClaudeResponseWriter?
@@ -590,9 +647,13 @@ final class ClaudeRun: @unchecked Sendable {
         self.table = table
         self.compacting = compacting
         permissionMode = compacting ? .dontAsk : .mirroring(inputs)
+        search = ClaudeBridge.webSearch(data["tools"])
     }
 
     var effort: String { compacting ? ClaudeBridge.compactionEffort : ClaudeBridge.effort(data) }
+
+    /// The only tools Claude Code may have: the Codex relay tools, and WebSearch while Codex offers web search.
+    var allowedTools: [String] { table.keys.sorted().map { "mcp__codex__" + $0 } + (search ? [ClaudeBridge.searchTool] : []) }
 
     func recordError(_ data: Data) {
         errors.append(data)
@@ -612,7 +673,7 @@ final class ClaudeRun: @unchecked Sendable {
         arguments += ["-p", "--model", model.cliModel]
         if model.efforts.contains(effort) { arguments += ["--effort", effort] }
         arguments += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-                         "--tools", "", "--setting-sources", "", "--strict-mcp-config"]
+                         "--tools", search ? ClaudeBridge.searchTool : "", "--setting-sources", "", "--strict-mcp-config"]
         if !table.isEmpty, let relay {
             let server: [String: Any] = ["command": relay.path, "args": [ClaudeMCPRelay.flag, config.path]]
             arguments += ["--mcp-config", ClaudeBridge.text(["mcpServers": ["codex": server]])]
@@ -623,7 +684,7 @@ final class ClaudeRun: @unchecked Sendable {
         arguments += ["--permission-mode", permissionMode.rawValue, "--permission-prompts", "none", "--disable-slash-commands", "--no-chrome",
                       "--no-session-persistence", "--system-prompt-snapshot", "off", "--settings", ClaudeBridge.text(settings),
                       "--append-system-prompt", prompt]
-        if !table.isEmpty { arguments += ["--allowedTools", table.keys.sorted().map { "mcp__codex__" + $0 }.joined(separator: ",")] }
+        if !allowedTools.isEmpty { arguments += ["--allowedTools", allowedTools.joined(separator: ",")] }
         return arguments
     }
 }
@@ -657,6 +718,8 @@ final class ClaudeResponseWriter: @unchecked Sendable {
     private(set) var wire = Data()
     private var sequence = 0
     private var items: [[String: Any]] = []
+    /// Output indexes of this response's search cards still in progress, by WebSearch tool_use ID.
+    private var searches: [String: Int] = [:]
     private var active: (index: Int, reasoning: Bool, text: String)?
     private var contextInput: Int?
     private var contextCached = 0
@@ -752,6 +815,36 @@ final class ClaudeResponseWriter: @unchecked Sendable {
             event("response.content_part.done", ["item_id": id, "output_index": current.index, "content_index": 0, "part": part])
         }
         event("response.output_item.done", ["output_index": current.index, "item": items[current.index]])
+    }
+
+    /// A Claude WebSearch as the web_search_call item Codex shows for its own hosted search.
+    func startSearch(_ id: String, query: String) {
+        searches[id] = addSearch(query, status: "in_progress")
+    }
+
+    /// Completes the search's card, or adds a finished card when the search began in an earlier, paused response.
+    func finishSearch(_ id: String, query: String, status: String) {
+        let index = searches.removeValue(forKey: id) ?? addSearch(query, status: status)
+        items[index]["status"] = status
+        event("response.output_item.done", ["output_index": index, "item": items[index]])
+    }
+
+    /// No response ends with a search card in progress. One without results is incomplete, never completed.
+    func closeSearches() {
+        for index in searches.values.sorted() {
+            items[index]["status"] = "incomplete"
+            event("response.output_item.done", ["output_index": index, "item": items[index]])
+        }
+        searches.removeAll()
+    }
+
+    private func addSearch(_ query: String, status: String) -> Int {
+        finishItem()
+        let index = items.count
+        items.append(["id": ClaudeBridge.searchPrefix + ClaudeBridge.identifier(), "type": "web_search_call", "status": status,
+                      "action": ["type": "search", "query": query]])
+        event("response.output_item.added", ["output_index": index, "item": items[index]])
+        return index
     }
 
     /// Marks an open message as the final answer. Returns false when no message is open.

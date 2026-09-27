@@ -126,7 +126,7 @@
 
 "routing_manual_badge" = "手動";
 
-"claude_model_description" = "このMacでサインイン済みのClaude Code CLIで実行する%@です。ツールはすべてCodexが実行します。";
+"claude_model_description" = "このMacでサインイン済みのClaude Code CLIで実行する%@です。Web検索以外のツールはすべてCodexが実行します。";
 "claude_toggle" = "Claudeモデルを使用";
 "claude_missing" = "Claudeモデル（Claude Code未インストール）";
 "claude_restart_enable" = "Claudeモデルを表示するためにChatGPTを再起動しますか？";

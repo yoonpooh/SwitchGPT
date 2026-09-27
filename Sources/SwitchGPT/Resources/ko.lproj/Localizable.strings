@@ -126,7 +126,7 @@
 
 "routing_manual_badge" = "수동";
 
-"claude_model_description" = "이 Mac에 로그인된 Claude Code CLI로 실행하는 %@입니다. 도구는 모두 Codex가 실행합니다.";
+"claude_model_description" = "이 Mac에 로그인된 Claude Code CLI로 실행하는 %@입니다. 웹 검색을 뺀 도구는 모두 Codex가 실행합니다.";
 "claude_toggle" = "Claude 모델 사용";
 "claude_missing" = "Claude 모델 (Claude Code 미설치)";
 "claude_restart_enable" = "Claude 모델을 표시하려면 ChatGPT를 재시작할까요?";
