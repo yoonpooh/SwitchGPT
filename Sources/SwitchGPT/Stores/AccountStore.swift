@@ -372,6 +372,8 @@ final class AccountStore {
         defer { busy = false; refresh() }
         do {
             let app = try session.appURL()
+            // The restarted picker lists what Claude Code offers now, not a list from before an update.
+            if clearingModelCache, routingPreferences.claudeEnabled, let relay { await relay.claude.models.refreshed() }
             try await session.stop(app: app)
             if clearingModelCache { session.clearModelCache() }
             try await session.launch(app)
@@ -452,8 +454,11 @@ final class AccountStore {
             routingCredentials[account.id] = credentials
             let support = index.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            let models = support.appendingPathComponent("claude-models.json")
             let activeRelay = relay ?? ModelRelay(desktopAuth: session.auth, eventURL: support.appendingPathComponent("relay-events.jsonl"),
-                                                 router: router, didRecord: { [weak self] event in
+                                                 router: router,
+                                                 claude: ClaudeExecutor(models: ClaudeModelCatalog(file: models, discover: ClaudeModelDiscovery.run)),
+                                                 didRecord: { [weak self] event in
                 Task { @MainActor [weak self] in self?.received(event) }
             })
             let isStarting = relay == nil

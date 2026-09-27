@@ -76,18 +76,123 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertFalse(RoutingConfiguration.topLevelKeys("[profiles.x]\nmodel_catalog_json = \"/c.json\"").contains("model_catalog_json"))
     }
 
-    func testCatalogAddsOpusOnceAfterAccountModels() throws {
+    /// Claude Code 2.1.281's model list for a Max account.
+    nonisolated(unsafe) static let options: [[String: Any]] = [
+        ["value": "default", "resolvedModel": "claude-opus-5-5[1m]", "description": "Opus 5.5 with 1M context · Best for everyday, complex tasks",
+         "supportsEffort": true, "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"]],
+        ["value": "opus[1m]", "resolvedModel": "claude-opus-5-5[1m]", "description": "Opus 5.5 with 1M context · Best for everyday, complex tasks",
+         "supportsEffort": true, "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"]],
+        ["value": "claude-fable-5-1[1m]", "resolvedModel": "claude-fable-5-1", "description": "Fable 5.1 · Most capable",
+         "supportsEffort": true, "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max", "ultracode"]],
+        ["value": "sonnet", "resolvedModel": "claude-sonnet-5", "description": "Sonnet 5 · Efficient for routine tasks",
+         "supportsEffort": true, "supportedEffortLevels": ["low", "medium", "high"]],
+        ["value": "haiku", "resolvedModel": "claude-haiku-4-5-20251001", "description": "Haiku 4.5 · Fastest for quick answers"],
+        ["value": "custom", "resolvedModel": "not a claude model"]
+    ]
+
+    func testModelListIsPinnedToResolvedModelsWithCodexEfforts() {
+        let models = Self.options.compactMap(ClaudeModel.init(option:))
+        XCTAssertEqual(models.map(\.slug), ["claude-code-opus-5-5", "claude-code-opus-5-5", "claude-code-fable-5-1",
+                                            "claude-code-sonnet-5", "claude-code-haiku-4-5"])
+        XCTAssertEqual(models.map(\.name), ["Opus 5.5", "Opus 5.5", "Fable 5.1", "Sonnet 5", "Haiku 4.5"])
+        // An alias is replaced by the model it resolves to, so a Claude Code update cannot swap the model behind a slug.
+        XCTAssertEqual(models.map(\.cliModel), ["claude-opus-5-5[1m]", "claude-opus-5-5[1m]", "claude-fable-5-1[1m]",
+                                                "claude-sonnet-5", "claude-haiku-4-5-20251001"])
+        XCTAssertEqual(models[2].efforts, ["low", "medium", "high", "xhigh", "max"]) // Codex does not know "ultracode".
+        XCTAssertEqual(models[3].efforts, ["low", "medium", "high"])
+        XCTAssertEqual(models[4].efforts, [])
+        XCTAssertEqual(models.map(\.contextWindow), [967_000, 967_000, 967_000, 167_000, 167_000])
+        XCTAssertEqual(models[0], ClaudeModel.fallback)
+        XCTAssertEqual(ClaudeModel.name("opus-6"), "Opus 6")
+        XCTAssertEqual(ClaudeModel(option: ["value": "claude-opus-6", "description": "Something new"])?.name, "Opus 6")
+    }
+
+    func testCatalogAddsEachClaudeModelOnceAfterAccountModels() throws {
+        let claude = [ClaudeModel.fallback,
+                      ClaudeModel(slug: "claude-code-haiku-4-5", name: "Haiku 4.5", cliModel: "claude-haiku-4-5-20251001", efforts: [],
+                                  contextWindow: 167_000)]
         let body = Data(#"{"models":[{"slug":"gpt-6-astra","priority":3},{"slug":"gpt-6-luna","priority":7}],"etag":"x"}"#.utf8)
-        let updated = try XCTUnwrap(ClaudeBridge.addingCatalogItem(to: body))
+        let updated = try XCTUnwrap(ClaudeBridge.addingCatalogItems(to: body, models: claude))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: updated) as? [String: Any])
         let models = try XCTUnwrap(object["models"] as? [[String: Any]])
-        XCTAssertEqual(models.map { $0["slug"] as? String }, ["gpt-6-astra", "gpt-6-luna", ClaudeBridge.slug])
-        XCTAssertEqual(models.last?["priority"] as? Int, 8)
-        XCTAssertEqual(models.last?["context_window"] as? Int, 272000)
-        XCTAssertEqual(models.last?["display_name"] as? String, "Opus 5.5")
+        XCTAssertEqual(models.map { $0["slug"] as? String }, ["gpt-6-astra", "gpt-6-luna", "claude-code-opus-5-5", "claude-code-haiku-4-5"])
+        XCTAssertEqual(models.map { $0["priority"] as? Int }, [3, 7, 8, 9])
+        XCTAssertEqual(models[2]["display_name"] as? String, "Opus 5.5")
+        XCTAssertEqual(models[2]["context_window"] as? Int, 967_000)
+        XCTAssertEqual(models[2]["max_context_window"] as? Int, 967_000)
+        XCTAssertEqual(models[2]["comp_hash"] as? String, "3000")
+        XCTAssertEqual(models[2]["default_reasoning_level"] as? String, "high")
+        XCTAssertEqual((models[2]["supported_reasoning_levels"] as? [[String: Any]])?.count, 5)
+        XCTAssertTrue((models[2]["description"] as? String)?.contains("Opus 5.5") == true)
+        XCTAssertEqual(models[3]["context_window"] as? Int, 167_000)
+        XCTAssertEqual((models[3]["supported_reasoning_levels"] as? [[String: Any]])?.map { $0["effort"] as? String }, ["medium"])
+        XCTAssertEqual(models[3]["default_reasoning_level"] as? String, "medium")
         XCTAssertEqual(object["etag"] as? String, "x")
-        XCTAssertNil(ClaudeBridge.addingCatalogItem(to: updated))
-        XCTAssertNil(ClaudeBridge.addingCatalogItem(to: Data("not json".utf8)))
+        XCTAssertNil(ClaudeBridge.addingCatalogItems(to: updated, models: claude))
+        XCTAssertNil(ClaudeBridge.addingCatalogItems(to: Data("not json".utf8), models: claude))
+        // A changed Claude list changes the validator even when the upstream list did not change.
+        XCTAssertNotEqual(ClaudeBridge.catalogETag("W/\"a\"", models: claude), ClaudeBridge.catalogETag("W/\"a\"", models: [.fallback]))
+        XCTAssertTrue(ClaudeBridge.catalogETag("W/\"a\"", models: claude).hasPrefix("W/\"a-switchgpt-claude-"))
+    }
+
+    func testModelCatalogAsksClaudeCodeAgainOnlyAfterAnUpdate() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("claude")
+        FileManager.default.createFile(atPath: executable.path, contents: Data(), attributes: [.posixPermissions: 0o755])
+        let file = root.appendingPathComponent("claude-models.json")
+        let calls = Counter()
+        let sonnet = ClaudeModel(slug: "claude-code-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
+        let catalog = ClaudeModelCatalog(file: file, executable: { executable }, discover: { _ in calls.increment(); return [sonnet] })
+        XCTAssertEqual(catalog.models, [.fallback])
+        XCTAssertEqual(catalog.model(for: ClaudeModel.fallback.slug), .fallback)
+        await catalog.refreshed()
+        await catalog.refreshed()
+        XCTAssertEqual(calls.value, 1)
+        XCTAssertEqual(catalog.models, [sonnet])
+        // Threads that already use Opus 5.5 keep working even when it is no longer listed.
+        XCTAssertEqual(catalog.model(for: ClaudeModel.fallback.slug), .fallback)
+        XCTAssertNil(catalog.model(for: "claude-code-gone"))
+        // Persisted: the next launch lists the same models before asking again.
+        let reopened = ClaudeModelCatalog(file: file, executable: { executable }, discover: { _ in calls.increment(); return [] })
+        XCTAssertEqual(reopened.models, [sonnet])
+        await reopened.refreshed()
+        XCTAssertEqual(calls.value, 1)
+        // An updated CLI is asked again; a failed query keeps the previous list.
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: executable.path)
+        let failing = ClaudeModelCatalog(file: file, executable: { executable },
+                                         discover: { _ in calls.increment(); throw ClaudeFailure(status: 502, message: "x") })
+        await failing.refreshed()
+        XCTAssertEqual(calls.value, 2)
+        XCTAssertEqual(failing.models, [sonnet])
+    }
+
+    func testDiscoveryReadsModelsAndContextWithoutAModelCall() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("claude")
+        let options = String(decoding: try JSONSerialization.data(withJSONObject: Self.options), as: UTF8.self)
+        let script = """
+        #!/usr/bin/python3
+        import json, sys
+        args = sys.argv[1:]
+        with open('\(root.path)/args.jsonl', 'a') as f: f.write(json.dumps(args) + '\\n')
+        request = json.loads(sys.stdin.readline())
+        model = args[args.index('--model') + 1] if '--model' in args else None
+        subtype = request['request']['subtype']
+        if subtype == 'initialize': answer = {'models': json.loads(r'''\(options)''')}
+        else: answer = {'maxTokens': 200000, 'autoCompactThreshold': 167000 if 'haiku' in model else 967000}
+        print(json.dumps({'type': 'system', 'subtype': 'status'}))
+        print(json.dumps({'type': 'control_response', 'response': {'subtype': 'success', 'request_id': request['request_id'], 'response': answer}}))
+        """
+        FileManager.default.createFile(atPath: executable.path, contents: Data(script.utf8), attributes: [.posixPermissions: 0o755])
+        let models = try ClaudeModelDiscovery.run(executable: executable)
+        XCTAssertEqual(models.map(\.slug), ["claude-code-opus-5-5", "claude-code-fable-5-1", "claude-code-sonnet-5", "claude-code-haiku-4-5"])
+        XCTAssertEqual(models.map(\.contextWindow), [967_000, 967_000, 967_000, 167_000])
+        let launches = try String(contentsOf: root.appendingPathComponent("args.jsonl"), encoding: .utf8).split(separator: "\n")
+            .map { try JSONDecoder().decode([String].self, from: Data($0.utf8)) }
+        XCTAssertEqual(launches.count, 5)
+        XCTAssertTrue(launches.allSatisfy { $0.contains("--restricted") && $0.contains("--strict-mcp-config") && !$0.contains("--mcp-config") })
     }
 
     func testCompressedOpusRequestsAreDecodedBeforeRouting() throws {
@@ -151,8 +256,10 @@ final class ClaudeBridgeTests: XCTestCase {
     }
 
     func testCatalogETagIsDistinctFromUpstream() {
-        XCTAssertEqual(ClaudeBridge.catalogETag("W/\"abc\""), "W/\"abc-switchgpt-claude\"")
-        XCTAssertEqual(ClaudeBridge.catalogETag("abc"), "abc-switchgpt-claude")
+        let weak = ClaudeBridge.catalogETag("W/\"abc\"", models: [.fallback])
+        XCTAssertTrue(weak.hasPrefix("W/\"abc-switchgpt-claude-") && weak.hasSuffix("\""), weak)
+        XCTAssertTrue(ClaudeBridge.catalogETag("abc", models: [.fallback]).hasPrefix("abc-switchgpt-claude-"))
+        XCTAssertEqual(ClaudeBridge.catalogETag("abc", models: [.fallback]), ClaudeBridge.catalogETag("abc", models: [.fallback]))
     }
 
     func testPreferencesFromOlderVersionsKeepClaudeDisabled() throws {
@@ -194,7 +301,7 @@ final class ClaudeBridgeTests: XCTestCase {
         defer { harness.stop() }
         let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object", "properties": ["cmd": ["type": "string"]]]]]
         var input: [Any] = [harness.environment, ["role": "user", "content": [["type": "input_text", "text": "run it"]]]]
-        let first = try await harness.send(["model": ClaudeBridge.slug, "input": input, "tools": tools, "prompt_cache_key": "thread-1",
+        let first = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "thread-1",
                                             "reasoning": ["effort": "xhigh"]])
         XCTAssertEqual(first.status, 200)
         let call = try XCTUnwrap(first.completed?["output"] as? [[String: Any]]).first { $0["type"] as? String == "function_call" }
@@ -206,7 +313,7 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual((first.completed?["usage"] as? [String: Any])?["input_tokens"] as? Int, 15)
 
         input += [try XCTUnwrap(call), ["type": "function_call_output", "call_id": callID, "output": "42"]]
-        let second = try await harness.send(["model": ClaudeBridge.slug, "input": input, "tools": tools, "prompt_cache_key": "thread-1",
+        let second = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "thread-1",
                                              "reasoning": ["effort": "xhigh"]])
         XCTAssertEqual(second.status, 200)
         let message = try XCTUnwrap((second.completed?["output"] as? [[String: Any]])?.last)
@@ -214,7 +321,7 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertTrue(second.text.contains("result was 42"))
         let arguments = try harness.launches()
         XCTAssertEqual(arguments.count, 1) // The tool result went back to the running process.
-        XCTAssertTrue(arguments[0].contains("claude-opus-5-5"))
+        XCTAssertEqual(arguments[0].firstIndex(of: "--model").map { arguments[0][$0 + 1] }, "claude-opus-5-5[1m]")
         XCTAssertEqual(arguments[0].firstIndex(of: "--effort").map { arguments[0][$0 + 1] }, "xhigh")
         XCTAssertTrue(harness.upstream.requests.isEmpty)
     }
@@ -222,7 +329,7 @@ final class ClaudeBridgeTests: XCTestCase {
     @MainActor func testCompactionReturnsReadableSummaryItem() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
-        let response = try await harness.send(["model": ClaudeBridge.slug, "prompt_cache_key": "thread-2", "input": [
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "thread-2", "input": [
             harness.environment, ["role": "user", "content": "long history"], ["type": "compaction_trigger"]] as [Any]])
         XCTAssertEqual(response.status, 200)
         let item = try XCTUnwrap((response.completed?["output"] as? [[String: Any]])?.first)
@@ -234,7 +341,7 @@ final class ClaudeBridgeTests: XCTestCase {
     @MainActor func testDisabledOrUnauthorizedOpusRequestsNeverReachClaude() async throws {
         let disabled = try await Harness(enabled: false)
         defer { disabled.stop() }
-        let body: [String: Any] = ["model": ClaudeBridge.slug, "prompt_cache_key": "t", "input": [disabled.environment]]
+        let body: [String: Any] = ["model": ClaudeModel.fallback.slug, "prompt_cache_key": "t", "input": [disabled.environment]]
         for encoding in [nil, "gzip"] {
             // Turned off, Opus is refused locally: its conversation never reaches OpenAI.
             let refused = try await disabled.send(body, encoding: encoding)
@@ -257,7 +364,7 @@ final class ClaudeBridgeTests: XCTestCase {
     @MainActor func testGzipOpusRequestRunsClaude() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
-        let response = try await harness.send(["model": ClaudeBridge.slug, "prompt_cache_key": "gz", "input": [
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "gz", "input": [
             harness.environment, ["role": "user", "content": "hello"]] as [Any]], encoding: "gzip")
         XCTAssertEqual(response.status, 200, response.text)
         XCTAssertTrue(response.text.contains("Hello from Opus"))
@@ -290,7 +397,7 @@ final class ClaudeBridgeTests: XCTestCase {
     @MainActor func testClaudeThatNeverStartsFailsTheResponse() async throws {
         let harness = try await Harness(enabled: true, startLimit: 1)
         defer { harness.stop() }
-        let response = try await harness.send(["model": ClaudeBridge.slug, "prompt_cache_key": "start", "input": [
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "start", "input": [
             harness.environment, ["role": "user", "content": "SLOW_START"]] as [Any]])
         XCTAssertEqual(response.status, 200)
         XCTAssertTrue(response.text.contains("response.failed"), response.text)
@@ -303,7 +410,7 @@ final class ClaudeBridgeTests: XCTestCase {
         defer { harness.stop() }
         let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object"]]]
         var input: [Any] = [harness.environment, ["role": "user", "content": "SPAWN_CHILD"]]
-        let first = try await harness.send(["model": ClaudeBridge.slug, "input": input, "tools": tools, "prompt_cache_key": "off"])
+        let first = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "off"])
         let call = try XCTUnwrap((first.completed?["output"] as? [[String: Any]])?.first { $0["type"] as? String == "function_call" }, first.text)
         let pids = try harness.processes()
         XCTAssertEqual(pids.count, 2) // Claude and its child, standing in for the MCP relay.
@@ -312,7 +419,7 @@ final class ClaudeBridgeTests: XCTestCase {
         harness.relay.claude.setEnabled(false)
         try await Harness.waitUntilGone(pids)
         input += [call, ["type": "function_call_output", "call_id": try XCTUnwrap(call["call_id"] as? String), "output": "42"]]
-        let second = try await harness.send(["model": ClaudeBridge.slug, "input": input, "tools": tools, "prompt_cache_key": "off"])
+        let second = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "off"])
         XCTAssertEqual(second.status, 400)
         XCTAssertTrue(second.text.contains(ClaudeBridge.disabledMessage))
         XCTAssertEqual(try harness.launches().count, 1)
@@ -324,7 +431,7 @@ final class ClaudeBridgeTests: XCTestCase {
         defer { harness.stop() }
         let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object"]]]
         var input: [Any] = [harness.environment, ["role": "user", "content": "run it"]]
-        let body: [String: Any] = ["model": ClaudeBridge.slug, "tools": tools, "prompt_cache_key": "ended"]
+        let body: [String: Any] = ["model": ClaudeModel.fallback.slug, "tools": tools, "prompt_cache_key": "ended"]
         var request = body
         request["input"] = input
         let first = try await harness.send(request)
@@ -353,21 +460,21 @@ final class ClaudeBridgeTests: XCTestCase {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
         // No environment message and no prompt_cache_key: identity comes from Codex's turn metadata header.
-        let response = try await harness.send(["model": ClaudeBridge.slug, "prompt_cache_key": "", "input": [["role": "user", "content": "hello"]]],
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "", "input": [["role": "user", "content": "hello"]]],
                                               headers: ["x-codex-turn-metadata": #"{"thread_id":"new-chat","turn_id":"t1"}"#])
         XCTAssertEqual(response.status, 200, response.text)
         XCTAssertTrue(response.text.contains("Hello from Opus"))
         let cwd = try XCTUnwrap(try harness.workingDirectories().first)
         XCTAssertTrue(cwd.contains("switchgpt-claude-"), cwd)
         XCTAssertFalse(cwd.contains(harness.root.lastPathComponent))
-        let anonymous = try await harness.send(["model": ClaudeBridge.slug, "input": [["role": "user", "content": "hello"]]])
+        let anonymous = try await harness.send(["model": ClaudeModel.fallback.slug, "input": [["role": "user", "content": "hello"]]])
         XCTAssertEqual(anonymous.status, 400)
     }
 
     @MainActor func testClaudeThatExitsEarlyReportsItsError() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
-        let response = try await harness.send(["model": ClaudeBridge.slug, "prompt_cache_key": "exit", "input": [
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "exit", "input": [
             harness.environment, ["role": "user", "content": "EXIT_EARLY"]] as [Any]])
         XCTAssertEqual(response.status, 200)
         XCTAssertTrue(response.text.contains("response.failed"), response.text)
@@ -377,7 +484,7 @@ final class ClaudeBridgeTests: XCTestCase {
     @MainActor func testStalledClaudeFailsTheOpenResponse() async throws {
         let harness = try await Harness(enabled: true, stallLimit: 1)
         defer { harness.stop() }
-        let response = try await harness.send(["model": ClaudeBridge.slug, "prompt_cache_key": "stall", "input": [
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "stall", "input": [
             harness.environment, ["role": "user", "content": "STALL_NOW"]] as [Any]])
         XCTAssertEqual(response.status, 200)
         XCTAssertTrue(response.text.contains("response.failed"), response.text)
@@ -390,11 +497,11 @@ final class ClaudeBridgeTests: XCTestCase {
         defer { harness.stop() }
         let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object"]]]
         var input: [Any] = [harness.environment, ["role": "user", "content": "run it"]]
-        let first = try await harness.send(["model": ClaudeBridge.slug, "input": input, "tools": tools, "prompt_cache_key": "effort",
+        let first = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "effort",
                                             "reasoning": ["effort": "xhigh"]])
         let call = try XCTUnwrap((first.completed?["output"] as? [[String: Any]])?.first { $0["type"] as? String == "function_call" }, first.text)
         input += [call, ["type": "function_call_output", "call_id": try XCTUnwrap(call["call_id"] as? String), "output": "42"]]
-        let second = try await harness.send(["model": ClaudeBridge.slug, "input": input, "tools": tools, "prompt_cache_key": "effort",
+        let second = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "effort",
                                              "reasoning": ["effort": "low"]])
         XCTAssertEqual(second.status, 200, second.text)
         let efforts = try harness.launches().map { arguments in arguments.firstIndex(of: "--effort").map { arguments[$0 + 1] } }
@@ -405,13 +512,42 @@ final class ClaudeBridgeTests: XCTestCase {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
         let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object"]]]
-        let first = try await harness.send(["model": ClaudeBridge.slug, "prompt_cache_key": "quit", "tools": tools, "input": [
+        let first = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "quit", "tools": tools, "input": [
             harness.environment, ["role": "user", "content": "SPAWN_CHILD"]] as [Any]])
         XCTAssertEqual(first.status, 200)
         let pids = try harness.processes()
         XCTAssertEqual(pids.count, 2)
         harness.relay.claude.shutdown()
         try await Harness.waitUntilGone(pids)
+    }
+
+    @MainActor func testEachClaudeModelRunsItsOwnCLIModelAndSwitchingRestartsClaude() async throws {
+        let haiku = ClaudeModel(slug: "claude-code-haiku-4-5", name: "Haiku 4.5", cliModel: "claude-haiku-4-5-20251001", efforts: [],
+                                contextWindow: 167_000)
+        let harness = try await Harness(enabled: true, models: [.fallback, haiku])
+        defer { harness.stop() }
+        let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object"]]]
+        var input: [Any] = [harness.environment, ["role": "user", "content": "run it"]]
+        let first = try await harness.send(["model": haiku.slug, "input": input, "tools": tools, "prompt_cache_key": "switch",
+                                            "reasoning": ["effort": "xhigh"]])
+        XCTAssertEqual(first.status, 200, first.text)
+        XCTAssertEqual(first.completed?["model"] as? String, haiku.slug)
+        let call = try XCTUnwrap((first.completed?["output"] as? [[String: Any]])?.first { $0["type"] as? String == "function_call" }, first.text)
+        input += [call, ["type": "function_call_output", "call_id": try XCTUnwrap(call["call_id"] as? String), "output": "42"]]
+        // The user switched to Opus while Haiku waited for the tool result: a fresh process runs the complete history.
+        let second = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "switch",
+                                             "reasoning": ["effort": "high"]])
+        XCTAssertEqual(second.status, 200, second.text)
+        XCTAssertEqual(second.completed?["model"] as? String, ClaudeModel.fallback.slug)
+        let launches = try harness.launches()
+        XCTAssertEqual(launches.map { $0[$0.firstIndex(of: "--model")! + 1] }, ["claude-haiku-4-5-20251001", "claude-opus-5-5[1m]"])
+        XCTAssertEqual(launches.map { args in args.firstIndex(of: "--effort").map { args[$0 + 1] } }, [nil, "high"])
+
+        // A Claude model Claude Code no longer lists is refused locally, never sent to OpenAI.
+        let gone = try await harness.send(["model": "claude-code-gone-1", "prompt_cache_key": "gone", "input": [harness.environment]])
+        XCTAssertEqual(gone.status, 400)
+        XCTAssertTrue(gone.text.contains(ClaudeBridge.unavailableMessage("claude-code-gone-1")))
+        XCTAssertTrue(harness.upstream.requests.isEmpty)
     }
 
     @MainActor func testModelListIncludesOpusOnlyWhileEnabled() async throws {
@@ -422,13 +558,50 @@ final class ClaudeBridgeTests: XCTestCase {
             request.setValue("W/\"cached\"", forHTTPHeaderField: "If-None-Match")
             let (body, response) = try await URLSession(configuration: .ephemeral).data(for: request)
             XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
-            XCTAssertEqual((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag"),
-                           enabled ? "W/\"catalog-switchgpt-claude\"" : "W/\"catalog\"")
+            let etag = try XCTUnwrap((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag"))
+            XCTAssertEqual(etag, enabled ? ClaudeBridge.catalogETag("W/\"catalog\"", models: [.fallback]) : "W/\"catalog\"")
             let models = try XCTUnwrap((JSONSerialization.jsonObject(with: body) as? [String: Any])?["models"] as? [[String: Any]])
-            XCTAssertEqual(models.contains { $0["slug"] as? String == ClaudeBridge.slug }, enabled)
+            XCTAssertEqual(models.contains { $0["slug"] as? String == ClaudeModel.fallback.slug }, enabled)
             XCTAssertEqual(harness.upstream.requests.first?.headers["if-none-match"] == nil, enabled)
             harness.stop()
         }
+    }
+
+    @MainActor func testModelListWaitsForClaudeCodeToBeAskedAgain() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("claude")
+        FileManager.default.createFile(atPath: executable.path, contents: Data(), attributes: [.posixPermissions: 0o755])
+        let sonnet = ClaudeModel(slug: "claude-code-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
+        // Claude Code was just updated: the list ChatGPT fetches after its restart must already include the new models.
+        let catalog = ClaudeModelCatalog(file: root.appendingPathComponent("claude-models.json"), executable: { executable },
+                                         discover: { _ in Thread.sleep(forTimeInterval: 0.5); return [sonnet] })
+        let harness = try await Harness(enabled: true, catalog: catalog)
+        defer { harness.stop() }
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:\(harness.port)/backend-api/codex/models?client_version=1")!)
+        request.setValue("Bearer desktop-token", forHTTPHeaderField: "Authorization")
+        let (body, response) = try await URLSession(configuration: .ephemeral).data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        let models = try XCTUnwrap((JSONSerialization.jsonObject(with: body) as? [String: Any])?["models"] as? [[String: Any]])
+        XCTAssertEqual(models.compactMap { $0["slug"] as? String }.filter(ClaudeModel.isClaude), [sonnet.slug])
+    }
+
+    func testSlowModelQueryServesThePreviousListAfterTheWait() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("claude")
+        FileManager.default.createFile(atPath: executable.path, contents: Data(), attributes: [.posixPermissions: 0o755])
+        let sonnet = ClaudeModel(slug: "claude-code-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
+        let catalog = ClaudeModelCatalog(executable: { executable }, discover: { _ in Thread.sleep(forTimeInterval: 1); return [sonnet] })
+        let start = Date()
+        // Resuming twice would trap: the completion runs once, at the deadline, even though the query finishes later.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            catalog.refresh(waitingAtMost: 0.1) { continuation.resume() }
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.9)
+        XCTAssertEqual(catalog.models, [.fallback])
+        await catalog.refreshed()
+        XCTAssertEqual(catalog.models, [sonnet])
     }
 
     /// Opt-in: SWITCHGPT_LIVE_RELAY=<built SwitchGPT executable> runs the signed-in Claude Code CLI once.
@@ -442,7 +615,7 @@ final class ClaudeBridgeTests: XCTestCase {
                              "parameters": ["type": "object", "properties": ["cmd": ["type": "string"]], "required": ["cmd"]]]]
         var input: [Any] = [harness.environment, ["role": "user", "content": [["type": "input_text",
             "text": "Call exec_command exactly once with cmd \"echo 42\". After the result arrives, reply with only the command output."]]]]
-        let body: [String: Any] = ["model": ClaudeBridge.slug, "tools": tools, "prompt_cache_key": "live", "reasoning": ["effort": "low"],
+        let body: [String: Any] = ["model": ClaudeModel.fallback.slug, "tools": tools, "prompt_cache_key": "live", "reasoning": ["effort": "low"],
                                    "instructions": "You are testing a tool relay."]
         var request = body
         request["input"] = input
@@ -503,6 +676,13 @@ final class ClaudeBridgeTests: XCTestCase {
     }
 }
 
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func increment() { lock.withLock { count += 1 } }
+}
+
 /// A relay wired to a fake Claude Code CLI that speaks stream-json and calls the MCP relay over HTTP.
 @MainActor private final class Harness {
     let root: URL
@@ -514,7 +694,8 @@ final class ClaudeBridgeTests: XCTestCase {
     }
 
     init(enabled: Bool, claude: URL? = nil, relayExecutable: URL = URL(fileURLWithPath: "/usr/bin/true"),
-         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90) async throws {
+         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, models: [ClaudeModel]? = nil,
+         catalog: ClaudeModelCatalog? = nil) async throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
         let fake = claude ?? root.appendingPathComponent("claude")
@@ -524,8 +705,8 @@ final class ClaudeBridgeTests: XCTestCase {
         let auth = root.appendingPathComponent("auth.json")
         try Data(#"{"tokens":{"access_token":"desktop-token"}}"#.utf8).write(to: auth)
         let upstreamPort = try await upstream.start()
-        let executor = ClaudeExecutor(claudeExecutable: { fake }, relayExecutable: relayExecutable, stallLimit: stallLimit,
-                                      startLimit: startLimit)
+        let executor = ClaudeExecutor(claudeExecutable: { fake }, models: catalog ?? ClaudeModelCatalog(models: models),
+                                      relayExecutable: relayExecutable, stallLimit: stallLimit, startLimit: startLimit)
         executor.setEnabled(enabled)
         relay = ModelRelay(desktopAuth: auth, upstreamBaseURL: URL(string: "http://127.0.0.1:\(upstreamPort)")!, claude: executor)
         let claims = Data(#"{"sub":"first-subject"}"#.utf8).base64EncodedString()

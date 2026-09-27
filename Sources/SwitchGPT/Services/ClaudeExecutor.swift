@@ -9,7 +9,7 @@ protocol ClaudeSink: AnyObject, Sendable {
     func observeClose(_ handler: @escaping @Sendable () -> Void)
 }
 
-/// Runs Opus 5.5 through the Claude Code CLI signed in on this Mac while Codex executes every tool.
+/// Runs Claude models through the Claude Code CLI signed in on this Mac while Codex executes every tool.
 /// Claude's private MCP relay parks it at a tool boundary; that call becomes a real Codex tool call,
 /// and the next Codex request returns the result to the same Claude process.
 final class ClaudeExecutor: @unchecked Sendable {
@@ -18,6 +18,7 @@ final class ClaudeExecutor: @unchecked Sendable {
     private let lock = NSLock()
     private var isEnabled = false
     private var port: UInt16 = 0
+    let models: ClaudeModelCatalog
     private let claudeExecutable: @Sendable () -> URL?
     private let relayExecutable: URL?
     private let stallLimit: TimeInterval
@@ -31,9 +32,10 @@ final class ClaudeExecutor: @unchecked Sendable {
 
     /// stallLimit: how long an open response may wait without any Claude Code output.
     /// startLimit: how long a new Claude Code process may take to report that it started.
-    init(claudeExecutable: @escaping @Sendable () -> URL? = { ClaudeCLI.locate() },
+    init(claudeExecutable: @escaping @Sendable () -> URL? = { ClaudeCLI.locate() }, models: ClaudeModelCatalog = ClaudeModelCatalog(),
          relayExecutable: URL? = Bundle.main.executableURL, stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90) {
         self.claudeExecutable = claudeExecutable
+        self.models = models
         self.relayExecutable = relayExecutable
         self.stallLimit = stallLimit
         self.startLimit = startLimit
@@ -51,8 +53,9 @@ final class ClaudeExecutor: @unchecked Sendable {
     var enabled: Bool { lock.withLock { isEnabled } }
     func setEnabled(_ enabled: Bool) {
         lock.withLock { isEnabled = enabled }
+        if enabled { models.refresh() }
         // Nothing may keep running or wait for a tool result once Claude is turned off.
-        if !enabled { stop(reason: "Claude Opus 5.5 was turned off in SwitchGPT") }
+        else { stop(reason: "Claude models were turned off in SwitchGPT") }
     }
     var relayPort: UInt16 {
         get { lock.withLock { port } }
@@ -98,8 +101,12 @@ final class ClaudeExecutor: @unchecked Sendable {
         guard let data = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] else {
             throw ClaudeFailure(status: 400, message: "Invalid JSON request")
         }
-        guard data["model"] as? String == ClaudeBridge.slug else { throw ClaudeFailure(status: 400, message: "Unsupported model") }
-        guard ClaudeBridge.efforts.contains(ClaudeBridge.effort(data)) else { throw ClaudeFailure(status: 400, message: "Unsupported effort") }
+        guard let slug = data["model"] as? String, ClaudeModel.isClaude(slug) else { throw ClaudeFailure(status: 400, message: "Unsupported model") }
+        guard let model = models.model(for: slug) else { throw ClaudeFailure(status: 400, message: ClaudeBridge.unavailableMessage(slug)) }
+        // A model without an effort setting ignores the one Codex sends.
+        guard model.efforts.isEmpty || model.efforts.contains(ClaudeBridge.effort(data)) else {
+            throw ClaudeFailure(status: 400, message: "Unsupported effort")
+        }
         let metadata = request.headers["x-codex-turn-metadata"]
             .flatMap { (try? JSONSerialization.jsonObject(with: Data($0.utf8))) as? [String: Any] }
         let candidates = [data["prompt_cache_key"] as? String, request.headers["thread-id"], request.headers["session-id"],
@@ -126,19 +133,19 @@ final class ClaudeExecutor: @unchecked Sendable {
                 cancel(run, "Codex compacted the conversation; continuing from the compacted history")
                 forget(run)
             }
-            compact(data, key: key, turnID: turnID, fingerprint: fingerprint, sink: sink)
+            compact(data, model: model, key: key, turnID: turnID, fingerprint: fingerprint, sink: sink)
             return
         }
         let results = Self.toolResults(inputs)
         let table = try ClaudeBridge.toolTable(data["tools"])
         if let current = run, current.writer == nil {
             let answered = !current.waiting.isEmpty && current.waiting.isSubset(of: results.keys)
-            let changed = ClaudeBridge.effort(data) != current.effort
+            let changed = model != current.model || ClaudeBridge.effort(data) != current.effort
                 || ClaudeBridge.digest(Self.roles(inputs)) != ClaudeBridge.digest(Self.roles(current.inputs))
                 || ClaudeBridge.digest(data["instructions"]) != ClaudeBridge.digest(current.data["instructions"])
                 || ClaudeBridge.tableDigest(table) != ClaudeBridge.tableDigest(current.table)
             if !answered || changed || (turnID != nil && current.turnID != nil && turnID != current.turnID) {
-                // Codex moved on (new message, new turn, changed context or tools): replay its complete,
+                // Codex moved on (new message, new turn, another model, changed context or tools): replay its complete,
                 // authoritative history in a fresh CLI. Never smuggle a steering message inside a tool result.
                 cancel(current, "Codex continued the conversation; continuing from complete Codex history")
                 forget(current)
@@ -149,7 +156,7 @@ final class ClaudeExecutor: @unchecked Sendable {
         let active: ClaudeRun
         if let run { active = run } else {
             // A fresh process reads the whole history, including tool calls of an ended run and their results.
-            active = ClaudeRun(key: key, turnID: turnID, data: data, inputs: inputs, table: table)
+            active = ClaudeRun(key: key, turnID: turnID, model: model, data: data, inputs: inputs, table: table)
             runs[key] = active
             runsByID[active.id] = active
         }
@@ -169,10 +176,10 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     /// One tool-less Claude call that turns the Codex history into a Codex compaction item.
-    private func compact(_ data: [String: Any], key: String, turnID: String?, fingerprint: String, sink: ClaudeSink) {
+    private func compact(_ data: [String: Any], model: ClaudeModel, key: String, turnID: String?, fingerprint: String, sink: ClaudeSink) {
         var request = data
         request["tools"] = [Any]()
-        let run = ClaudeRun(key: key, turnID: turnID, data: request, inputs: request["input"] as? [Any] ?? [],
+        let run = ClaudeRun(key: key, turnID: turnID, model: model, data: request, inputs: request["input"] as? [Any] ?? [],
                             table: [:], compacting: true)
         runsByID[run.id] = run
         attach(run, sink: sink, fingerprint: fingerprint)
@@ -181,7 +188,7 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     private func attach(_ run: ClaudeRun, sink: ClaudeSink, fingerprint: String) {
-        let writer = ClaudeResponseWriter(sink: sink, fingerprint: fingerprint)
+        let writer = ClaudeResponseWriter(sink: sink, fingerprint: fingerprint, model: run.model.slug)
         run.writer = writer
         run.touched = Date()
         run.output = Date()
@@ -278,16 +285,9 @@ final class ClaudeExecutor: @unchecked Sendable {
             // Claude Code has no tools of its own, so it never needs the Codex folder. Starting it there would make it
             // read a protected folder such as Documents, where macOS blocks it behind a permission prompt.
             process.currentDirectoryURL = scratch
-            var environment = ProcessInfo.processInfo.environment
-            // Authentication stays entirely inside the original CLI; no credentials are read or injected here.
-            for name in ["CLAUDE_CODE_SAFE_MODE", "CLAUDE_CODE_SIMPLE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
-                         "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"] {
-                environment[name] = nil
-            }
+            var environment = ClaudeCLI.environment(executable: executable)
             // Codex already truncates tool output; Claude Code's own 25,000-token MCP cap would cut screenshots and results again.
             if environment["MAX_MCP_OUTPUT_TOKENS"] == nil { environment["MAX_MCP_OUTPUT_TOKENS"] = "100000" }
-            environment["PATH"] = [executable.deletingLastPathComponent().path, "/opt/homebrew/bin", "/usr/local/bin",
-                                   "/usr/bin", "/bin", "/usr/sbin", "/sbin", environment["PATH"]].compactMap { $0 }.joined(separator: ":")
             process.environment = environment
             let input = Pipe()
             let output = Pipe()
@@ -552,6 +552,7 @@ final class ClaudeRun: @unchecked Sendable {
     let id = ClaudeBridge.identifier()
     let key: String
     let turnID: String?
+    let model: ClaudeModel
     let data: [String: Any]
     let compacting: Bool
     var inputs: [Any]
@@ -573,9 +574,11 @@ final class ClaudeRun: @unchecked Sendable {
     var buffer = Data()
     private var errors = Data()
 
-    init(key: String, turnID: String?, data: [String: Any], inputs: [Any], table: [String: ClaudeTool], compacting: Bool = false) {
+    init(key: String, turnID: String?, model: ClaudeModel, data: [String: Any], inputs: [Any], table: [String: ClaudeTool],
+         compacting: Bool = false) {
         self.key = key
         self.turnID = turnID
+        self.model = model
         self.data = data
         self.inputs = inputs
         self.table = table
@@ -597,8 +600,9 @@ final class ClaudeRun: @unchecked Sendable {
     }
 
     func arguments(relay: URL?, config: URL) -> [String] {
-        var arguments = ["--restricted", "-p", "--model", ClaudeBridge.claudeModel, "--effort", effort,
-                         "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+        var arguments = ["--restricted", "-p", "--model", model.cliModel]
+        if model.efforts.contains(effort) { arguments += ["--effort", effort] }
+        arguments += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                          "--tools", "", "--setting-sources", "", "--strict-mcp-config"]
         if !table.isEmpty, let relay {
             let server: [String: Any] = ["command": relay.path, "args": [ClaudeMCPRelay.flag, config.path]]
@@ -636,6 +640,7 @@ final class ClaudePending: @unchecked Sendable {
 final class ClaudeResponseWriter: @unchecked Sendable {
     let sink: ClaudeSink
     let fingerprint: String
+    let model: String
     let responseID = "resp_" + ClaudeBridge.identifier()
     var usage: [String: Any]?
     private(set) var wire = Data()
@@ -645,9 +650,10 @@ final class ClaudeResponseWriter: @unchecked Sendable {
     private var contextInput: Int?
     private var contextCached = 0
 
-    init(sink: ClaudeSink, fingerprint: String) {
+    init(sink: ClaudeSink, fingerprint: String, model: String) {
         self.sink = sink
         self.fingerprint = fingerprint
+        self.model = model
     }
 
     func event(_ kind: String, _ payload: [String: Any] = [:]) {
@@ -664,7 +670,7 @@ final class ClaudeResponseWriter: @unchecked Sendable {
 
     func response(_ status: String) -> [String: Any] {
         ["id": responseID, "object": "response", "created_at": Int(Date().timeIntervalSince1970), "status": status,
-         "model": ClaudeBridge.slug, "output": items, "usage": usage ?? NSNull()]
+         "model": model, "output": items, "usage": usage ?? NSNull()]
     }
 
     /// The latest Claude API call is the context actually occupied, including Claude Code's own prompt.

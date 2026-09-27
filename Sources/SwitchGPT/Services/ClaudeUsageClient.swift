@@ -5,10 +5,11 @@ struct ClaudeCredential: Sendable {
     let accessToken: String
     let expiresAt: Date?
     let subscriptionType: String?
+    let rateLimitTier: String?
 
     init(data: Data) throws {
         struct Stored: Decodable {
-            struct OAuth: Decodable { let accessToken: String; let expiresAt: Double?; let subscriptionType: String? }
+            struct OAuth: Decodable { let accessToken: String; let expiresAt: Double?; let subscriptionType: String?; let rateLimitTier: String? }
             let claudeAiOauth: OAuth?
         }
         guard let oauth = try? JSONDecoder().decode(Stored.self, from: data).claudeAiOauth, !oauth.accessToken.isEmpty else {
@@ -17,6 +18,15 @@ struct ClaudeCredential: Sendable {
         accessToken = oauth.accessToken
         expiresAt = oauth.expiresAt.map { Date(timeIntervalSince1970: $0 / 1000) }
         subscriptionType = oauth.subscriptionType
+        rateLimitTier = oauth.rateLimitTier
+    }
+
+    /// "max" with tier "default_claude_max_20x" is "Max 20x"; any other plan is shown as Claude Code names it.
+    var plan: String? {
+        if let tier = rateLimitTier, let range = tier.range(of: #"max_[0-9]+x$"#, options: .regularExpression) {
+            return "Max " + tier[range].dropFirst("max_".count)
+        }
+        return subscriptionType
     }
 
     static func read() throws -> ClaudeCredential {
@@ -59,7 +69,7 @@ struct ClaudeUsageClient: Sendable {
             let account: Account?
         }
         let email = try? JSONDecoder().decode(Profile.self, from: await request(credential, path: "profile")).account?.email
-        return ClaudeAccountUsage(usage: usage, plan: credential.subscriptionType, email: email)
+        return ClaudeAccountUsage(usage: usage, plan: credential.plan, email: email)
     }
 
     private func request(_ credential: ClaudeCredential, path: String) async throws -> Data {

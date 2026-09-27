@@ -35,6 +35,14 @@ final class ClaudeUsageTests: XCTestCase {
         XCTAssertEqual(credential.accessToken, "token")
         XCTAssertEqual(credential.expiresAt?.timeIntervalSince1970, 1790532599)
         XCTAssertEqual(credential.subscriptionType, "max")
+        XCTAssertEqual(credential.plan, "max")
+        let tiered = #"{"claudeAiOauth":{"accessToken":"t","subscriptionType":"max","rateLimitTier":"default_claude_max_20x"}}"#
+        XCTAssertEqual(try ClaudeCredential(data: Data(tiered.utf8)).plan, "Max 20x")
+        XCTAssertEqual(PlanBadge.title("Max 20x"), "Max 20x")
+        XCTAssertEqual(PlanBadge.title("prolite"), "Pro")
+        XCTAssertEqual(PlanBadge.title("pro"), "Pro 20x")
+        XCTAssertEqual(PlanBadge.title("plus"), "Plus")
+        XCTAssertEqual(PlanBadge.title("max"), "Max")
         XCTAssertThrowsError(try ClaudeCredential(data: Data("{}".utf8)))
         XCTAssertThrowsError(try ClaudeCredential(data: Data()))
     }

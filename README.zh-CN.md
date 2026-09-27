@@ -22,14 +22,14 @@
 <p align="center">
   <a href="https://github.com/yoonpooh/SwitchGPT/releases/latest">下载</a> ·
   <a href="#快速开始">快速开始</a> ·
-  <a href="#claude-opus-55可选">Claude Opus 5.5</a> ·
+  <a href="#claude-模型可选">Claude 模型</a> ·
   <a href="#问题排查">问题排查</a> ·
   <a href="https://github.com/yoonpooh/SwitchGPT/releases">更新日志</a>
 </p>
 
 ---
 
-SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录的同时，选择处理 Codex 模型请求的账户。GitHub 等插件以及对这台 Mac 的远程访问继续使用原有认证，模型请求则使用多个已保存账户的剩余额度。你还可以通过本机已登录的 Claude Code CLI，把 **Claude Opus 5.5** 加入模型选择器。
+SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录的同时，选择处理 Codex 模型请求的账户。GitHub 等插件以及对这台 Mac 的远程访问继续使用原有认证，模型请求则使用多个已保存账户的剩余额度。你还可以通过本机已登录的 Claude Code CLI，把 **Fable 5.1、Opus 5.5、Sonnet 5** 等 Claude 模型 加入模型选择器。
 
 ## 目录
 
@@ -41,7 +41,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 - [快速开始](#快速开始)
 - [使用方法](#使用方法)
 - [自动切换](#自动切换)
-- [Claude Opus 5.5（可选）](#claude-opus-55可选)
+- [Claude 模型（可选）](#claude-模型可选)
 - [隐私与本地数据](#隐私与本地数据)
 - [问题排查](#问题排查)
 - [卸载](#卸载)
@@ -57,13 +57,13 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 - **额度用尽自动切换** — 5 小时或每周额度用尽时，按列表顺序选择下一个可用账户。
 - **查看实际处理账户** — 分别显示下次请求的账户、最近完成响应的账户和桌面登录账户。
 - **用量一目了然** — 每个已保存账户都显示剩余额度、重置时间、套餐徽章、头像和重置次数。
-- **Claude Opus 5.5（可选）** — 在 ChatGPT 模型选择器中通过 Claude Code 运行 Opus 5.5，所有工具调用均由 Codex 执行。
+- **Claude 模型（可选）** — 在 ChatGPT 模型选择器中通过 Claude Code 运行你的账户可用的 Claude 模型，所有工具调用均由 Codex 执行。
 - **完全本地** — 认证信息保存在 macOS 钥匙串中，请求经本地中继直接发往 OpenAI。没有 SwitchGPT 服务器。
 - **多语言** — 英语、韩语、日语和简体中文。
 
 ## 0.3.0 新功能
 
-- **Claude Opus 5.5（可选）：** 在 `⋯` 中开启 **使用 Claude Opus 5.5**，即可在 ChatGPT 模型选择器中添加 Opus 5.5。它通过已登录的 Claude Code CLI 运行，不消耗 OpenAI 额度；所有工具调用都交回 Codex，沿用现有的权限与审批设置。详见 [Claude Opus 5.5](#claude-opus-55可选)。
+- **Claude 模型（可选）：** 在 `⋯` 中开启 **使用 Claude 模型**，即可把 Claude Code CLI 提供的模型加入 ChatGPT 模型选择器。它们通过已登录的 Claude Code CLI 运行，不消耗 OpenAI 额度；所有工具调用都交回 Codex，沿用现有的权限与审批设置。详见 [Claude 模型](#claude-模型可选)。
 
 更早的变更请查看[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)。
 
@@ -73,7 +73,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 flowchart LR
     Desktop["ChatGPT 桌面<br/>（以账户 A 登录）"] -->|Codex 模型请求| Relay["SwitchGPT 中继<br/>127.0.0.1:19565"]
     Relay -->|GPT 模型| OpenAI["OpenAI<br/>（所选账户 B、C、…）"]
-    Relay -.->|Opus 5.5，可选| Claude["Claude Code CLI<br/>（工具调用交回 Codex）"]
+    Relay -.->|Claude 模型，可选| Claude["Claude Code CLI<br/>（工具调用交回 Codex）"]
     Desktop --> Plugins["插件与远程访问<br/>（不变，账户 A）"]
 ```
 
@@ -83,7 +83,7 @@ flowchart LR
 | GitHub 等已连接插件 | 已连接到应用的各服务账户 |
 | 对这台 Mac 的远程访问 | 原有桌面登录和远程设置 |
 | 这台 Mac 上的 Codex 模型请求 | SwitchGPT 中选择的账户 |
-| Opus 5.5 请求（可选） | 本机 Claude Code CLI 的登录 |
+| Claude 模型请求（可选） | 本机 Claude Code CLI 的登录 |
 
 例如，桌面保持 A 账户登录及其 GitHub 连接、远程设置，模型请求则由已保存的 B 账户处理。B 的额度用尽后，可自动切换到 C，无需更改桌面登录或重新连接插件。
 
@@ -93,7 +93,7 @@ flowchart LR
 
 - 运行 **macOS 14 或更新版本**的 Apple 芯片 Mac
 - 已安装并登录的当前 **ChatGPT 桌面应用**，须使用默认文件式认证路径 `~/.codex/auth.json`。SwitchGPT 使用应用自带的 CLI，无需单独安装 Codex CLI。
-- 可选：如需使用 Claude Opus 5.5，需要已安装并登录的 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
+- 可选：如需使用 Claude 模型，需要已安装并登录的 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## 安装
 
@@ -160,25 +160,27 @@ flowchart LR
 
 在 `⋯` 中关闭自动切换后，将继续使用所选账户并直接返回其额度错误。自动模式下，卡片顺序优先于手动选择，调整顺序会从下一个请求起生效。各账户额度仍各自独立。
 
-## Claude Opus 5.5（可选）
+## Claude 模型（可选）
 
-在 `⋯` 中开启 **使用 Claude Opus 5.5** 后，ChatGPT 的模型选择器会增加 Opus 5.5。它通过本机已登录的 Claude Code CLI（`~/.local/bin/claude`、`/opt/homebrew/bin/claude` 或 `/usr/local/bin/claude`）运行。SwitchGPT 不读取 Anthropic 凭据；未安装 CLI 时该开关不可用。
+在 `⋯` 中开启 **使用 Claude 模型** 后，账户可用的 Claude 模型会加入 ChatGPT 的模型选择器。它们通过本机已登录的 Claude Code CLI（`~/.local/bin/claude`、`/opt/homebrew/bin/claude` 或 `/usr/local/bin/claude`）运行。SwitchGPT 不读取 Anthropic 凭据；未安装 CLI 时该开关不可用。
 
 模型列表需重启后才会更新，因此切换时会询问是否重启 ChatGPT，并删除 `~/.codex/models_cache.json` 以获取新列表。
 
-- **不消耗 OpenAI 额度** — Opus 请求同样经过本地中继和桌面登录校验，但不会选择 OpenAI 账户或消耗其额度。其他模型不受影响。
+SwitchGPT 会向 Claude Code 查询可用模型（例如 Fable 5.1、Opus 5.5、Sonnet 5、Haiku 4.5），并分别以 `claude-code-<模型>` 列出。Claude Code 更新后或每 6 小时，列表会在不调用模型的情况下重新获取，并在下次重启 ChatGPT 后出现在选择器中。每个模型以 Claude Code 的自动压缩阈值作为上下文窗口（1M 模型为 967K，Haiku 为 167K），因此 Codex 会先于 Claude Code 压缩线程，包括刚切换到窗口更小的模型时。
+
+- **不消耗 OpenAI 额度** — Claude 请求同样经过本地中继和桌面登录校验，但不会选择 OpenAI 账户或消耗其额度。其他模型不受影响。
 - **所有工具由 Codex 执行** — Claude Code 不使用自带工具。所有工具调用都交回 Codex，按当前权限与审批设置执行，结果再返回同一个 Claude 进程。
-- **压缩** — 手动和自动压缩都由 Opus 生成摘要。
-- **线程中途切换模型** — 使用过 Opus 的线程也可以切换到 GPT 模型继续：SwitchGPT 只移除 OpenAI 会拒绝的 Opus 条目，并把 Opus 的压缩摘要转成可读消息。反方向有限制：GPT 模型压缩的摘要是加密的，Opus 只能从其后的消息继续，缺少早先上下文时会说明。
-- **托管工具** — 网页搜索等 OpenAI 托管工具在 Opus 中不可用，Opus 会被告知缺少哪些工具。
+- **压缩** — 手动和自动压缩都由当前使用的 Claude 模型生成摘要。
+- **线程中途切换模型** — 在 Claude 模型之间切换会用完整历史启动新的 Claude 进程，也可以切换到 GPT 模型继续：SwitchGPT 只移除 OpenAI 会拒绝的 Claude 条目，并把 Claude 的压缩摘要转成可读消息。反方向有限制：GPT 模型压缩的摘要是加密的，Claude 只能从其后的消息继续，缺少早先上下文时会说明。
+- **托管工具** — 网页搜索等 OpenAI 托管工具在 Claude 模型中不可用，Claude 会被告知缺少哪些工具。
 
 <details>
 <summary>实现细节</summary>
 
-- 开关关闭时，SwitchGPT 会在本地直接拒绝 Opus 请求，不会发往 OpenAI；关闭的同时也会结束正在运行的 Opus 任务。压缩请求（gzip、deflate、zstd）同样处理。zstd 需要 Homebrew 的 `zstd`；开关开启时，SwitchGPT 无法读取的请求会在本地直接拒绝，不会转发。
+- 开关关闭时，SwitchGPT 会在本地直接拒绝 Claude 请求，不会发往 OpenAI；关闭的同时也会结束正在运行的 Claude 任务。压缩请求（gzip、deflate、zstd）同样处理。zstd 需要 Homebrew 的 `zstd`；开关开启时，SwitchGPT 无法读取的请求会在本地直接拒绝，不会转发。
 - Claude Code 在一个空的专用文件夹中运行，而不是线程所在文件夹，因此“文稿”等受保护文件夹中的线程或没有项目的新聊天不会卡在 macOS 权限提示上。Codex 工具仍在线程文件夹中运行。
-- 若 Claude Code 在 90 秒内未启动或中途退出，Opus 响应会附带 Claude Code 的错误信息失败。
-- 如果 `~/.codex/config.toml` 设置了 `model_catalog_json`，该列表会取代 SwitchGPT 添加了 Opus 的列表；开启 Opus 时 SwitchGPT 会给出提示。
+- 若 Claude Code 在 90 秒内未启动或中途退出，Claude 响应会附带 Claude Code 的错误信息失败。
+- 如果 `~/.codex/config.toml` 设置了 `model_catalog_json`，该列表会取代 SwitchGPT 添加了 Claude 模型的列表；开启 Claude 模型时 SwitchGPT 会给出提示。
 
 </details>
 
@@ -190,9 +192,10 @@ flowchart LR
 | --- | --- |
 | 账户列表和顺序 | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | 所选模型账户 | `~/Library/Application Support/SwitchGPT/routing-selection.json` |
-| 自动切换、Opus 设置和连接状态 | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
+| 自动切换、Claude 模型设置和连接状态 | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
 | 未确认的重置请求编号 | `~/Library/Application Support/SwitchGPT/reset-credit-attempts.json`（含用于并发保存控制的 `.lock` 文件） |
 | 请求元数据 | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
+| Claude 模型列表 | `~/Library/Application Support/SwitchGPT/claude-models.json` |
 | 原有桌面认证 | `~/.codex/auth.json` — 保留 |
 
 通过 `~/.codex/config.toml` 的管理区块设置 `openai_base_url`，并使用 HTTP 流式传输，让后续请求采用所选账户。本地日志记录不透明的账户标识、路径、模型、HTTP 状态、完成状态、令牌计数、客户端类型、时间及额度耗尽状态。**不记录提示词、响应内容或认证令牌。**
@@ -208,8 +211,8 @@ flowchart LR
 | 账户需要重新登录 | 通过浏览器重新添加该账户。已保存账户会自动刷新，仅当刷新令牌过期或被撤销时需要重新登录。 |
 | 用量显示为未知 | 缺失信息显示为未知，而不是剩余量为零。请尝试**刷新**。 |
 | 提示自定义端点冲突 | SwitchGPT 不会覆盖其他中继的 `openai_base_url`。如需由 SwitchGPT 管理，请先移除原有设置。 |
-| 模型选择器中没有 Opus 5.5 | 切换开关后重启 ChatGPT；若 `~/.codex/config.toml` 中设置了 `model_catalog_json`，请将其移除。 |
-| Opus 开关不可用 | 在支持的路径之一安装 Claude Code CLI 并登录。 |
+| 模型选择器中没有 Claude 模型 | 切换开关后重启 ChatGPT；若 `~/.codex/config.toml` 中设置了 `model_catalog_json`，请将其移除。 |
+| Claude 开关不可用 | 在支持的路径之一安装 Claude Code CLI 并登录。 |
 
 ## 卸载
 

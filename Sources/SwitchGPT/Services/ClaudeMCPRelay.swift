@@ -10,6 +10,19 @@ enum ClaudeCLI {
     static func locate(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> URL? {
         candidates(home: home).first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
+
+    /// The user's environment, minus anything that would replace Claude Code's own sign-in, with the CLI's folder on PATH.
+    static func environment(executable: URL) -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        // Authentication stays entirely inside the original CLI; no credentials are read or injected here.
+        for name in ["CLAUDE_CODE_SAFE_MODE", "CLAUDE_CODE_SIMPLE", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+                     "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"] {
+            environment[name] = nil
+        }
+        environment["PATH"] = [executable.deletingLastPathComponent().path, "/opt/homebrew/bin", "/usr/local/bin",
+                               "/usr/bin", "/bin", "/usr/sbin", "/sbin", environment["PATH"]].compactMap { $0 }.joined(separator: ":")
+        return environment
+    }
 }
 
 /// Private stdio MCP transport started by Claude Code as "SwitchGPT <flag> <relay.json>".

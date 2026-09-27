@@ -91,7 +91,7 @@
 "routing_waiting" = "デスクトップのリクエスト待ち";
 "routing_waiting_help" = "ChatGPTでメッセージを送信すると接続を確認できます。";
 "routing_auto_badge" = "自動";
-"routing_auto_toggle" = "リスト順で自動切り替え";
+"routing_auto_toggle" = "アカウント順で自動切り替え";
 "routing_auto_help" = "利用可能な先頭のアカウントを優先し、上位のアカウントの利用枠が回復したら次のリクエストから戻ります。手動で選んだアカウントを固定するには無効にしてください。";
 "routing_auto_changed" = "アカウントの優先順位に従って自動切り替え";
 "routing_no_available" = "利用可能なアカウントの確認が必要";
@@ -126,15 +126,15 @@
 
 "routing_manual_badge" = "手動";
 
-"claude_model_description" = "このMacでサインイン済みのClaude Code CLIで実行するOpus 5.5です。ツールはすべてCodexが実行します。";
-"claude_toggle" = "Claude Opus 5.5を使用";
-"claude_missing" = "Claude Opus 5.5（Claude Code未インストール）";
-"claude_restart_enable" = "Opus 5.5を表示するためにChatGPTを再起動しますか？";
-"claude_restart_disable" = "Opus 5.5を一覧から外すためにChatGPTを再起動しますか？";
+"claude_model_description" = "このMacでサインイン済みのClaude Code CLIで実行する%@です。ツールはすべてCodexが実行します。";
+"claude_toggle" = "Claudeモデルを使用";
+"claude_missing" = "Claudeモデル（Claude Code未インストール）";
+"claude_restart_enable" = "Claudeモデルを表示するためにChatGPTを再起動しますか？";
+"claude_restart_disable" = "Claudeモデルを一覧から外すためにChatGPTを再起動しますか？";
 "claude_restart_detail" = "モデル選択は再起動後に更新されます。実行中のタスクが中断される場合があります。ログインは維持されます。";
 "claude_restart_action" = "ChatGPTを再起動";
 "claude_restart_later" = "後で";
-"claude_catalog_override" = "config.toml で model_catalog_json が設定されていると Opus 5.5 は表示されません。その行を削除してから ChatGPT を再起動してください。";
+"claude_catalog_override" = "config.toml で model_catalog_json が設定されていると Claude モデルは表示されません。その行を削除してから ChatGPT を再起動してください。";
 "claude_usage_help" = "このMacのClaude Codeにサインインしているアカウントの利用枠";
 "claude_scoped_weekly" = "%@ 週間";
 "claude_signed_out" = "Claude Codeにサインインしていません。ターミナルでclaudeを実行してサインインしてください。";

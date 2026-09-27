@@ -22,14 +22,14 @@
 <p align="center">
   <a href="https://github.com/yoonpooh/SwitchGPT/releases/latest">다운로드</a> ·
   <a href="#빠른-시작">빠른 시작</a> ·
-  <a href="#claude-opus-55-선택">Claude Opus 5.5</a> ·
+  <a href="#claude-모델-선택">Claude 모델</a> ·
   <a href="#문제-해결">문제 해결</a> ·
   <a href="https://github.com/yoonpooh/SwitchGPT/releases">변경 기록</a>
 </p>
 
 ---
 
-SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex 모델 요청에 사용할 계정만 전환하는 macOS 메뉴 막대 앱입니다. GitHub 등의 플러그인과 이 Mac으로의 원격 접속은 기존 인증을 그대로 사용하고, 모델 요청은 저장한 여러 계정의 남은 사용량으로 처리합니다. 이 Mac에 로그인된 Claude Code CLI를 통해 **Claude Opus 5.5**를 모델 선택기에 추가할 수도 있습니다.
+SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex 모델 요청에 사용할 계정만 전환하는 macOS 메뉴 막대 앱입니다. GitHub 등의 플러그인과 이 Mac으로의 원격 접속은 기존 인증을 그대로 사용하고, 모델 요청은 저장한 여러 계정의 남은 사용량으로 처리합니다. 이 Mac에 로그인된 Claude Code CLI를 통해 **Fable 5.1, Opus 5.5, Sonnet 5** 같은 Claude 모델을 모델 선택기에 추가할 수도 있습니다.
 
 ## 목차
 
@@ -41,7 +41,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 - [빠른 시작](#빠른-시작)
 - [사용 방법](#사용-방법)
 - [자동 전환](#자동-전환)
-- [Claude Opus 5.5 (선택)](#claude-opus-55-선택)
+- [Claude 모델 (선택)](#claude-모델-선택)
 - [개인정보와 로컬 데이터](#개인정보와-로컬-데이터)
 - [문제 해결](#문제-해결)
 - [제거](#제거)
@@ -57,13 +57,13 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 - **한도 소진 시 자동 전환** — 5시간·주간 한도가 소진되면 목록 순서대로 사용 가능한 다음 계정을 선택합니다.
 - **실제 처리 계정 확인** — 다음 요청에 사용할 계정, 최근 응답을 완료한 계정, 데스크톱 로그인 계정을 구분해 표시합니다.
 - **한눈에 보는 사용량** — 저장한 계정마다 남은 사용량, 초기화 시각, 요금제 배지, 프로필 사진, 초기화 크레딧을 표시합니다.
-- **Claude Opus 5.5 (선택)** — ChatGPT 모델 선택기에서 Claude Code를 통해 Opus 5.5를 실행하며, 도구 호출은 모두 Codex가 실행합니다.
+- **Claude 모델 (선택)** — Claude Code 계정에서 쓸 수 있는 Claude 모델을 ChatGPT 모델 선택기에서 실행하며, 도구 호출은 모두 Codex가 실행합니다.
 - **로컬 전용** — 인증 정보는 macOS 키체인에 저장하고, 요청은 로컬 중계를 거쳐 OpenAI로 직접 전달합니다. SwitchGPT 서버는 없습니다.
 - **다국어 지원** — 영어, 한국어, 일본어, 중국어 간체.
 
 ## 0.3.0의 새로운 기능
 
-- **Claude Opus 5.5 (선택):** `⋯`에서 **Claude Opus 5.5 사용**을 켜면 ChatGPT 모델 선택기에 Opus 5.5가 추가됩니다. 로그인된 Claude Code CLI로 실행하므로 OpenAI 한도를 쓰지 않으며, 모든 도구 호출은 Codex로 돌아가 기존 권한·승인 설정이 그대로 적용됩니다. [Claude Opus 5.5](#claude-opus-55-선택)를 참고하세요.
+- **Claude 모델 (선택):** `⋯`에서 **Claude 모델 사용**을 켜면 Claude Code CLI가 제공하는 모델이 ChatGPT 모델 선택기에 추가됩니다. 로그인된 Claude Code CLI로 실행하므로 OpenAI 한도를 쓰지 않으며, 모든 도구 호출은 Codex로 돌아가 기존 권한·승인 설정이 그대로 적용됩니다. [Claude 모델](#claude-모델-선택)을 참고하세요.
 
 이전 변경 사항은 [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases)에서 확인할 수 있습니다.
 
@@ -73,7 +73,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 flowchart LR
     Desktop["ChatGPT 데스크톱<br/>(A 계정으로 로그인)"] -->|Codex 모델 요청| Relay["SwitchGPT 중계<br/>127.0.0.1:19565"]
     Relay -->|GPT 모델| OpenAI["OpenAI<br/>(선택한 B, C, … 계정)"]
-    Relay -.->|Opus 5.5, 선택| Claude["Claude Code CLI<br/>(도구 호출은 Codex로 반환)"]
+    Relay -.->|Claude 모델, 선택| Claude["Claude Code CLI<br/>(도구 호출은 Codex로 반환)"]
     Desktop --> Plugins["플러그인·원격 접속<br/>(변경 없음, A 계정)"]
 ```
 
@@ -83,7 +83,7 @@ flowchart LR
 | GitHub 등 연결된 플러그인 | 앱에 이미 연결해 둔 각 서비스 계정 |
 | 이 Mac으로의 원격 접속 | 기존 데스크톱 로그인과 원격 연결 설정 |
 | 이 Mac의 Codex 모델 요청 | SwitchGPT에서 선택한 계정 |
-| Opus 5.5 요청 (선택) | 이 Mac의 Claude Code CLI 로그인 |
+| Claude 모델 요청 (선택) | 이 Mac의 Claude Code CLI 로그인 |
 
 예를 들어 데스크톱은 A 계정으로 로그인한 채 GitHub 연결과 원격 설정을 유지하고, 모델 요청은 저장된 B 계정으로 처리할 수 있습니다. B의 한도가 소진되면 데스크톱 로그인을 바꾸거나 플러그인을 다시 연결하지 않고 C 계정으로 자동 전환할 수 있습니다.
 
@@ -93,7 +93,7 @@ flowchart LR
 
 - **macOS 14 이상**의 Apple silicon Mac
 - 설치 및 로그인이 완료된 현재 **ChatGPT 데스크톱 앱**. 기본 파일 기반 인증 저장 경로인 `~/.codex/auth.json`을 사용해야 합니다. 데스크톱 앱에 포함된 CLI를 사용하므로 별도 Codex CLI 설치는 필요하지 않습니다.
-- 선택: Claude Opus 5.5를 사용하려면 설치 및 로그인이 완료된 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
+- 선택: Claude 모델을 사용하려면 설치 및 로그인이 완료된 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## 설치
 
@@ -160,25 +160,27 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 
 `⋯`에서 자동 전환을 끄면 선택 계정을 계속 사용하며 해당 계정의 한도 오류를 그대로 반환합니다. 자동 모드에서는 카드 순서가 수동 선택보다 우선하며, 순서를 바꾸면 다음 요청에 반영됩니다. 계정별 한도는 각각 별도로 유지됩니다.
 
-## Claude Opus 5.5 (선택)
+## Claude 모델 (선택)
 
-`⋯`에서 **Claude Opus 5.5 사용**을 켜면 ChatGPT 모델 선택기에 Opus 5.5가 추가됩니다. 이 Mac에 이미 로그인된 Claude Code CLI(`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, `/usr/local/bin/claude`)로 실행합니다. SwitchGPT는 Anthropic 인증 정보를 읽지 않으며, CLI가 없으면 토글이 비활성화됩니다.
+`⋯`에서 **Claude 모델 사용**을 켜면 계정에서 쓸 수 있는 Claude 모델이 ChatGPT 모델 선택기에 추가됩니다. 이 Mac에 이미 로그인된 Claude Code CLI(`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, `/usr/local/bin/claude`)로 실행합니다. SwitchGPT는 Anthropic 인증 정보를 읽지 않으며, CLI가 없으면 토글이 비활성화됩니다.
 
 모델 목록은 재시작해야 갱신되므로, 토글을 바꾸면 ChatGPT 재시작 여부를 묻습니다. 새 목록을 받도록 `~/.codex/models_cache.json`을 지웁니다.
 
-- **OpenAI 한도 사용 안 함** — Opus 요청도 같은 중계와 데스크톱 로그인 확인을 거치지만, OpenAI 계정을 고르거나 한도를 쓰지 않습니다. 다른 모델은 그대로입니다.
+SwitchGPT는 Claude Code에 제공 모델(예: Fable 5.1, Opus 5.5, Sonnet 5, Haiku 4.5)을 물어 각각 `claude-code-<모델>`로 추가합니다. 목록은 Claude Code가 업데이트되거나 6시간이 지나면 모델 호출 없이 다시 조회하며, 다음 ChatGPT 재시작 때 선택기에 반영됩니다. 각 모델의 컨텍스트 창은 Claude Code의 자동 압축 기준(1M 모델은 967K, Haiku는 167K)으로 알리므로, 창이 더 작은 모델로 바꾼 직후를 포함해 Claude Code보다 Codex가 먼저 스레드를 압축합니다.
+
+- **OpenAI 한도 사용 안 함** — Claude 요청도 같은 중계와 데스크톱 로그인 확인을 거치지만, OpenAI 계정을 고르거나 한도를 쓰지 않습니다. 다른 모델은 그대로입니다.
 - **도구는 모두 Codex가 실행** — Claude Code에는 자체 도구를 주지 않습니다. 도구 호출은 모두 Codex로 돌아가 현재 권한·승인 설정으로 실행되고, 결과는 같은 Claude 프로세스로 전달됩니다.
-- **압축** — 수동·자동 압축 모두 Opus가 요약을 작성합니다.
-- **스레드 중간 모델 변경** — Opus를 쓰던 스레드도 GPT 모델로 바꿔 이어 쓸 수 있습니다. OpenAI가 거절하는 Opus 항목만 걸러 내고, Opus가 쓴 압축 요약은 읽을 수 있는 메시지로 바꿔 보냅니다. 반대 방향은 제한이 있습니다. GPT 모델이 압축한 요약은 암호화되어 있어 Opus는 그 이후 메시지부터 이어 가며, 이전 맥락이 없으면 그렇다고 알립니다.
-- **호스팅 도구** — 웹 검색 같은 OpenAI 호스팅 도구는 Opus에서 쓸 수 없으며, 어떤 도구가 빠졌는지 Opus에게 알려 줍니다.
+- **압축** — 수동·자동 압축 모두 사용 중인 Claude 모델이 요약을 작성합니다.
+- **스레드 중간 모델 변경** — Claude 모델끼리 바꾸면 전체 기록으로 새 Claude 프로세스를 시작하고, GPT 모델로 바꿔 이어 쓸 수도 있습니다. OpenAI가 거절하는 Claude 항목만 걸러 내고, Claude가 쓴 압축 요약은 읽을 수 있는 메시지로 바꿔 보냅니다. 반대 방향은 제한이 있습니다. GPT 모델이 압축한 요약은 암호화되어 있어 Claude는 그 이후 메시지부터 이어 가며, 이전 맥락이 없으면 그렇다고 알립니다.
+- **호스팅 도구** — 웹 검색 같은 OpenAI 호스팅 도구는 Claude 모델에서 쓸 수 없으며, 어떤 도구가 빠졌는지 Claude에게 알려 줍니다.
 
 <details>
 <summary>세부 동작</summary>
 
-- 토글이 꺼져 있으면 Opus 요청을 OpenAI로 보내지 않고 SwitchGPT가 바로 거절하며, 끄는 즉시 진행 중인 Opus 작업도 끝냅니다. 압축된 요청(gzip, deflate, zstd)도 똑같이 처리합니다. zstd는 Homebrew의 `zstd`가 필요하며, 토글이 켜져 있을 때 SwitchGPT가 읽지 못한 요청은 넘기지 않고 바로 거절합니다.
+- 토글이 꺼져 있으면 Claude 요청을 OpenAI로 보내지 않고 SwitchGPT가 바로 거절하며, 끄는 즉시 진행 중인 Claude 작업도 끝냅니다. 압축된 요청(gzip, deflate, zstd)도 똑같이 처리합니다. zstd는 Homebrew의 `zstd`가 필요하며, 토글이 켜져 있을 때 SwitchGPT가 읽지 못한 요청은 넘기지 않고 바로 거절합니다.
 - Claude Code는 스레드 폴더가 아닌 빈 전용 폴더에서 실행됩니다. 그래서 문서 폴더처럼 보호된 폴더의 스레드나 프로젝트 없는 새 채팅에서도 macOS 권한 창을 기다리지 않습니다. Codex 도구는 그대로 스레드 폴더에서 실행됩니다.
-- Claude Code가 90초 안에 시작되지 않거나 도중에 종료되면 Opus 응답은 Claude Code의 오류 메시지와 함께 실패합니다.
-- `~/.codex/config.toml`에 `model_catalog_json`이 있으면 그 목록이 SwitchGPT가 Opus를 추가한 목록을 대신합니다. Opus를 켤 때 SwitchGPT가 이를 경고합니다.
+- Claude Code가 90초 안에 시작되지 않거나 도중에 종료되면 Claude 응답은 Claude Code의 오류 메시지와 함께 실패합니다.
+- `~/.codex/config.toml`에 `model_catalog_json`이 있으면 그 목록이 SwitchGPT가 Claude 모델을 추가한 목록을 대신합니다. Claude 모델을 켤 때 SwitchGPT가 이를 경고합니다.
 
 </details>
 
@@ -190,9 +192,10 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 | --- | --- |
 | 계정 목록과 순서 | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | 선택한 모델 계정 | `~/Library/Application Support/SwitchGPT/routing-selection.json` |
-| 자동 전환·Opus 설정과 연결 확인 상태 | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
+| 자동 전환·Claude 모델 설정과 연결 확인 상태 | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
 | 미확인 리셋권 요청 번호 | `~/Library/Application Support/SwitchGPT/reset-credit-attempts.json` (동시 저장 제어용 `.lock` 파일 포함) |
 | 요청 메타데이터 | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
+| Claude 모델 목록 | `~/Library/Application Support/SwitchGPT/claude-models.json` |
 | 기존 데스크톱 인증 정보 | `~/.codex/auth.json` — 유지 |
 
 `~/.codex/config.toml`의 관리 블록에 `openai_base_url`을 설정하고, 다음 요청부터 선택한 계정을 사용하도록 HTTP 스트리밍을 사용합니다. 로컬 로그에는 불투명한 계정 식별값, 요청 경로, 모델, HTTP 상태, 완료 여부, 토큰 수, 클라이언트 종류, 처리 시각과 한도 소진 여부를 기록합니다. **프롬프트·응답 내용·인증 토큰은 기록하지 않습니다.**
@@ -208,8 +211,8 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 | 계정에 다시 로그인해야 함 | 브라우저를 통해 해당 계정을 다시 추가하세요. 저장 계정은 자동 갱신되며, 갱신 토큰이 만료·폐기된 경우에만 재로그인이 필요합니다. |
 | 사용량이 확인 불가로 표시됨 | 없는 정보는 남은 사용량 0이 아니라 확인 불가로 표시합니다. **새로 고침**을 시도하세요. |
 | 사용자 지정 엔드포인트 충돌 안내가 나옴 | SwitchGPT는 다른 중계의 `openai_base_url`을 덮어쓰지 않습니다. SwitchGPT로 관리하려면 기존 설정을 먼저 제거하세요. |
-| 모델 선택기에 Opus 5.5가 보이지 않음 | 토글을 바꾼 뒤 ChatGPT를 재시작하고, `~/.codex/config.toml`에 `model_catalog_json`이 있으면 제거하세요. |
-| Opus 토글이 비활성화됨 | 지원하는 경로 중 하나에 Claude Code CLI를 설치하고 로그인하세요. |
+| 모델 선택기에 Claude 모델이 보이지 않음 | 토글을 바꾼 뒤 ChatGPT를 재시작하고, `~/.codex/config.toml`에 `model_catalog_json`이 있으면 제거하세요. |
+| Claude 토글이 비활성화됨 | 지원하는 경로 중 하나에 Claude Code CLI를 설치하고 로그인하세요. |
 
 ## 제거
 

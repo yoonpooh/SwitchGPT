@@ -7,7 +7,7 @@ struct ClaudeFailure: Error {
     let message: String
 }
 
-/// Where a Codex request goes: Opus to Claude Code, everything else to OpenAI.
+/// Where a Codex request goes: Claude models to Claude Code, everything else to OpenAI.
 enum ClaudeRoute {
     case claude(RelayRequest)
     case openAI(RelayRequest)
@@ -23,17 +23,19 @@ struct ClaudeTool {
     var comparable: [String: Any] { ["kind": kind, "name": name, "namespace": namespace ?? NSNull(), "mcp": mcp] }
 }
 
-/// Codex Responses <-> Claude Code stream-json translation for Opus 5.5. Pure functions only.
+/// Codex Responses <-> Claude Code stream-json translation for Claude models. Pure functions only.
 enum ClaudeBridge {
-    static let slug = "claude-code-opus-5-5"
-    static let claudeModel = "claude-opus-5-5"
     static let efforts: Set<String> = ["low", "medium", "high", "xhigh", "max"]
     static let relayPath = "/backend-api/codex/switchgpt-claude-relay"
     static let callPrefix = "codex_claude_"
     static let compactionPrefix = "claude-code-bridge-summary-v1:"
     static let compactionEffort = "medium"
     static let compactionImages = 4
-    static let disabledMessage = "Claude Opus 5.5 is turned off in SwitchGPT. Turn it on in the SwitchGPT menu or choose another model."
+    static let disabledMessage = "Claude models are turned off in SwitchGPT. Turn them on in the SwitchGPT menu or choose another model."
+
+    static func unavailableMessage(_ slug: String) -> String {
+        "Claude Code no longer offers \(slug) for this account. Choose another model."
+    }
 
     static let systemPrompt = """
         You are Claude Code, running unmodified as the inference agent behind a Codex UI bridge.
@@ -106,9 +108,9 @@ enum ClaudeBridge {
         (data["reasoning"] as? [String: Any])?["effort"] as? String ?? "high"
     }
 
-    /// Compressed bodies are decoded first so an Opus conversation is never sent to OpenAI.
-    /// While Claude is on, a model request SwitchGPT cannot read is refused locally: it may be an Opus conversation.
-    /// A GPT request continuing a conversation that used Opus is rewritten only where OpenAI would reject it.
+    /// Compressed bodies are decoded first so a Claude conversation is never sent to OpenAI.
+    /// While Claude is on, a model request SwitchGPT cannot read is refused locally: it may be a Claude conversation.
+    /// A GPT request continuing a conversation that used Claude is rewritten only where OpenAI would reject it.
     static func route(_ request: RelayRequest, claudeEnabled: Bool) throws -> ClaudeRoute {
         guard request.isModelRequest else { return .openAI(request) }
         let encoding = (request.headers["content-encoding"] ?? "identity").lowercased().trimmingCharacters(in: .whitespaces)
@@ -118,17 +120,17 @@ enum ClaudeBridge {
         else if claudeEnabled { throw ClaudeFailure(status: 415, message: unreadableMessage(encoding)) }
         else { return .openAI(request) } // Claude is off: OpenAI receives it as before.
         guard let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return .openAI(request) }
-        if object["model"] as? String == slug { return .claude(request.replacingBody(body)) }
+        if ClaudeModel.isClaude(object["model"]) { return .claude(request.replacingBody(body)) }
         guard let input = object["input"] as? [Any], let cleaned = openAIInput(input) else { return .openAI(request) }
         var updated = object
         updated["input"] = cleaned
         return .openAI(request.replacingBody(encode(updated)))
     }
 
-    /// OpenAI rejects three kinds of items Opus leaves in a Codex history. Returns nil when there are none.
+    /// OpenAI rejects three kinds of items Claude leaves in a Codex history. Returns nil when there are none.
     /// - Tool call IDs outside its own prefixes: the ID is optional, so it is dropped.
     /// - Reasoning without encrypted content: OpenAI looks it up and fails because nothing is stored.
-    /// - Opus compaction summaries: they are not OpenAI ciphertext, so they become a readable message.
+    /// - Claude compaction summaries: they are not OpenAI ciphertext, so they become a readable message.
     static func openAIInput(_ input: [Any]) -> [Any]? {
         var changed = false
         let cleaned = input.compactMap { value -> Any? in
@@ -196,26 +198,17 @@ enum ClaudeBridge {
         return output
     }
 
-    /// Opus is listed under a distinct validator, so an unchanged upstream list never revalidates it.
-    static func catalogETag(_ etag: String) -> String {
-        guard etag.hasSuffix("\""), etag.count >= 2 else { return etag + "-switchgpt-claude" }
-        return String(etag.dropLast()) + "-switchgpt-claude\""
+    /// The Claude models are listed under a distinct validator, so an unchanged upstream list never hides a changed Claude list.
+    static func catalogETag(_ etag: String, models: [ClaudeModel]) -> String {
+        let suffix = "-switchgpt-claude-" + String(digest(models.map { [$0.slug, $0.name, $0.cliModel, $0.efforts, $0.contextWindow] as [Any] }).prefix(8))
+        guard etag.hasSuffix("\""), etag.count >= 2 else { return etag + suffix }
+        return String(etag.dropLast()) + suffix + "\""
     }
 
     // MARK: Model picker
 
     private static let catalogJSON = #"""
     {
-     "slug": "claude-code-opus-5-5",
-     "display_name": "Opus 5.5",
-     "default_reasoning_level": "high",
-     "supported_reasoning_levels": [
-      {"effort": "low", "description": "low (forwarded to Claude Code)"},
-      {"effort": "medium", "description": "medium (forwarded to Claude Code)"},
-      {"effort": "high", "description": "high (forwarded to Claude Code)"},
-      {"effort": "xhigh", "description": "xhigh (forwarded to Claude Code)"},
-      {"effort": "max", "description": "max (forwarded to Claude Code)"}
-     ],
      "shell_type": "unified_exec",
      "visibility": "list",
      "supported_in_api": true,
@@ -235,8 +228,6 @@ enum ClaudeBridge {
      "web_search_tool_type": "text_and_image",
      "truncation_policy": {"mode": "tokens", "limit": 10000},
      "supports_image_detail_original": true,
-     "context_window": 272000,
-     "max_context_window": 872000,
      "comp_hash": "3000",
      "effective_context_window_percent": 95,
      "experimental_supported_tools": [],
@@ -254,21 +245,36 @@ enum ClaudeBridge {
     }
     """#
 
-    static func catalogItem(priority: Int) -> [String: Any] {
+    /// The same comp_hash as GPT-6, so switching between them never forces a compaction by itself; only a smaller
+    /// context window does.
+    static func catalogItem(_ model: ClaudeModel, priority: Int) -> [String: Any] {
         var item = (try? JSONSerialization.jsonObject(with: Data(catalogJSON.utf8))) as? [String: Any] ?? [:]
-        item["description"] = L10n.text("claude_model_description")
+        item["slug"] = model.slug
+        item["display_name"] = model.name
+        item["description"] = L10n.format("claude_model_description", model.name)
         item["priority"] = priority
+        // A model without an effort setting still needs one level; the executor does not forward it.
+        let levels = model.efforts.isEmpty ? [compactionEffort] : model.efforts
+        item["supported_reasoning_levels"] = levels.map { effort -> [String: Any] in
+            ["effort": effort, "description": model.efforts.isEmpty ? "Claude Code has no effort setting for this model"
+                                                                    : effort + " (forwarded to Claude Code)"]
+        }
+        item["default_reasoning_level"] = levels.contains("high") ? "high" : levels[0]
+        item["context_window"] = model.contextWindow
+        item["max_context_window"] = model.contextWindow
         return item
     }
 
-    /// Adds Opus 5.5 after the account's own models. Returns nil when the body is left unchanged.
-    static func addingCatalogItem(to body: Data) -> Data? {
+    /// Adds the Claude models after the account's own models. Returns nil when the body is left unchanged.
+    static func addingCatalogItems(to body: Data, models claude: [ClaudeModel]) -> Data? {
         guard var object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
               var models = object["models"] as? [Any] else { return nil }
         let existing = models.compactMap { $0 as? [String: Any] }
-        guard !existing.contains(where: { $0["slug"] as? String == slug }) else { return nil }
+        let listed = Set(existing.compactMap { $0["slug"] as? String })
+        let added = claude.filter { !listed.contains($0.slug) }
+        guard !added.isEmpty else { return nil }
         let priority = (existing.compactMap { ($0["priority"] as? NSNumber)?.intValue }.max() ?? 0) + 1
-        models.append(catalogItem(priority: priority))
+        for (offset, model) in added.enumerated() { models.append(catalogItem(model, priority: priority + offset)) }
         object["models"] = models
         return encode(object)
     }

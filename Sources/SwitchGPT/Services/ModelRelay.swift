@@ -262,8 +262,19 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
             // Codex explicitly falls back to HTTP/SSE on 426. This avoids a WebSocket
             // retaining the old account across turns after the user selects a new one.
             if request.headers["upgrade"]?.lowercased() == "websocket" { fail(426); return }
-            // A cached catalog without Opus must not be revalidated while Claude is enabled.
-            if claude.enabled && request.isCatalogRequest { request = request.removingHeader("if-none-match") }
+            // A cached catalog without the Claude models must not be revalidated while Claude is enabled.
+            if claude.enabled && request.isCatalogRequest {
+                let catalogRequest = request.removingHeader("if-none-match")
+                // After a Claude Code update the list waits for its models; otherwise the picker would show the
+                // old ones until the next ChatGPT restart.
+                claude.models.refresh(waitingAtMost: ClaudeModelCatalog.catalogWait) { [self] in
+                    queue.async { [self] in
+                        originalRequest = catalogRequest
+                        startAttempt(catalogRequest, selected: selected)
+                    }
+                }
+                return
+            }
             originalRequest = request
             startAttempt(request, selected: selected)
         } catch let failure as HTTPFailure { fail(failure.status) }
@@ -371,8 +382,9 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
         event?.finishedAt = .now
         if let response = catalogResponse {
             catalogResponse = nil
-            let updated = error == nil ? ClaudeBridge.addingCatalogItem(to: catalogBody) : nil
-            let etag = updated == nil ? nil : response.value(forHTTPHeaderField: "ETag").map(ClaudeBridge.catalogETag)
+            let models = claude.models.models
+            let updated = error == nil ? ClaudeBridge.addingCatalogItems(to: catalogBody, models: models) : nil
+            let etag = updated == nil ? nil : response.value(forHTTPHeaderField: "ETag").map { ClaudeBridge.catalogETag($0, models: models) }
             sendHead(response, etag: etag)
             sendChunk(updated ?? catalogBody)
             catalogBody.removeAll()

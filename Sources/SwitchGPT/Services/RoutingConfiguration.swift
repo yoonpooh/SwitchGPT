@@ -39,7 +39,7 @@ struct RoutingConfiguration {
         return block + original
     }
 
-    /// A model_catalog_json override replaces the model list SwitchGPT adds Opus 5.5 to.
+    /// A model_catalog_json override replaces the model list SwitchGPT adds the Claude models to.
     var overridesCatalog: Bool {
         guard let text = try? String(contentsOf: home.appendingPathComponent("config.toml"), encoding: .utf8) else { return false }
         return Self.topLevelKeys(text).contains("model_catalog_json")

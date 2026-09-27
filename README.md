@@ -22,14 +22,14 @@
 <p align="center">
   <a href="https://github.com/yoonpooh/SwitchGPT/releases/latest">Download</a> ·
   <a href="#quick-start">Quick start</a> ·
-  <a href="#claude-opus-55-optional">Claude Opus 5.5</a> ·
+  <a href="#claude-models-optional">Claude models</a> ·
   <a href="#troubleshooting">Troubleshooting</a> ·
   <a href="https://github.com/yoonpooh/SwitchGPT/releases">Changelog</a>
 </p>
 
 ---
 
-SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed in while choosing which account handles Codex model requests. Plugins such as GitHub and Remote access to this Mac keep their existing sign-in, while model requests use the remaining quota of your saved accounts. You can also add **Claude Opus 5.5** to the model picker through the Claude Code CLI already signed in on your Mac.
+SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed in while choosing which account handles Codex model requests. Plugins such as GitHub and Remote access to this Mac keep their existing sign-in, while model requests use the remaining quota of your saved accounts. You can also add Claude models such as **Fable 5.1, Opus 5.5, and Sonnet 5** to the model picker through the Claude Code CLI already signed in on your Mac.
 
 ## Contents
 
@@ -41,7 +41,7 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 - [Quick start](#quick-start)
 - [Usage](#usage)
 - [Automatic switching](#automatic-switching)
-- [Claude Opus 5.5 (optional)](#claude-opus-55-optional)
+- [Claude models (optional)](#claude-models-optional)
 - [Privacy and local data](#privacy-and-local-data)
 - [Troubleshooting](#troubleshooting)
 - [Uninstall](#uninstall)
@@ -57,13 +57,13 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 - **Switch automatically at the limit** — when the 5-hour or weekly quota is exhausted, SwitchGPT selects the next available account in your list order.
 - **See what actually ran** — the panel separates the next request account, the account that last completed a response, and your desktop sign-in.
 - **Usage at a glance** — remaining usage, reset times, plan badges, profile photos, and reset credits for every saved account.
-- **Optional Claude Opus 5.5** — run Opus 5.5 from the ChatGPT model picker through Claude Code, with every tool call executed by Codex.
+- **Optional Claude models** — run the Claude models your Claude Code account offers from the ChatGPT model picker, with every tool call executed by Codex.
 - **Local and private** — credentials stay in macOS Keychain, and requests go directly to OpenAI through a local relay. There is no SwitchGPT server.
 - **Localized** — English, Korean, Japanese, and Simplified Chinese.
 
 ## What's new in 0.3.0
 
-- **Claude Opus 5.5 (optional):** turn on **Use Claude Opus 5.5** in `⋯` to add Opus 5.5 to the ChatGPT model picker. It runs through your signed-in Claude Code CLI, never spends OpenAI quota, and returns every tool call to Codex so your existing permissions and approvals apply. See [Claude Opus 5.5](#claude-opus-55-optional).
+- **Claude models (optional):** turn on **Use Claude models** in `⋯` to add the models your Claude Code CLI offers to the ChatGPT model picker. They run through your signed-in Claude Code CLI, never spend OpenAI quota, and return every tool call to Codex so your existing permissions and approvals apply. See [Claude models](#claude-models-optional).
 
 Earlier changes are listed on the [Releases page](https://github.com/yoonpooh/SwitchGPT/releases).
 
@@ -73,7 +73,7 @@ Earlier changes are listed on the [Releases page](https://github.com/yoonpooh/Sw
 flowchart LR
     Desktop["ChatGPT desktop<br/>(signed in as account A)"] -->|Codex model requests| Relay["SwitchGPT relay<br/>127.0.0.1:19565"]
     Relay -->|GPT models| OpenAI["OpenAI<br/>(selected account B, C, …)"]
-    Relay -.->|Opus 5.5, optional| Claude["Claude Code CLI<br/>(tool calls return to Codex)"]
+    Relay -.->|Claude models, optional| Claude["Claude Code CLI<br/>(tool calls return to Codex)"]
     Desktop --> Plugins["Plugins & Remote<br/>(unchanged, account A)"]
 ```
 
@@ -83,7 +83,7 @@ flowchart LR
 | Connected plugins, such as GitHub | The service account already connected to the app |
 | Remote access to this Mac | Your existing desktop sign-in and Remote setup |
 | Codex model requests on this Mac | The account selected in SwitchGPT |
-| Opus 5.5 requests (optional) | The Claude Code CLI sign-in on this Mac |
+| Claude model requests (optional) | The Claude Code CLI sign-in on this Mac |
 
 For example, keep desktop account A signed in with its GitHub connection and Remote setup, and run model requests with saved account B. When B reaches its limit, automatic switching can select C without changing desktop sign-in or reconnecting plugins.
 
@@ -93,7 +93,7 @@ Routing applies to Codex requests that use the built-in `openai` provider on thi
 
 - Apple silicon Mac running **macOS 14 or later**
 - The current **ChatGPT desktop app**, installed and signed in, using the default file-based credential store at `~/.codex/auth.json`. SwitchGPT uses the app's bundled CLI; no separate Codex CLI installation is required.
-- Optional: the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI, installed and signed in, to use Claude Opus 5.5
+- Optional: the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI, installed and signed in, to use Claude models
 
 ## Installation
 
@@ -160,25 +160,27 @@ Dates follow the Mac's time zone and interface language. Reopen the app after ch
 
 Turn automatic switching off in `⋯` to keep using the selected account and receive its limit errors directly. In automatic mode, card order takes precedence over manual selection, and reordering applies to the next request. Quotas remain separate for each account.
 
-## Claude Opus 5.5 (optional)
+## Claude models (optional)
 
-Turn on **Use Claude Opus 5.5** in `⋯` to add Opus 5.5 to the ChatGPT model picker. It runs through the Claude Code CLI already signed in on this Mac (`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, or `/usr/local/bin/claude`). SwitchGPT reads no Anthropic credentials, and the toggle is disabled when the CLI is not installed.
+Turn on **Use Claude models** in `⋯` to add the Claude models your account can use to the ChatGPT model picker. They run through the Claude Code CLI already signed in on this Mac (`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, or `/usr/local/bin/claude`). SwitchGPT reads no Anthropic credentials, and the toggle is disabled when the CLI is not installed.
 
 Toggling asks before restarting ChatGPT, because the model list refreshes only after a restart. SwitchGPT removes `~/.codex/models_cache.json` so ChatGPT fetches the updated list.
 
-- **No OpenAI quota** — Opus requests pass through the same relay and desktop sign-in check but never select an OpenAI account or spend its quota. Other models are unchanged.
+SwitchGPT asks Claude Code which models it offers, such as Fable 5.1, Opus 5.5, Sonnet 5, and Haiku 4.5, and lists each one as `claude-code-<model>`. The list is refreshed without a model call when Claude Code is updated and every 6 hours, and reaches the picker after the next ChatGPT restart. Each model reports Claude Code's auto-compact threshold as its context window (967K for 1M-context models, 167K for Haiku), so Codex compacts a thread before Claude Code would, including right after switching to a model with a smaller window.
+
+- **No OpenAI quota** — Claude requests pass through the same relay and desktop sign-in check but never select an OpenAI account or spend its quota. Other models are unchanged.
 - **Codex runs every tool** — Claude Code gets no tools of its own. Each tool call is returned to Codex, which runs it under its current permissions and approvals, and the result goes back to the same Claude process.
-- **Compaction** — manual and automatic compaction produce a summary written by Opus.
-- **Switching models mid-thread** — a thread that used Opus can continue with a GPT model: SwitchGPT removes only the Opus-made items OpenAI would reject and turns an Opus compaction summary into a readable message. The reverse is limited: a GPT compaction summary is encrypted, so Opus continues from the messages after it and says when earlier context is missing.
-- **Hosted tools** — OpenAI-hosted tools such as web search are not available to Opus; it is told which ones are missing.
+- **Compaction** — manual and automatic compaction produce a summary written by the Claude model in use.
+- **Switching models mid-thread** — a thread can move between Claude models, which starts a fresh Claude process with the full history, or continue with a GPT model: SwitchGPT removes only the Claude-made items OpenAI would reject and turns a Claude compaction summary into a readable message. The reverse is limited: a GPT compaction summary is encrypted, so Claude continues from the messages after it and says when earlier context is missing.
+- **Hosted tools** — OpenAI-hosted tools such as web search are not available to Claude models; it is told which ones are missing.
 
 <details>
 <summary>Implementation details</summary>
 
-- While the toggle is off, SwitchGPT refuses Opus requests locally instead of sending them to OpenAI, and turning it off ends any running Opus task. Compressed requests (gzip, deflate, zstd) are handled the same way. zstd needs Homebrew's `zstd`; while the toggle is on, a request SwitchGPT cannot read is refused locally instead of being forwarded.
+- While the toggle is off, SwitchGPT refuses Claude requests locally instead of sending them to OpenAI, and turning it off ends any running Claude task. Compressed requests (gzip, deflate, zstd) are handled the same way. zstd needs Homebrew's `zstd`; while the toggle is on, a request SwitchGPT cannot read is refused locally instead of being forwarded.
 - Claude Code runs in an empty private folder, never in the thread's folder, so threads in protected folders such as Documents, or without a project, do not wait on a macOS permission prompt. Codex tools still run in the thread's folder.
-- If Claude Code has not started within 90 seconds, or exits early, the Opus response fails with Claude Code's error.
-- If `~/.codex/config.toml` sets `model_catalog_json`, that list replaces the one SwitchGPT adds Opus to. SwitchGPT warns about it when you turn Opus on.
+- If Claude Code has not started within 90 seconds, or exits early, the Claude response fails with Claude Code's error.
+- If `~/.codex/config.toml` sets `model_catalog_json`, that list replaces the one SwitchGPT adds Claude models to. SwitchGPT warns about it when you turn Claude models on.
 
 </details>
 
@@ -190,9 +192,10 @@ Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth
 | --- | --- |
 | Account list and order | `~/Library/Application Support/SwitchGPT/accounts.json` |
 | Selected model account | `~/Library/Application Support/SwitchGPT/routing-selection.json` |
-| Automatic switching, Opus, and connection status | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
+| Automatic switching, Claude models, and connection status | `~/Library/Application Support/SwitchGPT/routing-preferences.json` |
 | Pending reset request IDs | `~/Library/Application Support/SwitchGPT/reset-credit-attempts.json` (with a `.lock` file for concurrent saves) |
 | Request metadata | `~/Library/Application Support/SwitchGPT/relay-events.jsonl` |
+| Claude model list | `~/Library/Application Support/SwitchGPT/claude-models.json` |
 | Existing desktop credentials | `~/.codex/auth.json` — preserved |
 
 A managed block in `~/.codex/config.toml` sets `openai_base_url`. HTTP streaming lets subsequent requests use the selected account. Local logs contain an opaque account fingerprint, path, model, HTTP status, completion state, token counts, client type, timestamps, and quota-exhaustion status. **Prompts, response content, and authentication tokens are not logged.**
@@ -208,8 +211,8 @@ Usage is retrieved from OpenAI's private `chatgpt.com/backend-api/wham/` endpoin
 | An account needs to sign in again | Add it again through the browser. Saved accounts refresh automatically; sign in again if the refresh token has expired or been revoked. |
 | Usage shows as unknown | Missing information is shown as unknown, never as zero remaining. Try **Refresh**. |
 | A custom endpoint conflict is reported | SwitchGPT does not overwrite another relay's `openai_base_url`. Remove the other setting first if you want SwitchGPT to manage routing. |
-| Opus 5.5 does not appear in the model picker | Restart ChatGPT after toggling, and remove `model_catalog_json` from `~/.codex/config.toml` if set. |
-| The Opus toggle is disabled | Install and sign in to the Claude Code CLI at one of the supported paths. |
+| A Claude model does not appear in the model picker | Restart ChatGPT after toggling, and remove `model_catalog_json` from `~/.codex/config.toml` if set. |
+| The Claude toggle is disabled | Install and sign in to the Claude Code CLI at one of the supported paths. |
 
 ## Uninstall
 

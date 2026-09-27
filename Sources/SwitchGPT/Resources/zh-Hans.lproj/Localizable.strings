@@ -91,7 +91,7 @@
 "routing_waiting" = "等待桌面请求确认";
 "routing_waiting_help" = "在 ChatGPT 中发送消息以验证连接。";
 "routing_auto_badge" = "自动";
-"routing_auto_toggle" = "按列表顺序自动切换";
+"routing_auto_toggle" = "按账户顺序自动切换";
 "routing_auto_help" = "优先使用列表中最靠前的可用账户。前面的账户额度恢复后，从下一个请求起切回。若要固定手动选择的账户，请关闭自动切换。";
 "routing_auto_changed" = "已按账户优先级自动切换";
 "routing_no_available" = "需确认可用账户";
@@ -126,15 +126,15 @@
 
 "routing_manual_badge" = "手动";
 
-"claude_model_description" = "通过本机已登录的 Claude Code CLI 运行 Opus 5.5，所有工具均由 Codex 执行。";
-"claude_toggle" = "使用 Claude Opus 5.5";
-"claude_missing" = "Claude Opus 5.5（未安装 Claude Code）";
-"claude_restart_enable" = "重新启动 ChatGPT 以显示 Opus 5.5？";
-"claude_restart_disable" = "重新启动 ChatGPT 以移除 Opus 5.5？";
+"claude_model_description" = "通过本机已登录的 Claude Code CLI 运行 %@，所有工具均由 Codex 执行。";
+"claude_toggle" = "使用 Claude 模型";
+"claude_missing" = "Claude 模型（未安装 Claude Code）";
+"claude_restart_enable" = "重新启动 ChatGPT 以显示 Claude 模型？";
+"claude_restart_disable" = "重新启动 ChatGPT 以移除 Claude 模型？";
 "claude_restart_detail" = "模型选择器将在重启后更新。进行中的任务可能中断，桌面登录保持不变。";
 "claude_restart_action" = "重启 ChatGPT";
 "claude_restart_later" = "稍后";
-"claude_catalog_override" = "config.toml 设置了 model_catalog_json 时不会显示 Opus 5.5。请删除该行，然后重启 ChatGPT。";
+"claude_catalog_override" = "config.toml 设置了 model_catalog_json 时不会显示 Claude 模型。请删除该行，然后重启 ChatGPT。";
 "claude_usage_help" = "本机 Claude Code 已登录账号的使用额度";
 "claude_scoped_weekly" = "%@ 每周";
 "claude_signed_out" = "Claude Code 尚未登录。请在终端运行 claude 登录。";
