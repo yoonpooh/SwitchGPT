@@ -464,7 +464,7 @@ final class ClaudeExecutor: @unchecked Sendable {
                     let block = value["content_block"] as? [String: Any]
                     switch block?["type"] as? String {
                     case "text": writer.startItem("message")
-                    case "thinking": writer.startItem("reasoning")
+                    case "thinking": writer.startThinking()
                     case "tool_use":
                         writer.finishItem()
                         let name = block?["name"] as? String ?? ""
@@ -478,7 +478,7 @@ final class ClaudeExecutor: @unchecked Sendable {
                     guard let delta = value["delta"] as? [String: Any] else { break }
                     switch delta["type"] as? String {
                     case "text_delta": if let text = delta["text"] as? String { writer.delta(text) }
-                    case "thinking_delta": if let text = delta["thinking"] as? String { writer.delta(text) }
+                    case "thinking_delta": if let text = delta["thinking"] as? String { writer.think(text) }
                     case "input_json_delta": if let json = delta["partial_json"] as? String { run.searches[index]?.input += json }
                     default: break
                     }
@@ -546,6 +546,7 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     private func failResponse(_ run: ClaudeRun, _ writer: ClaudeResponseWriter, _ message: String) {
+        writer.flushThought()
         writer.closeSearches()
         var failed = writer.response("failed")
         failed["error"] = ["code": run.failureCode ?? "bridge_error", "message": message]
@@ -723,6 +724,8 @@ final class ClaudeResponseWriter: @unchecked Sendable {
     /// Output indexes of this response's search cards still in progress, by WebSearch tool_use ID.
     private var searches: [String: Int] = [:]
     private var active: (index: Int, reasoning: Bool, text: String)?
+    /// A thought not shown yet, held until its first sentence is known.
+    private var thought: String?
     private var contextInput: Int?
     private var contextCached = 0
 
@@ -803,6 +806,7 @@ final class ClaudeResponseWriter: @unchecked Sendable {
     }
 
     func finishItem() {
+        flushThought()
         guard let current = active, let id = items[current.index]["id"] else { return }
         active = nil
         let part = contentPart(reasoning: current.reasoning, text: current.text)
@@ -817,6 +821,66 @@ final class ClaudeResponseWriter: @unchecked Sendable {
             event("response.content_part.done", ["item_id": id, "output_index": current.index, "content_index": 0, "part": part])
         }
         event("response.output_item.done", ["output_index": current.index, "item": items[current.index]])
+    }
+
+    static let titleLength = 60
+
+    /// Codex titles a reasoning summary by its leading bold line and, expanded, shows only what follows it. Claude's
+    /// thinking has no such line, so a thought is held until its first sentence can become the title, and the whole
+    /// thought stays the body. A thought that stays blank, as when Claude Code omits thinking text, never becomes an item.
+    func startThinking() {
+        finishItem()
+        thought = ""
+    }
+
+    func think(_ text: String) {
+        guard let held = thought.map({ $0 + text }) else {
+            if active?.reasoning == true { delta(text) }
+            return
+        }
+        thought = held
+        if let title = Self.title(held, complete: false) { showThought(title) }
+    }
+
+    /// Shows a thought still held, as when its block or the response ends before its first sentence does.
+    func flushThought() {
+        guard let held = thought else { return }
+        if held.contains(where: { !$0.isWhitespace }) { showThought(Self.title(held, complete: true) ?? "") } else { thought = nil }
+    }
+
+    private func showThought(_ title: String) {
+        guard let held = thought else { return }
+        thought = nil
+        startItem("reasoning")
+        // Codex finds the title only at the very start.
+        let body = String(held.drop(while: \.isWhitespace))
+        delta(title.isEmpty ? body : "**\(title)**\n\n\(body)")
+    }
+
+    /// A thought's first sentence as a one-line title of at most titleLength characters. Empty when the thought already
+    /// starts with a bold title, nil while more of it is needed to tell.
+    static func title(_ thought: String, complete: Bool) -> String? {
+        let text = Array(thought.drop(while: \.isWhitespace))
+        if text.starts(with: "**") { return "" }
+        if !complete, "**".starts(with: text) { return nil }
+        var end: Int?
+        for (offset, character) in text.prefix(titleLength + 1).enumerated() {
+            if character.isNewline { end = offset; break }
+            guard ".!?。！？".contains(character) else { continue }
+            // A period inside "3.5" ends nothing; one at the very end may still be followed by more.
+            if offset + 1 < text.count {
+                if text[offset + 1].isWhitespace { end = offset + 1; break }
+            } else if complete { end = offset + 1 }
+        }
+        guard end != nil || complete || text.count > titleLength else { return nil }
+        var sentence = end.map { Array(text[..<$0]) } ?? text
+        if sentence.count > titleLength {
+            let space = sentence[..<titleLength].lastIndex(where: \.isWhitespace).flatMap { $0 >= titleLength / 2 ? $0 : nil }
+            sentence = Array(sentence[..<(space ?? titleLength - 1)]) + ["…"]
+        }
+        var line = String(sentence).replacingOccurrences(of: "*", with: "").split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        while let last = line.last, ".。".contains(last) { line.removeLast() }
+        return line
     }
 
     /// A Claude WebSearch as the web_search_call item Codex shows for its own hosted search.
