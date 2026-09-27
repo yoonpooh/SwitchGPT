@@ -586,6 +586,64 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(searches(failed).map { $0["status"] as? String }, ["failed"])
     }
 
+    @MainActor func testClaudeThinkingIsTitledByItsFirstSentence() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "think",
+                                               "input": [harness.environment, ["role": "user", "content": "THINK first"]] as [Any]])
+        XCTAssertEqual(response.status, 200, response.text)
+        let output = try XCTUnwrap(response.completed?["output"] as? [[String: Any]])
+        // The thinking Claude Code left empty adds no item.
+        XCTAssertEqual(output.map { $0["type"] as? String }, ["reasoning", "message"])
+        let expected = "**Found the cause**\n\nFound the cause. The CLI lists old models."
+        XCTAssertEqual((output[0]["summary"] as? [[String: Any]])?.map { $0["text"] as? String }, [expected])
+        XCTAssertEqual(Self.streamedThought(response.text), expected)
+    }
+
+    @MainActor func testHeldThoughtIsShownWhenItsBlockOrResponseEnds() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        // Neither thought ends its first sentence before its block does; both start with whitespace.
+        let cases = [("BRIEF_THOUGHT", "**Checking the cache**\n\nChecking the cache"), ("BOLD_THOUGHT", "**Checking tests**\n\nbody")]
+        for (prompt, expected) in cases {
+            let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": prompt,
+                                                   "input": [harness.environment, ["role": "user", "content": prompt]] as [Any]])
+            XCTAssertEqual(response.status, 200, response.text)
+            let output = try XCTUnwrap(response.completed?["output"] as? [[String: Any]])
+            XCTAssertEqual(output.map { $0["type"] as? String }, ["reasoning", "message"])
+            XCTAssertEqual((output[0]["summary"] as? [[String: Any]])?.map { $0["text"] as? String }, [expected])
+            XCTAssertEqual(Self.streamedThought(response.text), expected)
+        }
+        // A thought held when Claude Code fails still reaches Codex.
+        let failed = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "brief-exit",
+                                             "input": [harness.environment, ["role": "user", "content": "BRIEF_THOUGHT THEN_EXIT"]] as [Any]])
+        XCTAssertTrue(failed.text.contains("response.failed"), failed.text)
+        XCTAssertEqual(Self.streamedThought(failed.text), cases[0].1)
+    }
+
+    private static func streamedThought(_ text: String) -> String {
+        text.components(separatedBy: "\n").compactMap { line -> [String: Any]? in
+            guard line.hasPrefix("data: ") else { return nil }
+            return try? JSONSerialization.jsonObject(with: Data(line.dropFirst(6).utf8)) as? [String: Any]
+        }.filter { $0["type"] as? String == "response.reasoning_summary_text.delta" }.compactMap { $0["delta"] as? String }.joined()
+    }
+
+    func testThinkingTitleIsItsFirstSentenceOnOneLine() {
+        XCTAssertEqual(ClaudeResponseWriter.title("원인을 찾았습니다. 이제 고치겠습니다.", complete: false), "원인을 찾았습니다")
+        XCTAssertNil(ClaudeResponseWriter.title("원인을 찾았습니다.", complete: false))
+        XCTAssertEqual(ClaudeResponseWriter.title("원인을 찾았습니다.", complete: true), "원인을 찾았습니다")
+        XCTAssertEqual(ClaudeResponseWriter.title("  Version 3.5 is **out**\nmore", complete: false), "Version 3.5 is out")
+        XCTAssertNil(ClaudeResponseWriter.title("Still thinking", complete: false))
+        XCTAssertEqual(ClaudeResponseWriter.title("Still thinking", complete: true), "Still thinking")
+        // A thought that brings its own title keeps it.
+        XCTAssertEqual(ClaudeResponseWriter.title("**Checking tests**\n\nbody", complete: false), "")
+        XCTAssertNil(ClaudeResponseWriter.title("*", complete: false))
+        let long = ClaudeResponseWriter.title(String(repeating: "word ", count: 30), complete: false)
+        XCTAssertEqual(long, Array(repeating: "word", count: 12).joined(separator: " ") + "…")
+        let unbroken = ClaudeResponseWriter.title(String(repeating: "가", count: 70), complete: false)
+        XCTAssertEqual(unbroken, String(repeating: "가", count: ClaudeResponseWriter.titleLength - 1) + "…")
+    }
+
     @MainActor func testSideConversationRunsBesideItsParent() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
@@ -1054,6 +1112,24 @@ private final class Counter: @unchecked Sendable {
     if 'HOLD_ANSWER' in prompt: time.sleep(1.5)
     out({'type': 'stream_event', 'event': {'type': 'message_start', 'message': {'usage': {'input_tokens': 10, 'cache_read_input_tokens': 5, 'output_tokens': 1}}}})
     answer = 'Hello from Opus'
+    if 'THINK' in prompt:
+        # Claude Code may omit a thought's text, leaving only its signature.
+        out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'thinking', 'thinking': ''}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'signature_delta', 'signature': 'sig'}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_stop', 'index': 0}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 1, 'content_block': {'type': 'thinking', 'thinking': ''}}})
+        for part in ['Found the ', 'cause. The CLI ', 'lists old models.']:
+            out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'index': 1, 'delta': {'type': 'thinking_delta', 'thinking': part}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_stop', 'index': 1}})
+    for key, thought in [('BRIEF_THOUGHT', '  Checking the cache'), ('BOLD_THOUGHT', '  **Checking tests**\n\nbody')]:
+        if key not in prompt: continue
+        out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'thinking', 'thinking': ''}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'thinking_delta', 'thinking': thought}}})
+        if 'THEN_EXIT' in prompt:
+            print('Claude Code crashed', file=sys.stderr, flush=True)
+            time.sleep(0.3)
+            sys.exit(1)
+        out({'type': 'stream_event', 'event': {'type': 'content_block_stop', 'index': 0}})
     if search and 'SEARCH_WEB' in prompt:
         out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'tool_use', 'id': 'toolu_search', 'name': 'WebSearch', 'input': {}}}})
         for part in ['{"query": "swift', ' release"}']:
