@@ -162,7 +162,7 @@ Turn automatic switching off in `⋯` to keep using the selected account and rec
 
 ## Claude models (optional)
 
-Turn on **Use Claude models** in `⋯` to add the Claude models your account can use to the ChatGPT model picker. They run through the Claude Code CLI already signed in on this Mac (`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, or `/usr/local/bin/claude`). SwitchGPT reads no Anthropic credentials, and the toggle is disabled when the CLI is not installed.
+Turn on **Use Claude models** in `⋯` to add the Claude models your account can use to the ChatGPT model picker. They run through the Claude Code CLI already signed in on this Mac (`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, or `/usr/local/bin/claude`). SwitchGPT reads no Anthropic credentials, and the toggle is disabled when the CLI is not installed. Its account and plan limits appear below the ChatGPT accounts as Claude Code itself reports them, without a model call.
 
 Toggling asks before restarting ChatGPT, because the model list refreshes only after a restart. SwitchGPT removes `~/.codex/models_cache.json` so ChatGPT fetches the updated list.
 

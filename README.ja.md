@@ -162,7 +162,7 @@ https://github.com/yoonpooh/SwitchGPT から最新の SwitchGPT リリースを�
 
 ## Claude モデル（任意）
 
-`⋯` の **Claudeモデルを使用** をオンにすると、アカウントで使える Claude モデルが ChatGPT のモデル選択に追加されます。この Mac でサインイン済みの Claude Code CLI（`~/.local/bin/claude`、`/opt/homebrew/bin/claude`、`/usr/local/bin/claude`）で実行します。SwitchGPT は Anthropic の認証情報を読み取らず、CLI がない場合はスイッチが無効になります。
+`⋯` の **Claudeモデルを使用** をオンにすると、アカウントで使える Claude モデルが ChatGPT のモデル選択に追加されます。この Mac でサインイン済みの Claude Code CLI（`~/.local/bin/claude`、`/opt/homebrew/bin/claude`、`/usr/local/bin/claude`）で実行します。SwitchGPT は Anthropic の認証情報を読み取らず、CLI がない場合はスイッチが無効になります。アカウントとプランの上限は Claude Code 自身が報告する値を ChatGPT アカウントの下に表示し、その際モデルは呼び出しません。
 
 モデル一覧は再起動後に更新されるため、切り替え時に ChatGPT を再起動するか確認します。新しい一覧を取得するため `~/.codex/models_cache.json` を削除します。
 

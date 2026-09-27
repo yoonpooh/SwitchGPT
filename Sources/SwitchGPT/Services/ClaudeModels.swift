@@ -112,6 +112,11 @@ enum ClaudeModelDiscovery {
 
     /// Sends one control request to a Claude Code process that has no tools, settings or MCP servers, and returns its answer.
     static func control(_ executable: URL, model: String? = nil, subtype: String, timeout: TimeInterval = 30) throws -> [String: Any] {
+        try controls(executable, model: model, subtypes: [subtype], timeout: timeout)[0]
+    }
+
+    /// Sends control requests to one such process in order and returns their answers in the same order.
+    static func controls(_ executable: URL, model: String? = nil, subtypes: [String], timeout: TimeInterval = 30) throws -> [[String: Any]] {
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("switchgpt-claude-models-" + ClaudeBridge.identifier())
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: scratch) }
@@ -130,22 +135,30 @@ enum ClaudeModelDiscovery {
         let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
         defer { deadline.cancel() }
-        var line = ClaudeBridge.encode(["type": "control_request", "request_id": "switchgpt", "request": ["subtype": subtype]] as [String: Any])
-        line.append(0x0a)
-        try? input.fileHandleForWriting.write(contentsOf: line)
+        var lines = Data()
+        for (index, subtype) in subtypes.enumerated() {
+            lines.append(ClaudeBridge.encode(["type": "control_request", "request_id": "switchgpt-\(index)", "request": ["subtype": subtype]] as [String: Any]))
+            lines.append(0x0a)
+        }
+        try? input.fileHandleForWriting.write(contentsOf: lines)
         try? input.fileHandleForWriting.close()
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        var answers = [[String: Any]?](repeating: nil, count: subtypes.count)
         for line in data.split(separator: 0x0a) {
             guard let event = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any],
                   event["type"] as? String == "control_response", let response = event["response"] as? [String: Any],
-                  response["request_id"] as? String == "switchgpt" else { continue }
+                  let id = response["request_id"] as? String, id.hasPrefix("switchgpt-"),
+                  let index = Int(id.dropFirst("switchgpt-".count)), answers.indices.contains(index) else { continue }
             guard response["subtype"] as? String == "success", let answer = response["response"] as? [String: Any] else {
-                throw ClaudeFailure(status: 502, message: "Claude Code refused " + subtype + ": " + (response["error"] as? String ?? "unknown error"))
+                throw ClaudeFailure(status: 502, message: "Claude Code refused " + subtypes[index] + ": " + (response["error"] as? String ?? "unknown error"))
             }
-            return answer
+            answers[index] = answer
         }
-        throw ClaudeFailure(status: 502, message: "Claude Code did not answer " + subtype)
+        if let missing = answers.firstIndex(where: { $0 == nil }) {
+            throw ClaudeFailure(status: 502, message: "Claude Code did not answer " + subtypes[missing])
+        }
+        return answers.compactMap { $0 }
     }
 }
 

@@ -138,4 +138,3 @@
 "claude_usage_help" = "このMacのClaude Codeにサインインしているアカウントの利用枠";
 "claude_scoped_weekly" = "%@ 週間";
 "claude_signed_out" = "Claude Codeにサインインしていません。ターミナルでclaudeを実行してサインインしてください。";
-"claude_token_expired" = "Claude Codeのサインイントークンの有効期限が切れました。Claude Codeを一度実行すると更新されます。";

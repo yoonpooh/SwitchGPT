@@ -2,7 +2,7 @@ import XCTest
 @testable import SwitchGPT
 
 final class ClaudeUsageTests: XCTestCase {
-    // Trimmed from a real api/oauth/usage response.
+    // Trimmed from the rate_limits of a real get_usage answer.
     let usageBody = """
     {"five_hour":{"utilization":8.0,"resets_at":"2026-09-27T18:09:59.991290+00:00"},"seven_day":null,
      "limits":[
@@ -29,65 +29,54 @@ final class ClaudeUsageTests: XCTestCase {
         XCTAssertNil(ClaudeUsage.date("soon"))
     }
 
-    func testCredentialRequiresClaudeOAuthLogin() throws {
-        let stored = #"{"claudeAiOauth":{"accessToken":"token","refreshToken":"refresh","expiresAt":1790532599000,"subscriptionType":"max"}}"#
-        let credential = try ClaudeCredential(data: Data((stored + "\n").utf8))
-        XCTAssertEqual(credential.accessToken, "token")
-        XCTAssertEqual(credential.expiresAt?.timeIntervalSince1970, 1790532599)
-        XCTAssertEqual(credential.subscriptionType, "max")
-        XCTAssertEqual(credential.plan, "max")
-        let tiered = #"{"claudeAiOauth":{"accessToken":"t","subscriptionType":"max","rateLimitTier":"default_claude_max_20x"}}"#
-        XCTAssertEqual(try ClaudeCredential(data: Data(tiered.utf8)).plan, "Max 20x")
+    func testPlanBadgeNamesClaudeAndChatGPTPlans() {
         XCTAssertEqual(PlanBadge.title("Max 20x"), "Max 20x")
         XCTAssertEqual(PlanBadge.title("prolite"), "Pro")
         XCTAssertEqual(PlanBadge.title("pro"), "Pro 20x")
         XCTAssertEqual(PlanBadge.title("plus"), "Plus")
         XCTAssertEqual(PlanBadge.title("max"), "Max")
-        XCTAssertThrowsError(try ClaudeCredential(data: Data("{}".utf8)))
-        XCTAssertThrowsError(try ClaudeCredential(data: Data()))
     }
 
-    func testFetchSendsOAuthHeadersAndReadsProfile() async throws {
-        let backend = ClaudeBackend(responses: [(200, usageBody), (200, #"{"account":{"email":"me@example.com"}}"#)])
-        let client = ClaudeUsageClient(credential: { try Self.credential(expiresAt: 2_000_000_000_000) },
-                                       send: { try await backend.send($0) })
-        let result = try await client.fetch(now: Date(timeIntervalSince1970: 1_790_000_000))
+    func testUsageComesFromClaudeCodeAnswers() throws {
+        let account = #"{"account":{"email":"me@example.com","subscriptionType":"Claude Max","organization":"Org"},"models":[]}"#
+        let usage = #"{"subscription_type":"max","rate_limits_available":true,"rate_limits":"# + usageBody + "}"
+        let result = try ClaudeUsageClient(answers: { (Data(account.utf8), Data(usage.utf8)) }).fetch()
         XCTAssertEqual(result.email, "me@example.com")
         XCTAssertEqual(result.plan, "max")
-        XCTAssertEqual(result.usage.meters.count, 3)
-        let requests = await backend.requests
-        XCTAssertEqual(requests.map { $0.url?.absoluteString }, ["https://api.anthropic.com/api/oauth/usage", "https://api.anthropic.com/api/oauth/profile"])
-        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "Authorization"), "Bearer token")
-        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "anthropic-beta"), "oauth-2025-04-20")
+        XCTAssertEqual(result.usage.meters.map(\.remaining), [92, 75, 100])
     }
 
-    func testProfileFailureStillShowsUsage() async throws {
-        let backend = ClaudeBackend(responses: [(200, usageBody), (500, "{}")])
-        let client = ClaudeUsageClient(credential: { try Self.credential(expiresAt: nil) }, send: { try await backend.send($0) })
-        let result = try await client.fetch()
-        XCTAssertNil(result.email)
-        XCTAssertEqual(result.usage.meters.count, 3)
+    func testAPIKeyLoginHasNoLimitsAndFailuresAreReported() async throws {
+        let apiKey = ClaudeUsageClient(answers: { (Data(#"{"account":{"email":"me@example.com"}}"#.utf8),
+                                                    Data(#"{"rate_limits_available":false,"rate_limits":null}"#.utf8)) })
+        let result = try apiKey.fetch()
+        XCTAssertNil(result.plan)
+        XCTAssertTrue(result.usage.meters.isEmpty)
+        let signedOut = ClaudeUsageClient(answers: { (Data(#"{"account":{}}"#.utf8), Data("{}".utf8)) })
+        guard case .failure(let error) = await signedOut.load() else { return XCTFail("Expected failure") }
+        XCTAssertEqual(error.localizedDescription, L10n.text("claude_signed_out"))
+        let refused = ClaudeUsageClient(answers: { throw SwitchError(message: "Claude Code refused get_usage") })
+        guard case .failure(let failure) = await refused.load() else { return XCTFail("Expected failure") }
+        XCTAssertEqual(failure.localizedDescription, "Claude Code refused get_usage")
     }
 
-    func testExpiredTokenIsNeverSentOrRenewed() async throws {
-        let backend = ClaudeBackend(responses: [])
-        let client = ClaudeUsageClient(credential: { try Self.credential(expiresAt: 1_000) }, send: { try await backend.send($0) })
-        let result = await client.load(now: Date(timeIntervalSince1970: 1_790_000_000))
-        guard case .failure(let error) = result else { return XCTFail("Expected failure") }
-        XCTAssertEqual(error.localizedDescription, L10n.text("claude_token_expired"))
-        let requests = await backend.requests
-        XCTAssertTrue(requests.isEmpty)
-    }
-
-    func testHTTPErrorsAreReported() async throws {
-        for (status, message) in [(401, L10n.text("claude_token_expired")), (429, L10n.format("usage_error", 429))] {
-            let backend = ClaudeBackend(responses: [(status, "{}")])
-            let client = ClaudeUsageClient(credential: { try Self.credential(expiresAt: nil) }, send: { try await backend.send($0) })
-            do { _ = try await client.fetch(); XCTFail("Expected error") }
-            catch { XCTAssertEqual(error.localizedDescription, message) }
-            let requests = await backend.requests
-            XCTAssertEqual(requests.count, 1)
-        }
+    func testControlRequestsShareOneProcessAndKeepTheirOrder() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = root.appendingPathComponent("claude")
+        // Answers arrive in reverse order.
+        let script = """
+        #!/usr/bin/python3
+        import json, sys
+        requests = [json.loads(line) for line in sys.stdin if line.strip()]
+        for request in reversed(requests):
+            answer = {'subtype': request['request']['subtype']}
+            print(json.dumps({'type': 'control_response', 'response': {'subtype': 'success', 'request_id': request['request_id'], 'response': answer}}))
+        """
+        FileManager.default.createFile(atPath: executable.path, contents: Data(script.utf8), attributes: [.posixPermissions: 0o755])
+        let answers = try ClaudeModelDiscovery.controls(executable, subtypes: ["initialize", "get_usage"])
+        XCTAssertEqual(answers.map { $0["subtype"] as? String }, ["initialize", "get_usage"])
     }
 
     @MainActor func testClaudeNicknamePersistsAndEmptyNameRestoresEmail() throws {
@@ -105,23 +94,5 @@ final class ClaudeUsageTests: XCTestCase {
         XCTAssertNil(AccountStore(index: index).claudeNickname)
         store.busy = true
         XCTAssertFalse(store.renameClaude(to: "Blocked"))
-    }
-
-    static func credential(expiresAt: Double?) throws -> ClaudeCredential {
-        var oauth: [String: Any] = ["accessToken": "token", "subscriptionType": "max"]
-        oauth["expiresAt"] = expiresAt
-        return try ClaudeCredential(data: JSONSerialization.data(withJSONObject: ["claudeAiOauth": oauth]))
-    }
-}
-
-actor ClaudeBackend {
-    private var responses: [(Int, String)]
-    private(set) var requests: [URLRequest] = []
-    init(responses: [(Int, String)]) { self.responses = responses }
-    func send(_ request: URLRequest) throws -> (Data, URLResponse) {
-        requests.append(request)
-        guard !responses.isEmpty else { throw URLError(.badServerResponse) }
-        let (status, body) = responses.removeFirst()
-        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
     }
 }

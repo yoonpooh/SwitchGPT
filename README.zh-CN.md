@@ -162,7 +162,7 @@ flowchart LR
 
 ## Claude 模型（可选）
 
-在 `⋯` 中开启 **使用 Claude 模型** 后，账户可用的 Claude 模型会加入 ChatGPT 的模型选择器。它们通过本机已登录的 Claude Code CLI（`~/.local/bin/claude`、`/opt/homebrew/bin/claude` 或 `/usr/local/bin/claude`）运行。SwitchGPT 不读取 Anthropic 凭据；未安装 CLI 时该开关不可用。
+在 `⋯` 中开启 **使用 Claude 模型** 后，账户可用的 Claude 模型会加入 ChatGPT 的模型选择器。它们通过本机已登录的 Claude Code CLI（`~/.local/bin/claude`、`/opt/homebrew/bin/claude` 或 `/usr/local/bin/claude`）运行。SwitchGPT 不读取 Anthropic 凭据；未安装 CLI 时该开关不可用。账户与套餐限额取自 Claude Code 自身的报告，显示在 ChatGPT 账户下方，查询时不会调用模型。
 
 模型列表需重启后才会更新，因此切换时会询问是否重启 ChatGPT，并删除 `~/.codex/models_cache.json` 以获取新列表。
 

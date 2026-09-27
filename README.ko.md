@@ -162,7 +162,7 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 
 ## Claude 모델 (선택)
 
-`⋯`에서 **Claude 모델 사용**을 켜면 계정에서 쓸 수 있는 Claude 모델이 ChatGPT 모델 선택기에 추가됩니다. 이 Mac에 이미 로그인된 Claude Code CLI(`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, `/usr/local/bin/claude`)로 실행합니다. SwitchGPT는 Anthropic 인증 정보를 읽지 않으며, CLI가 없으면 토글이 비활성화됩니다.
+`⋯`에서 **Claude 모델 사용**을 켜면 계정에서 쓸 수 있는 Claude 모델이 ChatGPT 모델 선택기에 추가됩니다. 이 Mac에 이미 로그인된 Claude Code CLI(`~/.local/bin/claude`, `/opt/homebrew/bin/claude`, `/usr/local/bin/claude`)로 실행합니다. SwitchGPT는 Anthropic 인증 정보를 읽지 않으며, CLI가 없으면 토글이 비활성화됩니다. 계정과 요금제 한도는 Claude Code가 직접 알려 주는 값으로 ChatGPT 계정 아래에 표시되며, 이때 모델은 호출하지 않습니다.
 
 모델 목록은 재시작해야 갱신되므로, 토글을 바꾸면 ChatGPT 재시작 여부를 묻습니다. 새 목록을 받도록 `~/.codex/models_cache.json`을 지웁니다.
 

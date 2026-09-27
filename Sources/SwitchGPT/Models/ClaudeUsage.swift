@@ -1,6 +1,6 @@
 import Foundation
 
-/// Plan limits of the Claude Code account signed in on this Mac, from api.anthropic.com/api/oauth/usage.
+/// Plan limits of the Claude Code account signed in on this Mac, as Claude Code's get_usage control request reports them.
 struct ClaudeUsage: Decodable, Equatable, Sendable {
     let limits: [Limit]
 
