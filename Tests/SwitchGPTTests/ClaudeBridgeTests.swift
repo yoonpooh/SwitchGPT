@@ -321,7 +321,51 @@ final class ClaudeBridgeTests: XCTestCase {
             XCTAssertEqual((error as? ClaudeFailure)?.status, 415)
         }
         guard case .openAI = try ClaudeBridge.route(try request(opus, encoding: "br"), claudeEnabled: false) else { return XCTFail("Not forwarded") }
-        XCTAssertThrowsError(try ClaudeBridge.route(try request(Data("not gzip".utf8), encoding: "gzip"), claudeEnabled: true))
+        // A body that cannot be decompressed says why instead of failing with an empty error.
+        XCTAssertThrowsError(try ClaudeBridge.route(try request(Data("not gzip".utf8), encoding: "gzip"), claudeEnabled: true)) { error in
+            XCTAssertEqual((error as? ClaudeFailure)?.status, 400)
+            XCTAssertEqual((error as? ClaudeFailure)?.message, ClaudeBridge.corruptMessage("gzip"))
+        }
+        guard case .openAI = try ClaudeBridge.route(try request(Data("not gzip".utf8), encoding: "gzip"), claudeEnabled: false) else {
+            return XCTFail("Not forwarded")
+        }
+    }
+
+    /// A long thread of screenshots decoded to more than the 64 MB wire limit, and Codex then showed an empty error.
+    func testCompressedBodiesDecodePastTheWireLimit() throws {
+        let body = Data(#"{"model":"claude-code-opus-5-5","input":""#.utf8)
+            + Data(repeating: UInt8(ascii: "A"), count: RelayRequest.bodyLimit + 1) + Data(#""}"#.utf8)
+        let gzip = try deflated(body, windowBits: 31)
+        XCTAssertEqual(try ClaudeBridge.decompress(gzip, encoding: "gzip"), body)
+        XCTAssertThrowsError(try ClaudeBridge.decompress(gzip, encoding: "gzip", limit: 1 << 20)) { error in
+            XCTAssertEqual((error as? HTTPFailure)?.status, 413)
+        }
+        // The zstd CLI streams from stdin without a content size, so the output buffer has to grow.
+        if ZstdLibrary.shared != nil, let compressed = try zstd(body) {
+            XCTAssertEqual(try ClaudeBridge.decompress(compressed, encoding: "zstd"), body)
+            XCTAssertThrowsError(try ClaudeBridge.decompress(compressed, encoding: "zstd", limit: 1 << 20)) { error in
+                XCTAssertEqual((error as? HTTPFailure)?.status, 413)
+            }
+        }
+    }
+
+    func testReplayedHistoryKeepsOnlyTheLatestImages() throws {
+        func image(_ fill: String, _ length: Int = 4) -> [String: Any] {
+            ["type": "input_image", "image_url": "data:image/png;base64," + String(repeating: fill, count: length)]
+        }
+        func data(_ block: [String: Any]) -> String? { (block["source"] as? [String: Any])?["data"] as? String }
+        let letters = (0..<25).map { String(UnicodeScalar(UInt8(ascii: "A") + UInt8($0))) }
+        let content = ClaudeBridge.promptContent(["input": [["role": "user", "content": letters.map { image($0) }]]], compacting: false)
+        XCTAssertEqual(content.count, 2 + ClaudeBridge.promptImages)
+        XCTAssertTrue(try XCTUnwrap(content[0]["text"] as? String).contains("[Attached image 25]"))
+        XCTAssertTrue(try XCTUnwrap(content[1]["text"] as? String).contains("last 20 of 25 attached images follow, in order, starting with image 6"))
+        XCTAssertEqual(data(content[2]), "FFFF")
+        XCTAssertEqual(content.last.flatMap(data), "YYYY")
+        // Large screenshots fill the size budget first; the newest one always goes along.
+        let half = ClaudeBridge.promptImageBytes / 2 + 4
+        let sized = ClaudeBridge.promptContent(["input": [["role": "user", "content": [image("A", half), image("B", half)]]]], compacting: false)
+        XCTAssertEqual(sized.count, 3)
+        XCTAssertEqual(sized.last.flatMap(data)?.first, "B")
     }
 
     /// Each case was rejected by the real OpenAI endpoint with a Claude-made item and accepted after this rewrite.
@@ -1034,8 +1078,12 @@ final class ClaudeBridgeTests: XCTestCase {
         process.standardInput = input
         process.standardOutput = output
         try process.run()
-        try input.fileHandleForWriting.write(contentsOf: data)
-        try input.fileHandleForWriting.close()
+        // Written from another thread: a large body would otherwise fill both pipes and block.
+        let writer = input.fileHandleForWriting
+        DispatchQueue.global().async {
+            try? writer.write(contentsOf: data)
+            try? writer.close()
+        }
         let compressed = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return process.terminationStatus == 0 ? compressed : nil

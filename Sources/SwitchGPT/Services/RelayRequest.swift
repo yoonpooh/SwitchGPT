@@ -4,6 +4,8 @@ import Foundation
 struct RelayRequest: Sendable {
     static let headerLimit = 65_536
     static let bodyLimit = 64 * 1024 * 1024
+    /// A compressed body may decode to more. It stays on this Mac, and Claude receives only its latest images.
+    static let decodedLimit = 256 * 1024 * 1024
     let method: String
     let target: String
     let headers: [String: String]

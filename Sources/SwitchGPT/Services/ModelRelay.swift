@@ -432,7 +432,12 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
 
     private func fail(_ status: Int) {
         guard !closed else { return }
-        let body = status == 429 ? "{\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"SwitchGPT: no account with confirmed remaining quota is available.\"}}" : ""
+        let body = switch status {
+        case 429: "{\"error\":{\"type\":\"usage_limit_reached\",\"message\":\"SwitchGPT: no account with confirmed remaining quota is available.\"}}"
+        case 413: "{\"error\":{\"type\":\"request_too_large\",\"message\":\"SwitchGPT: this request is over \(RelayRequest.bodyLimit >> 20) MB, "
+            + "the most it accepts. Continue in a new thread.\"}}"
+        default: ""
+        }
         send(Data("HTTP/1.1 \(status) SwitchGPT\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)".utf8), final: true)
     }
 
