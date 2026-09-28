@@ -126,8 +126,8 @@
 "reset_storage_error" = "초기화 처리 기록을 확인하거나 저장할 수 없어 사용을 중단했습니다.";
 "reset_unavailable" = "초기화 사용 가능 여부를 확인하지 못했습니다. 새로 고침해 주세요.";
 "reset_no_credit" = "남은 초기화가 없습니다.";
-"reset_not_applicable" = "지금은 초기화할 사용 한도가 없습니다.";
-"reset_not_applicable_detail" = "한도를 사용한 뒤 다시 시도하세요.";
+"reset_not_applicable" = "지금은 초기화가 필요하지 않습니다.";
+"reset_not_applicable_detail" = "사용 한도를 쓴 뒤에 다시 시도하세요.";
 "reset_success" = "사용 한도를 초기화했습니다.";
 "reset_success_detail" = "%@ · 남은 초기화 %d회";
 "reset_already_redeemed" = "이전에 요청한 초기화가 확인됐습니다.";

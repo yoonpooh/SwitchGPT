@@ -126,8 +126,8 @@
 "reset_storage_error" = "The reset was stopped because its request record could not be read or saved.";
 "reset_unavailable" = "Could not confirm reset availability. Please refresh.";
 "reset_no_credit" = "No resets are left.";
-"reset_not_applicable" = "There are no usage limits to reset right now.";
-"reset_not_applicable_detail" = "Try again after using some of a limit.";
+"reset_not_applicable" = "Usage doesn't need a reset right now.";
+"reset_not_applicable_detail" = "Try again after using some of your limits.";
 "reset_success" = "Usage limits reset.";
 "reset_success_detail" = "%@ · %d resets left";
 "reset_already_redeemed" = "The previously requested reset was confirmed.";

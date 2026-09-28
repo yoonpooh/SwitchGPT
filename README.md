@@ -34,7 +34,7 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 ## Contents
 
 - [Features](#features)
-- [What's new in 0.4.2](#whats-new-in-042)
+- [What's new in 0.4.3](#whats-new-in-043)
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -61,7 +61,7 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 - **Local and private** — credentials stay in macOS Keychain, and requests go directly to OpenAI through a local relay. There is no SwitchGPT server.
 - **Localized** — English, Korean, Japanese, and Simplified Chinese.
 
-## What's new in 0.4.2
+## What's new in 0.4.3
 
 - **Resets on the account card:** a card shows remaining resets as **Resets: N** with the original ↻ icon. Why a reset cannot be used, and its result, now appear in a popup when you select **Use** instead of on the card. See [Reset credits](#reset-credits).
 
@@ -99,7 +99,7 @@ Routing applies to Codex requests that use the built-in `openai` provider on thi
 
 ### Download
 
-1. Download `SwitchGPT-v0.4.2-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
+1. Download `SwitchGPT-v0.4.3-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
 2. With both files in the same directory, verify the checksum:
 
    ```sh
@@ -268,8 +268,8 @@ The script builds for the host architecture. Published artifacts are Apple silic
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.2-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.2-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.3-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.3-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### Project structure

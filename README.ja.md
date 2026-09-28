@@ -34,7 +34,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 ## 目次
 
 - [主な機能](#主な機能)
-- [0.4.2 の新機能](#042-の新機能)
+- [0.4.3 の新機能](#043-の新機能)
 - [仕組み](#仕組み)
 - [動作要件](#動作要件)
 - [インストール](#インストール)
@@ -61,7 +61,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 - **ローカルで完結** — 認証情報は macOS キーチェーンに保存し、リクエストはローカル中継から OpenAI へ直接送ります。SwitchGPT のサーバーはありません。
 - **多言語対応** — 英語、韓国語、日本語、中国語（簡体字）。
 
-## 0.4.2 の新機能
+## 0.4.3 の新機能
 
 - **アカウントカードのリセット：** 残りのリセット回数を **リセット N回** と従来の ↻ アイコンで表示します。使用できない理由と結果は、カードではなく **使用** を押したときにポップアップで表示します。[リセットクレジット](#リセットクレジット) を参照してください。
 
@@ -99,7 +99,7 @@ flowchart LR
 
 ### ダウンロード
 
-1. [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)から `SwitchGPT-v0.4.2-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
+1. [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)から `SwitchGPT-v0.4.3-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
 2. 両方のファイルを同じフォルダに置き、チェックサムを確認します。
 
    ```sh
@@ -268,8 +268,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.2-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.2-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.3-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.3-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### プロジェクト構成

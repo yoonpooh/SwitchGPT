@@ -126,8 +126,8 @@
 "reset_storage_error" = "リセットの処理記録を読み取りまたは保存できないため、使用を中止しました。";
 "reset_unavailable" = "リセットを使用できるか確認できませんでした。更新してください。";
 "reset_no_credit" = "残りのリセットがありません。";
-"reset_not_applicable" = "現在リセットできる利用上限がありません。";
-"reset_not_applicable_detail" = "利用上限を使ってから再度お試しください。";
+"reset_not_applicable" = "現在リセットの必要はありません。";
+"reset_not_applicable_detail" = "利用枠を使ってから再度お試しください。";
 "reset_success" = "利用上限をリセットしました。";
 "reset_success_detail" = "%@・残りのリセット %d回";
 "reset_already_redeemed" = "以前リクエストしたリセットを確認しました。";
