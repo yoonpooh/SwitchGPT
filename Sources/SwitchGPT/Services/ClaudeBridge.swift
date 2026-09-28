@@ -161,15 +161,27 @@ enum ClaudeBridge {
         return config().flatMap(configuredVerbosity)
     }
 
-    /// model_verbosity from the top level of a Codex config.toml.
+    /// model_verbosity from the top level of a Codex config.toml. Multi-line strings are skipped, so text inside them,
+    /// such as an example in developer_instructions, is never read as a key or a table.
     static func configuredVerbosity(_ config: String) -> String? {
+        var closing: String? // Ends the multi-line string the scan is inside.
         for line in config.components(separatedBy: .newlines) {
-            let text = line.components(separatedBy: "#")[0].trimmingCharacters(in: .whitespaces)
+            if let delimiter = closing {
+                if line.contains(delimiter) { closing = nil }
+                continue
+            }
+            let text = line.trimmingCharacters(in: .whitespaces)
             if text.hasPrefix("[") { break }
-            let parts = text.split(separator: "=", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            guard parts.count == 2, parts[0] == "model_verbosity" else { continue }
-            let value = parts[1].trimmingCharacters(in: CharacterSet(charactersIn: "\"'")).lowercased()
-            return verbosities.contains(value) ? value : nil
+            guard !text.hasPrefix("#"), let equals = text.firstIndex(of: "=") else { continue }
+            let key = text[..<equals].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            let value = text[text.index(after: equals)...].trimmingCharacters(in: .whitespaces)
+            if let delimiter = ["\"\"\"", "'''"].first(where: value.hasPrefix), !value.dropFirst(3).contains(delimiter) {
+                closing = delimiter
+                continue
+            }
+            guard key == "model_verbosity", let quote = value.first, quote == "\"" || quote == "'" else { continue }
+            let setting = value.dropFirst().prefix { $0 != quote }.lowercased()
+            return verbosities.contains(setting) ? setting : nil
         }
         return nil
     }

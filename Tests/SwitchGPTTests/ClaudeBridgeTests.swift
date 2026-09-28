@@ -116,6 +116,12 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertNil(ClaudeBridge.configuredVerbosity("[profiles.p]\nmodel_verbosity = \"low\"\n"))
         XCTAssertNil(ClaudeBridge.configuredVerbosity("model_verbosity = \"loud\"\n"))
         XCTAssertEqual(ClaudeBridge.configuredVerbosity("model_verbosity='LOW'"), "low")
+        XCTAssertEqual(ClaudeBridge.configuredVerbosity("\"model_verbosity\" = \"high\""), "high")
+        // Keys and tables inside a multi-line string are text, not configuration.
+        let instructions = "developer_instructions = \"\"\"\nmodel_verbosity = \"low\"\n[Output format]\n\"\"\"\n"
+        XCTAssertEqual(ClaudeBridge.configuredVerbosity(instructions + "model_verbosity = \"high\"\n"), "high")
+        XCTAssertEqual(ClaudeBridge.configuredVerbosity("notes = '''\n[x]\n'''\nmodel_verbosity = \"high\"\n"), "high")
+        XCTAssertEqual(ClaudeBridge.configuredVerbosity("a = \"\"\"one line\"\"\"\nmodel_verbosity = \"high\"\n"), "high")
         // The request wins, and the config is not read then.
         XCTAssertEqual(ClaudeBridge.verbosity(["text": ["verbosity": "low"]], config: { XCTFail("config read"); return config }), "low")
         XCTAssertEqual(ClaudeBridge.verbosity(["text": ["verbosity": "odd"]], config: { config }), "high")
