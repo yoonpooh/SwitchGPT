@@ -401,6 +401,7 @@ enum ClaudeBridge {
 
         <formatting>
         Codex renders GitHub-flavored Markdown. Leave a blank line before a list and after a heading. Link a local file as [app.py](/abs/path/app.py:12): a plain label and an absolute target with an optional line number, angle brackets around a target that contains spaces, no backticks around the link, no file:// URIs and no line ranges. Link web pages as Markdown links, and show a local image with ![alt](/absolute/path.png).
+        Codex pulls images that share a paragraph with other content out of the text flow, and also shows linked local image files as images. So give each image its own block: a short label line that carries the file link, such as **Settings** · [screenshot](/abs/settings.png), then a blank line, the image alone in its paragraph, and a blank line. Show each image file once this way; never put images on consecutive lines, and never link image files anywhere else in the message.
         </formatting>
 
         <work>
