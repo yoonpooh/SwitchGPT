@@ -62,6 +62,10 @@ enum ClaudeBridge {
     static let compactionPrefix = "claude-code-bridge-summary-v1:"
     static let compactionEffort = "medium"
     static let compactionImages = 4
+    /// A fresh Claude Code process replays the whole history. Only the latest images go along, so a thread full of
+    /// screenshots stays within Claude's request limits.
+    static let promptImages = 20
+    static let promptImageBytes = 16 * 1024 * 1024
     /// Claude Code's own search tool, offered in place of Codex's hosted web search.
     static let searchTool = "WebSearch"
     /// Marks the web_search_call items made from Claude's searches, so a GPT continuation can drop them.
@@ -160,7 +164,7 @@ enum ClaudeBridge {
         let encoding = (request.headers["content-encoding"] ?? "identity").lowercased().trimmingCharacters(in: .whitespaces)
         let body: Data
         if encoding == "identity" { body = request.body }
-        else if let decoded = try decompress(request.body, encoding: encoding) { body = decoded }
+        else if let decoded = try decoded(request.body, encoding: encoding) { body = decoded }
         else if claudeEnabled { throw ClaudeFailure(status: 415, message: unreadableMessage(encoding)) }
         else { return .openAI(request) } // Claude is off: OpenAI receives it as before.
         guard let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return .openAI(request) }
@@ -210,17 +214,34 @@ enum ClaudeBridge {
             + (encoding == "zstd" ? " Install zstd with Homebrew (brew install zstd), then send the message again." : "")
     }
 
+    static let tooLargeMessage = "This Codex conversation is over \(RelayRequest.decodedLimit >> 20) MB once decompressed, "
+        + "more than SwitchGPT reads, so it was not sent to Claude or OpenAI. Continue in a new thread."
+
+    static func corruptMessage(_ encoding: String) -> String {
+        "SwitchGPT could not decompress this Codex request (Content-Encoding: \(encoding)), so it was not sent to Claude or OpenAI. "
+            + "Send the message again."
+    }
+
+    /// A body that fails to decode is refused with the reason instead of an empty error. It may be a Claude
+    /// conversation, so it never goes to OpenAI, even while Claude is off.
+    private static func decoded(_ data: Data, encoding: String) throws -> Data? {
+        do { return try decompress(data, encoding: encoding) }
+        catch let failure as HTTPFailure {
+            throw ClaudeFailure(status: failure.status, message: failure.status == 413 ? tooLargeMessage : corruptMessage(encoding))
+        }
+    }
+
     /// Returns nil for an unsupported encoding, and throws for a corrupt or oversized body.
-    static func decompress(_ data: Data, encoding: String) throws -> Data? {
+    static func decompress(_ data: Data, encoding: String, limit: Int = RelayRequest.decodedLimit) throws -> Data? {
         switch encoding {
-        case "gzip", "x-gzip": return try inflated(data, windowBits: 31)
-        case "deflate": return try inflated(data, windowBits: 15)
-        case "zstd": return try ZstdLibrary.shared?.decompress(data)
+        case "gzip", "x-gzip": return try inflated(data, windowBits: 31, limit: limit)
+        case "deflate": return try inflated(data, windowBits: 15, limit: limit)
+        case "zstd": return try ZstdLibrary.shared?.decompress(data, limit: limit)
         default: return nil
         }
     }
 
-    private static func inflated(_ data: Data, windowBits: Int32) throws -> Data {
+    private static func inflated(_ data: Data, windowBits: Int32, limit: Int) throws -> Data {
         var stream = z_stream()
         guard inflateInit2_(&stream, windowBits, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
             throw HTTPFailure(status: 400)
@@ -240,7 +261,7 @@ enum ClaudeBridge {
                 }
                 guard status == Z_OK || status == Z_STREAM_END else { throw HTTPFailure(status: 400) }
                 output.append(contentsOf: chunk[0..<(chunk.count - Int(stream.avail_out))])
-                guard output.count <= RelayRequest.bodyLimit else { throw HTTPFailure(status: 413) }
+                guard output.count <= limit else { throw HTTPFailure(status: 413) }
             } while status != Z_STREAM_END && (stream.avail_in > 0 || stream.avail_out == 0)
         }
         guard status == Z_STREAM_END else { throw HTTPFailure(status: 400) }
@@ -486,24 +507,42 @@ enum ClaudeBridge {
             return object.mapValues(walk)
         }
         let conversation = walk(inputs)
+        let kept = latestImages(images, count: compacting ? compactionImages : promptImages)
+        let note = kept.count == images.count ? ""
+            : kept.isEmpty ? "None of the \(images.count) attached images follow."
+            : "Only the last \(kept.count) of \(images.count) attached images follow, in order, starting with image \(images.count - kept.count + 1)."
         var content: [[String: Any]]
         if compacting {
             // Instructions are supplied again after compaction; only the latest images add useful state.
-            let kept = Array(images.suffix(compactionImages))
-            let note = kept.count < images.count ? "\n\nOnly the last \(kept.count) of \(images.count) attached images follow, in order." : ""
-            content = [["type": "text", "text": compactionPrompt + note + "\n\n" + text(["conversation": conversation], sorted: true)]]
-            images = kept
+            content = [["type": "text", "text": compactionPrompt + (note.isEmpty ? "" : "\n\n" + note) + "\n\n"
+                        + text(["conversation": conversation], sorted: true)]]
         } else {
             let search = webSearch(data["tools"])
             let hosted = hostedTools(data["tools"]).filter { $0 != "web_search" || !search } // Replaced by WebSearch.
             let envelope = "{\"conversation\":" + text(conversation, sorted: true)
                 + (hosted.isEmpty ? "" : ",\"unavailable_hosted_tools\":" + text(hosted)) + "}"
             content = [["type": "text", "text": envelope]]
+            if !note.isEmpty {
+                content.append(["type": "text", "text": note + " The others were left out to keep the request within Claude's limits; "
+                                + "view one again with a tool if you need it."])
+            }
         }
-        for image in images {
+        for image in kept {
             content.append(["type": "image", "source": ["type": "base64", "media_type": image["mimeType"] ?? "", "data": image["data"] ?? ""]])
         }
         return content
+    }
+
+    /// The latest images within a count and a size budget, in order. An image over the budget on its own is left out.
+    static func latestImages(_ images: [[String: Any]], count: Int) -> [[String: Any]] {
+        var kept: [[String: Any]] = [], bytes = 0
+        for image in images.reversed() {
+            let size = (image["data"] as? String)?.utf8.count ?? 0
+            guard kept.count < count, bytes + size <= promptImageBytes else { break }
+            kept.append(image)
+            bytes += size
+        }
+        return kept.reversed()
     }
 
     /// How Codex begins the user message that carries an AGENTS.md.
@@ -553,10 +592,14 @@ enum ClaudeBridge {
 final class ZstdLibrary: @unchecked Sendable {
     private typealias Decompress = @convention(c) (UnsafeMutableRawPointer?, Int, UnsafeRawPointer?, Int) -> Int
     private typealias IsError = @convention(c) (Int) -> UInt32
+    private typealias ErrorCode = @convention(c) (Int) -> Int32
     private typealias ContentSize = @convention(c) (UnsafeRawPointer?, Int) -> UInt64
     private let decompressFrame: Decompress
     private let isError: IsError
+    private let errorCode: ErrorCode
     private let contentSize: ContentSize
+    /// ZSTD_error_dstSize_tooSmall.
+    private static let outputTooSmall: Int32 = 70
 
     static let shared = ZstdLibrary(paths: ["/opt/homebrew/opt/zstd/lib/libzstd.dylib", "/opt/homebrew/lib/libzstd.dylib",
                                             "/usr/local/opt/zstd/lib/libzstd.dylib", "/usr/local/lib/libzstd.dylib"])
@@ -564,27 +607,30 @@ final class ZstdLibrary: @unchecked Sendable {
     init?(paths: [String]) {
         guard let handle = paths.lazy.compactMap({ dlopen($0, RTLD_NOW | RTLD_LOCAL) }).first,
               let decompress = dlsym(handle, "ZSTD_decompress"), let isError = dlsym(handle, "ZSTD_isError"),
-              let contentSize = dlsym(handle, "ZSTD_getFrameContentSize") else { return nil }
+              let errorCode = dlsym(handle, "ZSTD_getErrorCode"), let contentSize = dlsym(handle, "ZSTD_getFrameContentSize") else { return nil }
         decompressFrame = unsafeBitCast(decompress, to: Decompress.self)
         self.isError = unsafeBitCast(isError, to: IsError.self)
+        self.errorCode = unsafeBitCast(errorCode, to: ErrorCode.self)
         self.contentSize = unsafeBitCast(contentSize, to: ContentSize.self)
     }
 
-    func decompress(_ data: Data) throws -> Data {
-        let limit = RelayRequest.bodyLimit
-        return try data.withUnsafeBytes { (input: UnsafeRawBufferPointer) in
+    /// A body without a declared size, or with more frames than the first declares, doubles its output buffer until
+    /// it fits or reaches the limit.
+    func decompress(_ data: Data, limit: Int = RelayRequest.decodedLimit) throws -> Data {
+        try data.withUnsafeBytes { (input: UnsafeRawBufferPointer) in
             let declared = contentSize(input.baseAddress, input.count)
             // 0...limit is exact; UInt64.max means unknown; UInt64.max - 1 is an invalid frame.
             if declared == UInt64.max - 1 { throw HTTPFailure(status: 400) }
             if declared != UInt64.max && declared > UInt64(limit) { throw HTTPFailure(status: 413) }
-            var capacities = [limit]
-            if declared != UInt64.max { capacities.insert(max(Int(declared), 1), at: 0) } // Retry for multi-frame bodies.
-            for capacity in capacities {
+            var capacity = declared == UInt64.max ? min(max(input.count * 8, 1 << 20), limit) : max(Int(declared), 1)
+            while true {
                 var output = Data(count: capacity)
                 let size = output.withUnsafeMutableBytes { decompressFrame($0.baseAddress, capacity, input.baseAddress, input.count) }
                 if isError(size) == 0 { output.count = size; return output }
+                guard errorCode(size) == Self.outputTooSmall else { throw HTTPFailure(status: 400) }
+                guard capacity < limit else { throw HTTPFailure(status: 413) }
+                capacity = min(capacity * 2, limit)
             }
-            throw HTTPFailure(status: 400)
         }
     }
 }
