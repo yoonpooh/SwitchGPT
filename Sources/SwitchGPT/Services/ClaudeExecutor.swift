@@ -405,11 +405,23 @@ final class ClaudeExecutor: @unchecked Sendable {
                 if let id = block["tool_use_id"] as? String { run.events.append(.toolResult(id, failed: block["is_error"] as? Bool == true)) }
             }
             pump(run)
+        case "rate_limit_event":
+            // Claude Code reports the plan limit it hit (session, weekly or model) before its error result.
+            if (event["rate_limit_info"] as? [String: Any])?["status"] as? String == "rejected" { run.limited = true }
+        case "assistant" where event["error"] as? String == "rate_limit":
+            run.limited = true
         case "result":
             run.collected = true
             if event["is_error"] as? Bool == true {
                 let result = event["result"] as? String
                 let detail = (result?.isEmpty == false ? result : nil) ?? event["subtype"] as? String ?? "unknown error"
+                if run.limited {
+                    // Codex retries most failed responses, and each retry would hit the same limit in a new Claude Code;
+                    // an invalid_prompt failure is shown to the user as is, once.
+                    run.failureCode = "invalid_prompt"
+                    cancel(run, "Claude usage limit reached: " + String(detail.prefix(300)))
+                    return
+                }
                 if detail.lowercased().contains("prompt is too long") || detail.lowercased().contains("context window") {
                     run.failureCode = "context_length_exceeded"
                 }
@@ -680,6 +692,8 @@ final class ClaudeRun: @unchecked Sendable {
     var initialized = false
     var launched: Date?
     var failureCode: String?
+    /// Claude Code reported that the account hit a usage limit.
+    var limited = false
     var lastUsage: [String: Any]?
     var touched = Date()
     var output = Date()

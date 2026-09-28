@@ -856,6 +856,19 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertTrue(response.text.contains("exited without a result: Not logged in"), response.text)
     }
 
+    @MainActor func testClaudeUsageLimitFailsOnceWithItsMessage() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "limit", "input": [
+            harness.environment, ["role": "user", "content": "HIT_LIMIT"]] as [Any]])
+        XCTAssertEqual(response.status, 200)
+        XCTAssertTrue(response.text.contains("response.failed"), response.text)
+        // Codex shows an invalid_prompt failure as is instead of retrying into the same limit.
+        XCTAssertTrue(response.text.contains("\"invalid_prompt\""), response.text)
+        XCTAssertTrue(response.text.contains("Claude usage limit reached: You've hit your session limit"), response.text)
+        try await Harness.waitUntilGone(try harness.processes())
+    }
+
     @MainActor func testStalledClaudeFailsTheOpenResponse() async throws {
         let harness = try await Harness(enabled: true, stallLimit: 1)
         defer { harness.stop() }
@@ -1372,6 +1385,13 @@ private final class Counter: @unchecked Sendable {
         tools = [t['name'] for t in listed]
     search = '--tools' in args and 'WebSearch' in args[args.index('--tools') + 1]
     out({'type': 'system', 'subtype': 'init', 'tools': ['mcp__codex__' + t for t in tools] + (['WebSearch'] if search else [])})
+    if 'HIT_LIMIT' in prompt:
+        limit = "You've hit your session limit · resets 3:50pm (Asia/Seoul)"
+        out({'type': 'rate_limit_event', 'rate_limit_info': {'status': 'rejected', 'resetsAt': 1790578180, 'rateLimitType': 'five_hour'}})
+        out({'type': 'assistant', 'error': 'rate_limit', 'message': {'role': 'assistant', 'model': '<synthetic>', 'content': [{'type': 'text', 'text': limit}]}})
+        out({'type': 'result', 'subtype': 'success', 'is_error': True, 'result': limit, 'terminal_reason': 'api_error'})
+        sys.stdin.read()
+        sys.exit(0)
     if 'STALL_NOW' in prompt: time.sleep(300)
     if 'HOLD_ANSWER' in prompt: time.sleep(1.5)
     if 'HOLD_LONG' in prompt: time.sleep(3)
