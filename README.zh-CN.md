@@ -34,7 +34,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 ## 目录
 
 - [功能特性](#功能特性)
-- [0.4.3 新功能](#043-新功能)
+- [0.4.4 新功能](#044-新功能)
 - [工作原理](#工作原理)
 - [系统要求](#系统要求)
 - [安装](#安装)
@@ -61,9 +61,10 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 - **完全本地** — 认证信息保存在 macOS 钥匙串中，请求经本地中继直接发往 OpenAI。没有 SwitchGPT 服务器。
 - **多语言** — 英语、韩语、日语和简体中文。
 
-## 0.4.3 新功能
+## 0.4.4 新功能
 
-- **账户卡片上的重置：** 以 **重置 N 次** 和原来的 ↻ 图标显示剩余重置次数。无法使用的原因和使用结果不再显示在卡片上，而是在点击 **使用** 时以弹窗提示。详见 [重置次数](#重置次数)。
+- **Claude 长时间任务不再中断：** Claude 安静工作时会发送 keepalive 事件，Codex 不会在 5 分钟后断开响应。如果连接仍然断开且 Codex 重试，会继续同一个 Claude Code 任务，而不是从头开始。
+- **显示 Claude 用量上限：** Claude Code 达到会话、每周或模型上限时，Codex 会立即显示包含重置时间的 Claude 消息，而不是重连 5 次。
 
 更早的变更请查看[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)。
 
@@ -99,7 +100,7 @@ flowchart LR
 
 ### 下载
 
-1. 从[最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)下载 `SwitchGPT-v0.4.3-macos-arm64.zip` 和 `SHA256SUMS.txt`。
+1. 从[最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)下载 `SwitchGPT-v0.4.4-macos-arm64.zip` 和 `SHA256SUMS.txt`。
 2. 将两个文件放在同一文件夹中，验证校验和：
 
    ```sh
@@ -268,8 +269,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### 项目结构

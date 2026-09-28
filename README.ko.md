@@ -34,7 +34,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 ## 목차
 
 - [주요 기능](#주요-기능)
-- [0.4.3의 새로운 기능](#043의-새로운-기능)
+- [0.4.4의 새로운 기능](#044의-새로운-기능)
 - [동작 방식](#동작-방식)
 - [요구 사항](#요구-사항)
 - [설치](#설치)
@@ -61,9 +61,10 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 - **로컬 전용** — 인증 정보는 macOS 키체인에 저장하고, 요청은 로컬 중계를 거쳐 OpenAI로 직접 전달합니다. SwitchGPT 서버는 없습니다.
 - **다국어 지원** — 영어, 한국어, 일본어, 중국어 간체.
 
-## 0.4.3의 새로운 기능
+## 0.4.4의 새로운 기능
 
-- **계정 카드의 초기화:** 남은 초기화 횟수를 **초기화 N회**와 기존 ↻ 아이콘으로 표시합니다. 사용할 수 없는 이유와 사용 결과는 카드 대신 **사용**을 눌렀을 때 팝업으로 알려 줍니다. [초기화](#초기화)를 참고하세요.
+- **긴 Claude 작업이 끊기지 않음:** Claude가 조용히 작업하는 동안 keepalive 이벤트를 보내므로 Codex가 5분 뒤 응답을 끊지 않습니다. 그래도 연결이 끊겨 Codex가 다시 요청하면 Claude Code를 처음부터 다시 시작하지 않고 하던 작업을 이어 갑니다.
+- **Claude 사용 한도 안내:** Claude Code가 세션·주간·모델 한도에 도달하면 Codex가 다섯 번 재연결하는 대신 초기화 시각이 담긴 Claude 메시지를 바로 보여 줍니다.
 
 이전 변경 사항은 [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases)에서 확인할 수 있습니다.
 
@@ -99,7 +100,7 @@ flowchart LR
 
 ### 다운로드
 
-1. [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)에서 `SwitchGPT-v0.4.3-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
+1. [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)에서 `SwitchGPT-v0.4.4-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
 2. 두 파일을 같은 폴더에 두고 체크섬을 확인합니다.
 
    ```sh
@@ -268,8 +269,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.3-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.3-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.4-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.4-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### 프로젝트 구조
