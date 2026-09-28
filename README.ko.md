@@ -170,7 +170,7 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 
 모델 목록은 재시작해야 갱신되므로, 토글을 바꾸면 ChatGPT 재시작 여부를 묻습니다. 새 목록을 받도록 `~/.codex/models_cache.json`을 지웁니다.
 
-SwitchGPT는 Claude Code에 제공 모델(예: Fable 5.1, Opus 5.5, Sonnet 5, Haiku 4.5)을 물어 각각 `claude-code-<모델>`로 추가합니다. 목록은 Claude Code가 업데이트되거나 6시간이 지나면 모델 호출 없이 다시 조회하며, 다음 ChatGPT 재시작 때 선택기에 반영됩니다. 각 모델의 컨텍스트 창은 Claude Code의 자동 압축 기준(1M 모델은 967K, Haiku는 167K)으로 알리므로, 창이 더 작은 모델로 바꾼 직후를 포함해 Claude Code보다 Codex가 먼저 스레드를 압축합니다.
+SwitchGPT는 Claude Code에 제공 모델(예: Fable 5.1, Opus 5.5, Sonnet 5, Haiku 4.5)을 물어 각각 Claude 모델 ID(예: `claude-opus-5-5`)로 추가합니다. 목록은 Claude Code가 업데이트되거나 6시간이 지나면 모델 호출 없이 다시 조회하며, 다음 ChatGPT 재시작 때 선택기에 반영됩니다. 각 모델의 컨텍스트 창은 Claude Code의 자동 압축 기준(1M 모델은 967K, Haiku는 167K)으로 알리므로, 창이 더 작은 모델로 바꾼 직후를 포함해 Claude Code보다 Codex가 먼저 스레드를 압축합니다.
 
 - **OpenAI 한도 사용 안 함** — Claude 요청도 같은 중계와 데스크톱 로그인 확인을 거치지만, OpenAI 계정을 고르거나 한도를 쓰지 않습니다. 다른 모델은 그대로입니다.
 - **웹 검색을 뺀 도구는 모두 Codex가 실행** — Claude Code에는 웹 검색 외의 자체 도구를 주지 않습니다. 그 밖의 도구 호출은 모두 Codex로 돌아가 현재 권한·승인 설정으로 실행되고, 결과는 같은 Claude 프로세스로 전달됩니다.

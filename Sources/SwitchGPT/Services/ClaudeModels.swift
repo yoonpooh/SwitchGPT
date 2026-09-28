@@ -1,6 +1,7 @@
 import Foundation
 
-/// A Claude model Claude Code offers the signed-in account, listed in the Codex model picker as "claude-code-<model>".
+/// A Claude model Claude Code offers the signed-in account, listed in the Codex model picker under its Claude model ID,
+/// such as "claude-opus-5-5".
 struct ClaudeModel: Codable, Equatable, Sendable {
     let slug: String
     let name: String
@@ -11,11 +12,11 @@ struct ClaudeModel: Codable, Equatable, Sendable {
     /// Claude Code's own auto-compact threshold, so Codex compacts the thread before Claude Code would have to.
     let contextWindow: Int
 
-    static let prefix = "claude-code-"
+    static let prefix = "claude-"
     static let largeContext = 967_000
     static let smallContext = 167_000
     /// Listed until Claude Code has been asked, and still served for threads that already use it.
-    static let fallback = ClaudeModel(slug: "claude-code-opus-5-5", name: "Opus 5.5", cliModel: "claude-opus-5-5[1m]",
+    static let fallback = ClaudeModel(slug: "claude-opus-5-5", name: "Opus 5.5", cliModel: "claude-opus-5-5[1m]",
                                       efforts: ["low", "medium", "high", "xhigh", "max"], contextWindow: largeContext)
 
     init(slug: String, name: String, cliModel: String, efforts: [String], contextWindow: Int) {
@@ -50,7 +51,7 @@ struct ClaudeModel: Codable, Equatable, Sendable {
         ClaudeModel(slug: slug, name: name, cliModel: cliModel, efforts: efforts, contextWindow: contextWindow)
     }
 
-    /// "claude-code-opus-5-5" -> ("opus", [5, 5]).
+    /// "claude-opus-5-5" -> ("opus", [5, 5]).
     var family: (name: String, version: [Int]) {
         let parts = slug.dropFirst(Self.prefix.count).split(separator: "-")
         return (parts.filter { Int($0) == nil }.joined(separator: "-"), parts.compactMap { Int($0) })

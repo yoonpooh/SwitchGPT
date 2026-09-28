@@ -193,8 +193,7 @@ final class ClaudeBridgeTests: XCTestCase {
 
     func testModelListIsPinnedToResolvedModelsWithCodexEfforts() {
         let models = Self.options.compactMap(ClaudeModel.init(option:))
-        XCTAssertEqual(models.map(\.slug), ["claude-code-opus-5-5", "claude-code-opus-5-5", "claude-code-fable-5-1",
-                                            "claude-code-sonnet-5", "claude-code-haiku-4-5"])
+        XCTAssertEqual(models.map(\.slug), ["claude-opus-5-5", "claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5", "claude-haiku-4-5"])
         XCTAssertEqual(models.map(\.name), ["Opus 5.5", "Opus 5.5", "Fable 5.1", "Sonnet 5", "Haiku 4.5"])
         // An alias is replaced by the model it resolves to, so a Claude Code update cannot swap the model behind a slug.
         XCTAssertEqual(models.map(\.cliModel), ["claude-opus-5-5[1m]", "claude-opus-5-5[1m]", "claude-fable-5-1[1m]",
@@ -223,22 +222,22 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(items.map { $0["slug"] as? String }, models.map(\.slug))
         XCTAssertEqual(items.filter { $0["visibility"] as? String == "list" }.map { $0["display_name"] as? String },
                        ["Opus 5.5", "Fable 5.1", "Sonnet 5", "Haiku 4.5"])
-        let hidden = try XCTUnwrap(items.first { $0["slug"] as? String == "claude-code-opus-4-8" })
+        let hidden = try XCTUnwrap(items.first { $0["slug"] as? String == "claude-opus-4-8" })
         XCTAssertEqual(hidden["visibility"] as? String, "hide")
         XCTAssertEqual(hidden["context_window"] as? Int, 167_000)
         XCTAssertEqual(hidden["comp_hash"] as? String, "3000")
-        XCTAssertEqual(ClaudeModelCatalog(models: models).model(for: "claude-code-opus-4-8")?.cliModel, "claude-opus-4-8")
+        XCTAssertEqual(ClaudeModelCatalog(models: models).model(for: "claude-opus-4-8")?.cliModel, "claude-opus-4-8")
     }
 
     func testCatalogAddsEachClaudeModelOnceAfterAccountModels() throws {
         let claude = [ClaudeModel.fallback,
-                      ClaudeModel(slug: "claude-code-haiku-4-5", name: "Haiku 4.5", cliModel: "claude-haiku-4-5-20251001", efforts: [],
+                      ClaudeModel(slug: "claude-haiku-4-5", name: "Haiku 4.5", cliModel: "claude-haiku-4-5-20251001", efforts: [],
                                   contextWindow: 167_000)]
         let body = Data(#"{"models":[{"slug":"gpt-6-astra","priority":3},{"slug":"gpt-6-luna","priority":7}],"etag":"x"}"#.utf8)
         let updated = try XCTUnwrap(ClaudeBridge.addingCatalogItems(to: body, models: claude))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: updated) as? [String: Any])
         let models = try XCTUnwrap(object["models"] as? [[String: Any]])
-        XCTAssertEqual(models.map { $0["slug"] as? String }, ["gpt-6-astra", "gpt-6-luna", "claude-code-opus-5-5", "claude-code-haiku-4-5"])
+        XCTAssertEqual(models.map { $0["slug"] as? String }, ["gpt-6-astra", "gpt-6-luna", "claude-opus-5-5", "claude-haiku-4-5"])
         XCTAssertEqual(models.map { $0["priority"] as? Int }, [3, 7, 8, 9])
         XCTAssertEqual(models[2]["display_name"] as? String, "Opus 5.5")
         XCTAssertEqual(models[2]["context_window"] as? Int, 967_000)
@@ -277,7 +276,7 @@ final class ClaudeBridgeTests: XCTestCase {
         FileManager.default.createFile(atPath: executable.path, contents: Data(), attributes: [.posixPermissions: 0o755])
         let file = root.appendingPathComponent("claude-models.json")
         let calls = Counter()
-        let sonnet = ClaudeModel(slug: "claude-code-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
+        let sonnet = ClaudeModel(slug: "claude-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
         let catalog = ClaudeModelCatalog(file: file, executable: { executable }, discover: { _ in calls.increment(); return [sonnet] })
         XCTAssertEqual(catalog.models, [.fallback])
         XCTAssertEqual(catalog.model(for: ClaudeModel.fallback.slug), .fallback)
@@ -287,7 +286,8 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(catalog.models, [sonnet])
         // Threads that already use Opus 5.5 keep working even when it is no longer listed.
         XCTAssertEqual(catalog.model(for: ClaudeModel.fallback.slug), .fallback)
-        XCTAssertNil(catalog.model(for: "claude-code-gone"))
+        XCTAssertNil(catalog.model(for: "claude-code-opus-5-5"))
+        XCTAssertNil(catalog.model(for: "claude-gone"))
         // Persisted: the next launch lists the same models before asking again.
         let reopened = ClaudeModelCatalog(file: file, executable: { executable }, discover: { _ in calls.increment(); return [] })
         XCTAssertEqual(reopened.models, [sonnet])
@@ -322,7 +322,7 @@ final class ClaudeBridgeTests: XCTestCase {
         """
         FileManager.default.createFile(atPath: executable.path, contents: Data(script.utf8), attributes: [.posixPermissions: 0o755])
         let models = try ClaudeModelDiscovery.run(executable: executable)
-        XCTAssertEqual(models.map(\.slug), ["claude-code-opus-5-5", "claude-code-fable-5-1", "claude-code-sonnet-5", "claude-code-haiku-4-5"])
+        XCTAssertEqual(models.map(\.slug), ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5", "claude-haiku-4-5"])
         XCTAssertEqual(models.map(\.contextWindow), [967_000, 967_000, 967_000, 167_000])
         let launches = try String(contentsOf: root.appendingPathComponent("args.jsonl"), encoding: .utf8).split(separator: "\n")
             .map { try JSONDecoder().decode([String].self, from: Data($0.utf8)) }
@@ -343,9 +343,9 @@ final class ClaudeBridgeTests: XCTestCase {
             if case .claude(let decoded) = try ClaudeBridge.route(request, claudeEnabled: true) { return decoded }
             return nil
         }
-        let opus = Data(#"{"model":"claude-code-opus-5-5"}"#.utf8)
+        let opus = Data(#"{"model":"claude-opus-5-5"}"#.utf8)
         XCTAssertEqual(try claude(try request(opus))?.body, opus)
-        XCTAssertNil(try claude(try request(#"{"model":"gpt-6-astra","input":"claude-code-opus-5-5"}"#)))
+        XCTAssertNil(try claude(try request(#"{"model":"gpt-6-astra","input":"claude-opus-5-5"}"#)))
         // Codex compresses large bodies; an Opus conversation must be decoded, never forwarded to OpenAI.
         for (encoding, bits) in [("gzip", Int32(31)), ("deflate", Int32(15))] {
             let decoded = try XCTUnwrap(try claude(try request(try deflated(opus, windowBits: bits), encoding: encoding)))
@@ -377,7 +377,7 @@ final class ClaudeBridgeTests: XCTestCase {
 
     /// A long thread of screenshots decoded to more than the 64 MB wire limit, and Codex then showed an empty error.
     func testCompressedBodiesDecodePastTheWireLimit() throws {
-        let body = Data(#"{"model":"claude-code-opus-5-5","input":""#.utf8)
+        let body = Data(#"{"model":"claude-opus-5-5","input":""#.utf8)
             + Data(repeating: UInt8(ascii: "A"), count: RelayRequest.bodyLimit + 1) + Data(#""}"#.utf8)
         let gzip = try deflated(body, windowBits: 31)
         XCTAssertEqual(try ClaudeBridge.decompress(gzip, encoding: "gzip"), body)
@@ -938,7 +938,7 @@ final class ClaudeBridgeTests: XCTestCase {
     }
 
     @MainActor func testEachClaudeModelRunsItsOwnCLIModelAndSwitchingRestartsClaude() async throws {
-        let haiku = ClaudeModel(slug: "claude-code-haiku-4-5", name: "Haiku 4.5", cliModel: "claude-haiku-4-5-20251001", efforts: [],
+        let haiku = ClaudeModel(slug: "claude-haiku-4-5", name: "Haiku 4.5", cliModel: "claude-haiku-4-5-20251001", efforts: [],
                                 contextWindow: 167_000)
         let harness = try await Harness(enabled: true, models: [.fallback, haiku])
         defer { harness.stop() }
@@ -960,9 +960,9 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(launches.map { args in args.firstIndex(of: "--effort").map { args[$0 + 1] } }, [nil, "high"])
 
         // A Claude model Claude Code no longer lists is refused locally, never sent to OpenAI.
-        let gone = try await harness.send(["model": "claude-code-gone-1", "prompt_cache_key": "gone", "input": [harness.environment]])
+        let gone = try await harness.send(["model": "claude-gone-1", "prompt_cache_key": "gone", "input": [harness.environment]])
         XCTAssertEqual(gone.status, 400)
-        XCTAssertTrue(gone.text.contains(ClaudeBridge.unavailableMessage("claude-code-gone-1")))
+        XCTAssertTrue(gone.text.contains(ClaudeBridge.unavailableMessage("claude-gone-1")))
         XCTAssertTrue(harness.upstream.requests.isEmpty)
     }
 
@@ -988,7 +988,7 @@ final class ClaudeBridgeTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let executable = root.appendingPathComponent("claude")
         FileManager.default.createFile(atPath: executable.path, contents: Data(), attributes: [.posixPermissions: 0o755])
-        let sonnet = ClaudeModel(slug: "claude-code-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
+        let sonnet = ClaudeModel(slug: "claude-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
         // Claude Code was just updated: the list ChatGPT fetches after its restart must already include the new models.
         let catalog = ClaudeModelCatalog(file: root.appendingPathComponent("claude-models.json"), executable: { executable },
                                          discover: { _ in Thread.sleep(forTimeInterval: 0.5); return [sonnet] })
@@ -1007,7 +1007,7 @@ final class ClaudeBridgeTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let executable = root.appendingPathComponent("claude")
         FileManager.default.createFile(atPath: executable.path, contents: Data(), attributes: [.posixPermissions: 0o755])
-        let sonnet = ClaudeModel(slug: "claude-code-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
+        let sonnet = ClaudeModel(slug: "claude-sonnet-5", name: "Sonnet 5", cliModel: "claude-sonnet-5", efforts: ["high"], contextWindow: 967_000)
         let catalog = ClaudeModelCatalog(executable: { executable }, discover: { _ in Thread.sleep(forTimeInterval: 1); return [sonnet] })
         let start = Date()
         // Resuming twice would trap: the completion runs once, at the deadline, even though the query finishes later.

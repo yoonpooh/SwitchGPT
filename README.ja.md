@@ -170,7 +170,7 @@ https://github.com/yoonpooh/SwitchGPT から最新の SwitchGPT リリースを�
 
 モデル一覧は再起動後に更新されるため、切り替え時に ChatGPT を再起動するか確認します。新しい一覧を取得するため `~/.codex/models_cache.json` を削除します。
 
-SwitchGPT は Claude Code に提供モデル（例：Fable 5.1、Opus 5.5、Sonnet 5、Haiku 4.5）を問い合わせ、それぞれ `claude-code-<モデル>` として追加します。一覧は Claude Code の更新時と 6 時間ごとにモデル呼び出しなしで再取得し、次の ChatGPT 再起動でモデル選択に反映されます。各モデルのコンテキストウィンドウには Claude Code の自動コンパクトの閾値（1M モデルは 967K、Haiku は 167K）を伝えるため、ウィンドウの小さいモデルに切り替えた直後も含め、Claude Code より先に Codex がスレッドをコンパクトします。
+SwitchGPT は Claude Code に提供モデル（例：Fable 5.1、Opus 5.5、Sonnet 5、Haiku 4.5）を問い合わせ、それぞれ Claude のモデル ID（例：`claude-opus-5-5`）として追加します。一覧は Claude Code の更新時と 6 時間ごとにモデル呼び出しなしで再取得し、次の ChatGPT 再起動でモデル選択に反映されます。各モデルのコンテキストウィンドウには Claude Code の自動コンパクトの閾値（1M モデルは 967K、Haiku は 167K）を伝えるため、ウィンドウの小さいモデルに切り替えた直後も含め、Claude Code より先に Codex がスレッドをコンパクトします。
 
 - **OpenAI の利用枠を消費しない** — Claude のリクエストも同じ中継とデスクトップのログイン確認を通りますが、OpenAI アカウントの選択や利用枠の消費はしません。他のモデルは変わりません。
 - **Web 検索以外のツールはすべて Codex が実行** — Claude Code 自身のツールは Web 検索以外使いません。それ以外のツール呼び出しはすべて Codex が現在の権限・承認設定で実行し、結果を同じ Claude プロセスへ返します。

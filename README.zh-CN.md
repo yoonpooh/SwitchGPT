@@ -170,7 +170,7 @@ flowchart LR
 
 模型列表需重启后才会更新，因此切换时会询问是否重启 ChatGPT，并删除 `~/.codex/models_cache.json` 以获取新列表。
 
-SwitchGPT 会向 Claude Code 查询可用模型（例如 Fable 5.1、Opus 5.5、Sonnet 5、Haiku 4.5），并分别以 `claude-code-<模型>` 列出。Claude Code 更新后或每 6 小时，列表会在不调用模型的情况下重新获取，并在下次重启 ChatGPT 后出现在选择器中。每个模型以 Claude Code 的自动压缩阈值作为上下文窗口（1M 模型为 967K，Haiku 为 167K），因此 Codex 会先于 Claude Code 压缩线程，包括刚切换到窗口更小的模型时。
+SwitchGPT 会向 Claude Code 查询可用模型（例如 Fable 5.1、Opus 5.5、Sonnet 5、Haiku 4.5），并分别以 Claude 模型 ID（例如 `claude-opus-5-5`）列出。Claude Code 更新后或每 6 小时，列表会在不调用模型的情况下重新获取，并在下次重启 ChatGPT 后出现在选择器中。每个模型以 Claude Code 的自动压缩阈值作为上下文窗口（1M 模型为 967K，Haiku 为 167K），因此 Codex 会先于 Claude Code 压缩线程，包括刚切换到窗口更小的模型时。
 
 - **不消耗 OpenAI 额度** — Claude 请求同样经过本地中继和桌面登录校验，但不会选择 OpenAI 账户或消耗其额度。其他模型不受影响。
 - **除网页搜索外，所有工具由 Codex 执行** — 除网页搜索外，Claude Code 不使用自带工具。其他工具调用都交回 Codex，按当前权限与审批设置执行，结果再返回同一个 Claude 进程。

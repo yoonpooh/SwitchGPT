@@ -342,7 +342,7 @@ enum ClaudeBridge {
     }
 
     /// Changed whenever the Claude items change for the same models, so Codex drops a catalog it cached.
-    private static let catalogRevision = 3
+    private static let catalogRevision = 4
 
     // MARK: Model picker
 
