@@ -34,7 +34,7 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 ## Contents
 
 - [Features](#features)
-- [What's new in 0.4.0](#whats-new-in-040)
+- [What's new in 0.4.1](#whats-new-in-041)
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -61,13 +61,13 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 - **Local and private** — credentials stay in macOS Keychain, and requests go directly to OpenAI through a local relay. There is no SwitchGPT server.
 - **Localized** — English, Korean, Japanese, and Simplified Chinese.
 
-## What's new in 0.4.0
+## What's new in 0.4.1
 
-- **Every Claude Code model:** the picker lists the newest model of each family your Claude Code CLI offers, such as Fable 5.1, Opus 5.5, Sonnet 5, and Haiku 4.5, with context windows that match Claude Code's auto-compact threshold. The toggle is now **Use Claude models**. See [Claude models](#claude-models-optional).
-- **Claude plan limits:** a Claude card below the ChatGPT accounts shows the 5-hour and weekly limits as Claude Code reports them, without a model call. ChatGPT plan badges now tell Pro and Pro 20x apart.
-- **Web search for Claude models:** while Codex offers web search, Claude models search the live web with Claude Code's WebSearch, shown as Codex web search cards.
-- **Codex permission mode:** Claude Code follows the permission mode chosen in Codex: ask for approval, auto review, full access, or plan mode.
-- **Better Claude replies in Codex:** final answers stream as they are written, progress notes appear as commentary, and file edits go through `apply_patch` so Codex shows their diffs. Codex instructions and AGENTS.md stay in Claude's system prompt, and `/side` conversations run beside their parent.
+- **Reset credits on the account card:** each card with reset credits shows the count, the earliest expiry, and a **Use** button, which is highlighted when a limit is low. **Use Reset Credit…** is also in the account menu, and a card explains why a credit cannot be used. See [Reset credits](#reset-credits).
+- **One Pro badge:** both ChatGPT Pro tiers now show as **Pro**.
+- **Claude model IDs:** Claude models are listed under their Claude model IDs, such as `claude-opus-5-5`, instead of `claude-code-…`. Choose the model again in threads that used an earlier ID.
+- **Codex output verbosity:** Claude answers follow the output verbosity set in Codex.
+- **Long Claude conversations:** threads with long histories or many images keep answering, and a request that is too large says why it was refused.
 
 Earlier changes are listed on the [Releases page](https://github.com/yoonpooh/SwitchGPT/releases).
 
@@ -103,7 +103,7 @@ Routing applies to Codex requests that use the built-in `openai` provider on thi
 
 ### Download
 
-1. Download `SwitchGPT-v0.4.0-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
+1. Download `SwitchGPT-v0.4.1-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
 2. With both files in the same directory, verify the checksum:
 
    ```sh
@@ -148,7 +148,7 @@ Keep SwitchGPT running in the menu bar while model routing is enabled.
 
 ### Reset credits
 
-Select **Reset** on an account card and confirm the account and consumption of one credit. The button is disabled when a reset cannot be used or usage data is stale. Afterward, usage and credit counts are fetched again, and automatic mode reapplies account priority. If a response or follow-up refresh fails, **Check result** continues the same request. Pending request IDs survive app restarts, and credits are never consumed automatically.
+An account card with reset credits shows the count, the earliest expiry, and a **Use** button. Select **Use**, or **Use Reset Credit…** from the account's context or more menu, then confirm the account and consumption of one credit; the confirmation shows the remaining usage and every credit's expiry. The button is highlighted when a limit is low or exhausted, and an expiry within a day is shown in orange as remaining time. When a reset cannot be used or usage data is stale, the button is disabled and the card shows why. A successful reset is confirmed briefly on the card. Afterward, usage and credit counts are fetched again, and automatic mode reapplies account priority. If a response or follow-up refresh fails, **Check result** continues the same request. Pending request IDs survive app restarts, and credits are never consumed automatically.
 
 ### Language and dates
 
@@ -272,8 +272,8 @@ The script builds for the host architecture. Published artifacts are Apple silic
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.0-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.0-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.1-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.1-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### Project structure

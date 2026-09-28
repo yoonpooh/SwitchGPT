@@ -107,6 +107,13 @@
 "routing_save_failed" = "The account is active, but its saved selection could not be updated.";
 "routing_auto_switched" = "Auto-switched";
 "reset_use" = "Reset";
+"reset_use_button" = "Use";
+"reset_menu" = "Use Reset Credit…";
+"reset_credits" = "Reset credits: %d";
+"reset_expiry_list" = "Credit expiry: %@";
+"reset_current_usage" = "Remaining now: %@";
+"reset_working" = "Using…";
+"expires_relative" = "Expires %@";
 "reset_retry" = "Check result";
 "reset_confirm_title" = "Use a reset credit?";
 "reset_confirm_detail" = "Use one reset credit from %@ to reset eligible usage limits. One credit will be consumed.";

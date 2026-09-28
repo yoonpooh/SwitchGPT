@@ -153,6 +153,10 @@ struct AccountPanel: View {
 
     @ViewBuilder private func accountActions(_ account: Account) -> some View {
         Button(L10n.text("edit_name")) { editName(account) }
+        if (store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 || store.hasPendingReset(account) {
+            Button(L10n.text(store.hasPendingReset(account) ? "reset_retry" : "reset_menu")) { confirmReset(account) }
+                .disabled(!store.canUseReset(account))
+        }
         Button(L10n.text("delete"), role: .destructive) { confirmDelete(account) }
             .disabled(account.id == store.currentID)
     }
@@ -221,15 +225,34 @@ struct AccountPanel: View {
         let retrying = store.hasPendingReset(account)
         let alert = NSAlert()
         alert.messageText = L10n.text(retrying ? "reset_retry" : "reset_confirm_title")
-        alert.informativeText = L10n.format(retrying ? "reset_retry_confirm" : "reset_confirm_detail", store.displayName(account))
+        var details = [L10n.format(retrying ? "reset_retry_confirm" : "reset_confirm_detail", store.displayName(account))]
+        if !retrying {
+            // Show what the credit would restore and what the account holds before it is spent.
+            let windows = [store.usages[account.id]?.rateLimit?.primaryWindow,
+                           store.usages[account.id]?.rateLimit?.secondaryWindow].compactMap { $0 }
+            if !windows.isEmpty {
+                details.append(L10n.format("reset_current_usage",
+                                           windows.map { "\($0.label) \(Int($0.remaining.rounded(.up)))%" }.joined(separator: " · ")))
+            }
+            let expirations = store.resetExpirations(account)
+            if !expirations.isEmpty {
+                details.append(L10n.format("reset_expiry_list", expirations.map { L10n.date($0) }.joined(separator: ", ")))
+            }
+        }
+        alert.informativeText = details.joined(separator: "\n\n")
         alert.addButton(withTitle: L10n.text(retrying ? "reset_retry" : "reset_use"))
         alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn {
             Task {
                 guard let result = await store.useResetCredit(account) else { return }
+                if result.succeeded {
+                    // The refreshed bars already show the effect; confirm briefly on the card instead of another dialog.
+                    withAnimation(.easeOut(duration: 0.2)) { store.resetNotices[account.id] = ResetNotice(text: result.text) }
+                    return
+                }
                 let completion = NSAlert()
-                completion.alertStyle = result.succeeded ? .informational : .warning
+                completion.alertStyle = .warning
                 completion.messageText = result.text
                 completion.informativeText = store.displayName(account)
                 NSApp.activate(ignoringOtherApps: true)

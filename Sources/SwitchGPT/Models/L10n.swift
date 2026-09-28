@@ -27,4 +27,12 @@ enum L10n {
         let style = Date.FormatStyle.dateTime.year().month(.defaultDigits).day().locale(locale)
         return date.formatted(includeTime ? style.hour().minute() : style)
     }
+
+    /// Short form for tight rows: only the time for today, otherwise month/day and time.
+    static func compactDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "H:mm" : "M/d H:mm"
+        return formatter.string(from: date)
+    }
 }

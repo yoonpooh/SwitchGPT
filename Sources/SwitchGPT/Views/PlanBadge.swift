@@ -13,10 +13,10 @@ struct PlanBadge: View {
             .fixedSize()
     }
 
-    /// ChatGPT reports lowercase plan types; its two Pro tiers are named like Claude's "Max 20x".
-    /// An already formatted name such as "Max 20x" is kept.
+    /// ChatGPT reports lowercase plan types; both of its Pro tiers ("prolite" and "pro") show as "Pro".
+    /// An already formatted name such as Claude's "Max 20x" is kept.
     nonisolated static func title(_ plan: String) -> String {
         guard plan == plan.lowercased() else { return plan }
-        return ["prolite": "Pro", "pro": "Pro 20x"][plan] ?? plan.capitalized
+        return ["prolite": "Pro"][plan] ?? plan.capitalized
     }
 }

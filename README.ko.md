@@ -34,7 +34,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 ## 목차
 
 - [주요 기능](#주요-기능)
-- [0.4.0의 새로운 기능](#040의-새로운-기능)
+- [0.4.1의 새로운 기능](#041의-새로운-기능)
 - [동작 방식](#동작-방식)
 - [요구 사항](#요구-사항)
 - [설치](#설치)
@@ -61,13 +61,13 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 - **로컬 전용** — 인증 정보는 macOS 키체인에 저장하고, 요청은 로컬 중계를 거쳐 OpenAI로 직접 전달합니다. SwitchGPT 서버는 없습니다.
 - **다국어 지원** — 영어, 한국어, 일본어, 중국어 간체.
 
-## 0.4.0의 새로운 기능
+## 0.4.1의 새로운 기능
 
-- **모든 Claude Code 모델:** Claude Code CLI가 제공하는 모델 중 계열별 최신 모델(Fable 5.1, Opus 5.5, Sonnet 5, Haiku 4.5 등)을 모델 선택기에 표시하며, 컨텍스트 창은 Claude Code의 자동 압축 기준에 맞춥니다. 메뉴 이름은 **Claude 모델 사용**으로 바뀌었습니다. [Claude 모델](#claude-모델-선택)을 참고하세요.
-- **Claude 요금제 한도:** ChatGPT 계정 아래의 Claude 카드에 Claude Code가 알려 주는 5시간·주간 한도를 모델 호출 없이 표시합니다. ChatGPT 요금제 배지는 Pro와 Pro 20x를 구분합니다.
-- **Claude 모델 웹 검색:** Codex에서 웹 검색이 켜져 있으면 Claude 모델이 Claude Code의 WebSearch로 실시간 웹을 검색하고, 결과를 Codex 웹 검색 카드로 표시합니다.
-- **Codex 권한 모드 연동:** Claude Code가 Codex에서 선택한 권한 모드(승인 요청, 자동 검토, 전체 접근, 계획 모드)를 그대로 따릅니다.
-- **Codex에서 더 자연스러운 Claude 응답:** 최종 답변은 작성되는 대로 스트리밍되고, 진행 메모는 코멘터리로 표시되며, 파일 수정은 `apply_patch`로 처리해 Codex에 diff가 보입니다. Codex 지침과 AGENTS.md는 Claude 시스템 프롬프트에 유지되고, `/side` 대화는 부모 대화와 나란히 실행됩니다.
+- **계정 카드의 리셋권:** 리셋권이 있는 카드에 보유 수, 가장 빠른 만료 시각, **사용** 버튼을 표시하며, 한도가 부족하면 버튼을 강조합니다. 계정 메뉴에서도 **리셋권 사용…**을 선택할 수 있고, 사용할 수 없으면 카드에 이유를 표시합니다. [초기화 크레딧](#초기화-크레딧)을 참고하세요.
+- **Pro 배지 통일:** ChatGPT의 두 Pro 요금제를 모두 **Pro**로 표시합니다.
+- **Claude 모델 ID:** Claude 모델을 `claude-code-…` 대신 `claude-opus-5-5` 같은 Claude 모델 ID로 표시합니다. 이전 ID를 쓰던 대화에서는 모델을 다시 선택하세요.
+- **Codex 출력 길이 설정:** Claude 답변이 Codex에서 설정한 출력 길이를 따릅니다.
+- **긴 Claude 대화:** 기록이 길거나 이미지가 많은 대화도 계속 응답하며, 너무 큰 요청은 거부된 이유를 알려 줍니다.
 
 이전 변경 사항은 [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases)에서 확인할 수 있습니다.
 
@@ -103,7 +103,7 @@ flowchart LR
 
 ### 다운로드
 
-1. [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)에서 `SwitchGPT-v0.4.0-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
+1. [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)에서 `SwitchGPT-v0.4.1-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
 2. 두 파일을 같은 폴더에 두고 체크섬을 확인합니다.
 
    ```sh
@@ -148,7 +148,7 @@ https://github.com/yoonpooh/SwitchGPT 에서 최신 SwitchGPT 릴리스를 이 M
 
 ### 초기화 크레딧
 
-계정 카드의 **초기화**를 누르고 대상 계정·리셋권 1장 소모를 확인하면 리셋권을 사용할 수 있습니다. 현재 사용할 수 없거나 조회 정보가 오래되었으면 버튼이 비활성화됩니다. 사용 후 한도와 보유 수를 다시 조회하며, 자동 전환이 켜져 있으면 목록 우선순위를 다시 적용합니다. 응답이 끊기거나 후속 조회에 실패하면 **결과 확인**으로 같은 요청을 이어갑니다. 앱을 다시 실행해도 미확인 요청 번호를 유지하며 리셋권을 자동 소모하지 않습니다.
+리셋권이 있는 계정 카드에는 보유 수, 가장 빠른 만료 시각, **사용** 버튼이 표시됩니다. **사용** 또는 계정 우클릭·더보기 메뉴의 **리셋권 사용…**을 누르고 대상 계정·리셋권 1장 소모를 확인하면 사용할 수 있으며, 확인 창에는 현재 남은 한도와 보유한 리셋권의 만료 시각이 모두 표시됩니다. 한도가 부족하거나 소진되면 버튼이 강조되고, 하루 안에 만료되는 리셋권은 남은 시간이 주황색으로 표시됩니다. 현재 사용할 수 없거나 조회 정보가 오래되었으면 버튼이 비활성화되고 그 이유가 카드에 표시됩니다. 사용에 성공하면 카드에 잠시 완료 표시가 나타납니다. 사용 후 한도와 보유 수를 다시 조회하며, 자동 전환이 켜져 있으면 목록 우선순위를 다시 적용합니다. 응답이 끊기거나 후속 조회에 실패하면 **결과 확인**으로 같은 요청을 이어갑니다. 앱을 다시 실행해도 미확인 요청 번호를 유지하며 리셋권을 자동 소모하지 않습니다.
 
 ### 언어와 날짜
 
@@ -272,8 +272,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.0-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.0-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.1-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.1-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### 프로젝트 구조

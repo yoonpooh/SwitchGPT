@@ -107,6 +107,13 @@
 "routing_save_failed" = "选择已应用，但无法保存设置。";
 "routing_auto_switched" = "已自动切换";
 "reset_use" = "重置";
+"reset_use_button" = "使用";
+"reset_menu" = "使用重置机会…";
+"reset_credits" = "重置机会 %d 次";
+"reset_expiry_list" = "持有重置机会到期时间：%@";
+"reset_current_usage" = "当前剩余：%@";
+"reset_working" = "正在使用…";
+"expires_relative" = "%@到期";
 "reset_retry" = "确认结果";
 "reset_confirm_title" = "使用重置次数？";
 "reset_confirm_detail" = "使用 %@ 的1次重置机会，重置符合条件的使用限额。将消耗1次重置机会。";

@@ -59,6 +59,11 @@ struct ResetCreditMessage {
     let succeeded: Bool
 }
 
+struct ResetNotice: Equatable {
+    let id = UUID()
+    let text: String
+}
+
 struct ResetCreditDetails: Decodable {
     let credits: [Credit]
     struct Credit: Decodable {

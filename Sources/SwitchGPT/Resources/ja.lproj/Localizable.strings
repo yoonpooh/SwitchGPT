@@ -107,6 +107,13 @@
 "routing_save_failed" = "選択は適用されましたが、設定を保存できませんでした。";
 "routing_auto_switched" = "自動切替済み";
 "reset_use" = "リセット";
+"reset_use_button" = "使用";
+"reset_menu" = "リセット権を使用…";
+"reset_credits" = "リセット権 %d回分";
+"reset_expiry_list" = "保有リセット権の期限：%@";
+"reset_current_usage" = "現在の残り：%@";
+"reset_working" = "使用中…";
+"expires_relative" = "%@に期限切れ";
 "reset_retry" = "結果を確認";
 "reset_confirm_title" = "リセット権を使用しますか？";
 "reset_confirm_detail" = "%@ のリセット権を1回分使用し、対象の利用上限をリセットします。リセット権を1回分消費します。";

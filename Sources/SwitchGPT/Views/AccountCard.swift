@@ -24,31 +24,29 @@ struct AccountCard: View {
     var useReset: () -> Void
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        VStack(alignment: .leading, spacing: 5) {
             if store.routingPreferences.automatic {
                 summary.contentShape(Rectangle()).draggable(account.id)
             } else {
                 Button(action: select) { summary.contentShape(Rectangle()).draggable(account.id) }
                     .buttonStyle(.plain)
             }
-            if hasReset {
-                if store.resetInProgressID == account.id {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Button(action: useReset) {
-                        Label("\(resetCount)", systemImage: "arrow.counterclockwise.circle")
-                            .labelStyle(.titleAndIcon)
-                    }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                    .disabled(!store.canUseReset(account))
-                    .help(resetHelp)
-                    .accessibilityLabel(L10n.text(store.hasPendingReset(account) ? "reset_retry" : "reset_use"))
-                }
+            // Kept outside the selection button so its own button stays clickable; aligned with the name.
+            if let notice {
+                feedbackRow(notice.text).padding(.leading, 32).transition(.opacity)
+            } else if hasReset {
+                resetRow.padding(.leading, 32).transition(.opacity)
             }
         }.padding(.horizontal, 7).padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
+            // The countdown runs only while the card is on screen, so a closed panel still shows it on reopening.
+            .task(id: notice?.id) {
+                guard let notice else { return }
+                do { try await Task.sleep(for: .seconds(6)) } catch { return }
+                withAnimation(.easeOut(duration: 0.2)) { store.clearResetNotice(notice, for: account.id) }
+            }
     }
+
+    private var notice: ResetNotice? { store.resetNotices[account.id] }
 
     private var summary: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -59,7 +57,6 @@ struct AccountCard: View {
                         .lineLimit(1).truncationMode(.middle).help(store.email(account))
                     if let plan = store.usages[account.id]?.planType { PlanBadge(plan: plan) }
                     Spacer(minLength: 0)
-                    if hasReset { Color.clear.frame(width: 24, height: 1) }
                 }
                 if let usage = store.usages[account.id] {
                     let windows = [usage.rateLimit?.primaryWindow, usage.rateLimit?.secondaryWindow].compactMap { $0 }
@@ -84,11 +81,90 @@ struct AccountCard: View {
 
     private var hasReset: Bool { resetCount > 0 || store.hasPendingReset(account) }
 
-    private var resetHelp: String {
-        if let expiration = store.resetDetails[account.id]?.availableCredits.first?.expiration {
-            return store.resetHelp(account) + " " + L10n.format("expires", L10n.date(expiration))
+    /// A window is low or exhausted, so using a credit now is worthwhile.
+    private var needsReset: Bool {
+        guard let usage = store.usages[account.id] else { return false }
+        if usage.availability() == .exhausted { return true }
+        return [usage.rateLimit?.primaryWindow, usage.rateLimit?.secondaryWindow].compactMap { $0 }
+            .contains { UsageBarTone.resolve(remaining: $0.remaining) != .normal }
+    }
+
+    /// Count, earliest expiry and the action stay visible because the menu bar panel rarely shows tooltips.
+    private var resetRow: some View {
+        let usable = store.canUseReset(account)
+        let pending = store.hasPendingReset(account)
+        let working = store.resetInProgressID == account.id
+        let expiry = store.resetExpirations(account).first
+        let expiringSoon = expiry.map { $0.timeIntervalSinceNow < 86_400 } ?? false
+        let suggested = usable && (pending || needsReset)
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: pending ? "arrow.triangle.2.circlepath" : "ticket.fill")
+                    .foregroundStyle(suggested ? Color.accentColor : Color.secondary)
+                    .accessibilityHidden(true)
+                Text(L10n.format("reset_credits", resetCount))
+                    .fontWeight(.semibold).foregroundStyle(.primary).fixedSize()
+                if let expiry {
+                    Text(expiryText(expiry))
+                        .foregroundStyle(expiringSoon ? Color.orange : Color.secondary)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+                Spacer(minLength: 4)
+                if working {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.mini)
+                        Text(L10n.text("reset_working"))
+                    }.fixedSize()
+                } else {
+                    let title = L10n.text(pending ? "reset_retry" : "reset_use_button")
+                    Group {
+                        // Draw attention to the button only when a reset would help right now.
+                        if suggested { Button(title, action: useReset).buttonStyle(.borderedProminent) }
+                        else { Button(title, action: useReset).buttonStyle(.bordered) }
+                    }
+                    .controlSize(.mini)
+                    .disabled(!usable)
+                    .help(store.resetHelp(account))
+                    .accessibilityLabel(L10n.text(pending ? "reset_retry" : "reset_use"))
+                }
+            }
+            // Explain a disabled button unless it is only waiting for another action to finish.
+            if !usable && !working && !store.busy && !store.loadingUsage {
+                Label(store.resetHelp(account), systemImage: "info.circle")
+                    .labelStyle(.titleAndIcon).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        return store.resetHelp(account)
+        .font(.system(size: 9)).foregroundStyle(.secondary)
+        .padding(.horizontal, 7).padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(suggested ? Color.accentColor.opacity(0.1) : Color.primary.opacity(0.04),
+                    in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .help(expiryList ?? "")
+    }
+
+    private func feedbackRow(_ text: String) -> some View {
+        Label(text, systemImage: "checkmark.circle.fill")
+            .labelStyle(.titleAndIcon)
+            .font(.system(size: 9, weight: .medium)).foregroundStyle(.green)
+            .padding(.horizontal, 7).padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    /// Within a day of expiry, the remaining time reads faster than a clock time.
+    private func expiryText(_ date: Date) -> String {
+        let remaining = date.timeIntervalSinceNow
+        guard remaining > 0 && remaining < 86_400 else { return L10n.format("expires", L10n.compactDate(date)) }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = L10n.locale
+        formatter.unitsStyle = .short
+        return L10n.format("expires_relative", formatter.localizedString(for: date, relativeTo: .now))
+    }
+
+    private var expiryList: String? {
+        let dates = store.resetExpirations(account)
+        return dates.isEmpty ? nil : L10n.format("reset_expiry_list", dates.map { L10n.date($0) }.joined(separator: ", "))
     }
 }
 
@@ -127,7 +203,7 @@ struct UsageWindowView: View {
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                 if let resetDate {
-                    Text(compactDate(resetDate))
+                    Text(L10n.compactDate(resetDate))
                         .font(.system(size: 8))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
@@ -160,12 +236,5 @@ struct UsageWindowView: View {
         case .warning: return .orange
         case .critical: return .red
         }
-    }
-
-    private func compactDate(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = L10n.locale
-        formatter.dateFormat = Calendar.current.isDateInToday(date) ? "H:mm" : "M/d H:mm"
-        return formatter.string(from: date)
     }
 }

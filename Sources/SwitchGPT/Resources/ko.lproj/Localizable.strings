@@ -107,6 +107,13 @@
 "routing_save_failed" = "선택은 적용됐지만 설정을 저장하지 못했습니다.";
 "routing_auto_switched" = "자동 전환됨";
 "reset_use" = "초기화";
+"reset_use_button" = "사용";
+"reset_menu" = "리셋권 사용…";
+"reset_credits" = "리셋권 %d장";
+"reset_expiry_list" = "보유 리셋권 만료: %@";
+"reset_current_usage" = "현재 남은 한도: %@";
+"reset_working" = "사용 중…";
+"expires_relative" = "%@ 만료";
 "reset_retry" = "결과 확인";
 "reset_confirm_title" = "리셋권을 사용할까요?";
 "reset_confirm_detail" = "%@ 계정의 리셋권 1장을 사용해 적용 가능한 사용 한도를 초기화합니다. 리셋권 1장이 소모됩니다.";

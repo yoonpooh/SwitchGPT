@@ -18,6 +18,8 @@ final class AccountStore {
     var selectedExhausted = false
     var resetDetails: [String: ResetCreditDetails] = [:]
     var resetInProgressID: String?
+    /// Success messages shown on account cards; kept here so they survive the panel closing.
+    var resetNotices: [String: ResetNotice] = [:]
     var usages: [String: AccountUsage] = [:]
     var usageErrors: [String: String] = [:]
     var usageUpdatedAt: [String: Date] = [:]
@@ -221,6 +223,16 @@ final class AccountStore {
     }
 
     func hasPendingReset(_ account: Account) -> Bool { resetLedger.hasPending(account.id) }
+
+    /// Clears a notice only if a newer one has not replaced it.
+    func clearResetNotice(_ notice: ResetNotice, for accountID: String) {
+        if resetNotices[accountID]?.id == notice.id { resetNotices[accountID] = nil }
+    }
+
+    /// Expiry dates of the account's unused reset credits, earliest first.
+    func resetExpirations(_ account: Account) -> [Date] {
+        resetDetails[account.id]?.availableCredits.compactMap(\.expiration) ?? []
+    }
 
     func canUseReset(_ account: Account) -> Bool {
         guard !busy, !loadingUsage, resetLedger.readable, accounts.contains(where: { $0.id == account.id }) else { return false }
@@ -436,6 +448,7 @@ final class AccountStore {
             try vault.remove(account.id)
             accounts.removeAll { $0.id == account.id }
             routingCredentials.removeValue(forKey: account.id)
+            resetNotices.removeValue(forKey: account.id)
             try persist()
             updateRouter()
             message = ""
