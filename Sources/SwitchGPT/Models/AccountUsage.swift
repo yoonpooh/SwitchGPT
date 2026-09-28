@@ -56,12 +56,17 @@ struct ResetCreditResult: Decodable, Sendable {
 
 struct ResetCreditMessage {
     let text: String
+    let detail: String?
     let succeeded: Bool
 }
 
-struct ResetNotice: Equatable {
-    let id = UUID()
-    let text: String
+/// Why a reset cannot be used right now; nil from AccountStore.resetBlock means it can.
+enum ResetBlock: Equatable {
+    case busy
+    case storage
+    case stale
+    case noCredit
+    case notApplicable
 }
 
 struct ResetCreditDetails: Decodable {

@@ -34,7 +34,7 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 ## 目录
 
 - [功能特性](#功能特性)
-- [0.4.1 新功能](#041-新功能)
+- [0.4.2 新功能](#042-新功能)
 - [工作原理](#工作原理)
 - [系统要求](#系统要求)
 - [安装](#安装)
@@ -61,13 +61,9 @@ SwitchGPT 是一款 macOS 菜单栏应用，在保持 ChatGPT 桌面账户登录
 - **完全本地** — 认证信息保存在 macOS 钥匙串中，请求经本地中继直接发往 OpenAI。没有 SwitchGPT 服务器。
 - **多语言** — 英语、韩语、日语和简体中文。
 
-## 0.4.1 新功能
+## 0.4.2 新功能
 
-- **账户卡片上的重置机会：** 有重置机会的卡片显示剩余次数、最早到期时间和 **使用** 按钮，额度不足时按钮会突出显示。也可以在账户菜单中选择 **使用重置机会…**，无法使用时卡片会显示原因。详见 [重置次数](#重置次数)。
-- **统一 Pro 徽章：** ChatGPT 的两个 Pro 套餐都显示为 **Pro**。
-- **Claude 模型 ID：** Claude 模型以 `claude-opus-5-5` 这样的 Claude 模型 ID 列出，不再使用 `claude-code-…`。使用旧 ID 的对话请重新选择模型。
-- **Codex 输出详细程度：** Claude 的回答遵循 Codex 中设置的输出详细程度。
-- **较长的 Claude 对话：** 历史较长或图片较多的对话会继续回复，过大的请求会说明被拒绝的原因。
+- **账户卡片上的重置：** 以 **重置 N 次** 和原来的 ↻ 图标显示剩余重置次数。无法使用的原因和使用结果不再显示在卡片上，而是在点击 **使用** 时以弹窗提示。详见 [重置次数](#重置次数)。
 
 更早的变更请查看[发布页面](https://github.com/yoonpooh/SwitchGPT/releases)。
 
@@ -103,7 +99,7 @@ flowchart LR
 
 ### 下载
 
-1. 从[最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)下载 `SwitchGPT-v0.4.1-macos-arm64.zip` 和 `SHA256SUMS.txt`。
+1. 从[最新版本](https://github.com/yoonpooh/SwitchGPT/releases/latest)下载 `SwitchGPT-v0.4.2-macos-arm64.zip` 和 `SHA256SUMS.txt`。
 2. 将两个文件放在同一文件夹中，验证校验和：
 
    ```sh
@@ -148,7 +144,7 @@ flowchart LR
 
 ### 重置次数
 
-有重置机会的账户卡片会显示剩余次数、最早到期时间和 **使用** 按钮。点击 **使用**，或在账户右键菜单、更多菜单中选择 **使用重置机会…**，确认目标账户及消耗 1 次重置机会后使用；确认窗口会显示当前剩余额度并列出所有重置机会的到期时间。额度不足或用尽时按钮会突出显示，一天内到期的重置机会会以橙色显示剩余时间。当前不可用或查询信息过期时，按钮会禁用，卡片上会显示原因。使用成功后卡片上会短暂显示完成提示。使用后会重新查询限额和剩余次数，自动模式会重新应用账户优先级。若响应中断或后续刷新失败，可点击 **确认结果** 继续此前的请求。未确认的请求编号会在重启应用后保留，重置次数不会自动消耗。
+有剩余重置的账户卡片会显示 **重置 N 次**、最早到期时间（一天内到期时以橙色显示剩余时间）和 **使用** 按钮，额度不足或用尽时按钮会突出显示。点击 **使用**，或在账户右键菜单、更多菜单中选择 **使用重置…**，确认窗口会显示当前剩余额度和每次重置的到期时间，确认后使用 1 次重置。当前无法使用时会以弹窗说明原因，用量信息过期时可在弹窗中直接刷新。结果也以弹窗显示。使用后会重新查询限额和剩余次数，自动模式会重新应用账户优先级。若响应中断或后续刷新失败，可点击 **确认结果** 继续此前的请求。未确认的请求编号会在重启应用后保留，重置不会被自动使用。
 
 ### 语言与日期
 
@@ -272,8 +268,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.1-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.1-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.2-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.2-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### 项目结构

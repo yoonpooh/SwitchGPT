@@ -34,7 +34,7 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 ## Contents
 
 - [Features](#features)
-- [What's new in 0.4.1](#whats-new-in-041)
+- [What's new in 0.4.2](#whats-new-in-042)
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -61,13 +61,9 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 - **Local and private** — credentials stay in macOS Keychain, and requests go directly to OpenAI through a local relay. There is no SwitchGPT server.
 - **Localized** — English, Korean, Japanese, and Simplified Chinese.
 
-## What's new in 0.4.1
+## What's new in 0.4.2
 
-- **Reset credits on the account card:** each card with reset credits shows the count, the earliest expiry, and a **Use** button, which is highlighted when a limit is low. **Use Reset Credit…** is also in the account menu, and a card explains why a credit cannot be used. See [Reset credits](#reset-credits).
-- **One Pro badge:** both ChatGPT Pro tiers now show as **Pro**.
-- **Claude model IDs:** Claude models are listed under their Claude model IDs, such as `claude-opus-5-5`, instead of `claude-code-…`. Choose the model again in threads that used an earlier ID.
-- **Codex output verbosity:** Claude answers follow the output verbosity set in Codex.
-- **Long Claude conversations:** threads with long histories or many images keep answering, and a request that is too large says why it was refused.
+- **Resets on the account card:** a card shows remaining resets as **Resets: N** with the original ↻ icon. Why a reset cannot be used, and its result, now appear in a popup when you select **Use** instead of on the card. See [Reset credits](#reset-credits).
 
 Earlier changes are listed on the [Releases page](https://github.com/yoonpooh/SwitchGPT/releases).
 
@@ -103,7 +99,7 @@ Routing applies to Codex requests that use the built-in `openai` provider on thi
 
 ### Download
 
-1. Download `SwitchGPT-v0.4.1-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
+1. Download `SwitchGPT-v0.4.2-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
 2. With both files in the same directory, verify the checksum:
 
    ```sh
@@ -148,7 +144,7 @@ Keep SwitchGPT running in the menu bar while model routing is enabled.
 
 ### Reset credits
 
-An account card with reset credits shows the count, the earliest expiry, and a **Use** button. Select **Use**, or **Use Reset Credit…** from the account's context or more menu, then confirm the account and consumption of one credit; the confirmation shows the remaining usage and every credit's expiry. The button is highlighted when a limit is low or exhausted, and an expiry within a day is shown in orange as remaining time. When a reset cannot be used or usage data is stale, the button is disabled and the card shows why. A successful reset is confirmed briefly on the card. Afterward, usage and credit counts are fetched again, and automatic mode reapplies account priority. If a response or follow-up refresh fails, **Check result** continues the same request. Pending request IDs survive app restarts, and credits are never consumed automatically.
+An account card with resets shows **Resets: N**, the earliest expiry (as remaining time in orange within a day), and a **Use** button, which is highlighted when a limit is low or exhausted. Select **Use**, or **Use Reset…** from the account's context or more menu; the confirmation shows the remaining usage and every reset's expiry, and confirming uses one reset. If a reset cannot be used right now, a popup says why, and when usage data is out of date it offers to refresh. The result is also shown in a popup. Afterward, usage and reset counts are fetched again, and automatic mode reapplies account priority. If a response or follow-up refresh fails, **Check result** continues the same request. Pending request IDs survive app restarts, and resets are never used automatically.
 
 ### Language and dates
 
@@ -272,8 +268,8 @@ The script builds for the host architecture. Published artifacts are Apple silic
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.1-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.1-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.2-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.4.2-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### Project structure

@@ -155,7 +155,7 @@ struct AccountPanel: View {
         Button(L10n.text("edit_name")) { editName(account) }
         if (store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 || store.hasPendingReset(account) {
             Button(L10n.text(store.hasPendingReset(account) ? "reset_retry" : "reset_menu")) { confirmReset(account) }
-                .disabled(!store.canUseReset(account))
+                .disabled(store.resetBlock(account) == .busy)
         }
         Button(L10n.text("delete"), role: .destructive) { confirmDelete(account) }
             .disabled(account.id == store.currentID)
@@ -220,8 +220,25 @@ struct AccountPanel: View {
         if alert.runModal() == .alertFirstButtonReturn { Task { await store.restartDesktop(clearingModelCache: true) } }
     }
 
+    /// Use stays clickable, so a reset that cannot run is explained here instead of on the card.
     private func confirmReset(_ account: Account) {
-        guard store.canUseReset(account) else { return }
+        switch store.resetBlock(account) {
+        case .busy?: return
+        case .storage?: return notify(L10n.text("reset_storage_error"), detail: store.displayName(account), style: .warning)
+        case .noCredit?: return notify(L10n.text("reset_no_credit"), detail: store.displayName(account), style: .informational)
+        case .notApplicable?:
+            return notify(L10n.text("reset_not_applicable"), detail: L10n.text("reset_not_applicable_detail"), style: .informational)
+        case .stale?:
+            let alert = NSAlert()
+            alert.messageText = L10n.text("reset_stale_title")
+            alert.informativeText = L10n.text("reset_stale_detail")
+            alert.addButton(withTitle: L10n.text("reset_refresh_action"))
+            alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn { Task { await store.refreshUsage() } }
+            return
+        case nil: break
+        }
         let retrying = store.hasPendingReset(account)
         let alert = NSAlert()
         alert.messageText = L10n.text(retrying ? "reset_retry" : "reset_confirm_title")
@@ -236,7 +253,10 @@ struct AccountPanel: View {
             }
             let expirations = store.resetExpirations(account)
             if !expirations.isEmpty {
-                details.append(L10n.format("reset_expiry_list", expirations.map { L10n.date($0) }.joined(separator: ", ")))
+                // Count from the usage summary; a credit without a readable expiry is still owned.
+                let owned = store.usages[account.id]?.rateLimitResetCredits?.availableCount ?? expirations.count
+                details.append(L10n.format("reset_expiry_list", max(owned, expirations.count),
+                                           expirations.map { L10n.date($0) }.joined(separator: ", ")))
             }
         }
         alert.informativeText = details.joined(separator: "\n\n")
@@ -246,19 +266,19 @@ struct AccountPanel: View {
         if alert.runModal() == .alertFirstButtonReturn {
             Task {
                 guard let result = await store.useResetCredit(account) else { return }
-                if result.succeeded {
-                    // The refreshed bars already show the effect; confirm briefly on the card instead of another dialog.
-                    withAnimation(.easeOut(duration: 0.2)) { store.resetNotices[account.id] = ResetNotice(text: result.text) }
-                    return
-                }
-                let completion = NSAlert()
-                completion.alertStyle = .warning
-                completion.messageText = result.text
-                completion.informativeText = store.displayName(account)
-                NSApp.activate(ignoringOtherApps: true)
-                completion.runModal()
+                notify(result.text, detail: result.detail ?? store.displayName(account),
+                       style: result.succeeded ? .informational : .warning)
             }
         }
+    }
+
+    private func notify(_ title: String, detail: String, style: NSAlert.Style) {
+        let alert = NSAlert()
+        alert.alertStyle = style
+        alert.messageText = title
+        alert.informativeText = detail
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     private func quit() {

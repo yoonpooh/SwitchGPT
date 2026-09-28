@@ -18,8 +18,6 @@ final class AccountStore {
     var selectedExhausted = false
     var resetDetails: [String: ResetCreditDetails] = [:]
     var resetInProgressID: String?
-    /// Success messages shown on account cards; kept here so they survive the panel closing.
-    var resetNotices: [String: ResetNotice] = [:]
     var usages: [String: AccountUsage] = [:]
     var usageErrors: [String: String] = [:]
     var usageUpdatedAt: [String: Date] = [:]
@@ -224,33 +222,23 @@ final class AccountStore {
 
     func hasPendingReset(_ account: Account) -> Bool { resetLedger.hasPending(account.id) }
 
-    /// Clears a notice only if a newer one has not replaced it.
-    func clearResetNotice(_ notice: ResetNotice, for accountID: String) {
-        if resetNotices[accountID]?.id == notice.id { resetNotices[accountID] = nil }
-    }
-
     /// Expiry dates of the account's unused reset credits, earliest first.
     func resetExpirations(_ account: Account) -> [Date] {
         resetDetails[account.id]?.availableCredits.compactMap(\.expiration) ?? []
     }
 
-    func canUseReset(_ account: Account) -> Bool {
-        guard !busy, !loadingUsage, resetLedger.readable, accounts.contains(where: { $0.id == account.id }) else { return false }
-        if hasPendingReset(account) { return true }
-        return usageErrors[account.id] == nil
-            && Date.now.timeIntervalSince(usageUpdatedAt[account.id] ?? .distantPast) <= 120
-            && usages[account.id]?.rateLimitResetCredits?.canUse == true
-    }
+    func canUseReset(_ account: Account) -> Bool { resetBlock(account) == nil }
 
-    func resetHelp(_ account: Account) -> String {
-        if !resetLedger.readable { return L10n.text("reset_storage_error") }
-        if hasPendingReset(account) { return L10n.text("reset_retry_help") }
-        if usageErrors[account.id] != nil || Date.now.timeIntervalSince(usageUpdatedAt[account.id] ?? .distantPast) > 120 {
-            return L10n.text("reset_refresh_help")
-        }
-        guard let credits = usages[account.id]?.rateLimitResetCredits else { return L10n.text("reset_refresh_help") }
-        if credits.availableCount <= 0 { return L10n.text("reset_no_credit") }
-        return L10n.text(credits.canUse ? "reset_use_help" : "reset_not_applicable")
+    /// A pending request can always be checked; otherwise a reset needs a fresh, error-free usage read.
+    func resetBlock(_ account: Account) -> ResetBlock? {
+        guard !busy, !loadingUsage, accounts.contains(where: { $0.id == account.id }) else { return .busy }
+        guard resetLedger.readable else { return .storage }
+        if hasPendingReset(account) { return nil }
+        guard usageErrors[account.id] == nil,
+              Date.now.timeIntervalSince(usageUpdatedAt[account.id] ?? .distantPast) <= 120,
+              let credits = usages[account.id]?.rateLimitResetCredits else { return .stale }
+        if credits.availableCount <= 0 { return .noCredit }
+        return credits.canUse ? nil : .notApplicable
     }
 
     func useResetCredit(_ account: Account) async -> ResetCreditMessage? {
@@ -279,18 +267,24 @@ final class AccountStore {
                 selectedExhausted = router.isCurrentExhausted()
             }
             let key: String
+            var detail: String?
             switch receipt.result.code {
             case .reset: key = "reset_success"
             case .alreadyRedeemed: key = "reset_already_redeemed"
-            case .nothingToReset: key = "reset_not_applicable"
+            case .nothingToReset: key = "reset_not_applicable"; detail = L10n.text("reset_not_applicable_detail")
             case .noCredit: key = "reset_no_credit"
             }
             let used = receipt.result.code == .reset || receipt.result.code == .alreadyRedeemed
-            let text = L10n.text(key) + (receipt.reconciled ? "" : " " + L10n.text("reset_followup_pending"))
-            return ResetCreditMessage(text: text, succeeded: used && receipt.reconciled)
+            if !receipt.reconciled {
+                detail = L10n.text("reset_followup_pending")
+            } else if used {
+                detail = L10n.format("reset_success_detail", displayName(account),
+                                     usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0)
+            }
+            return ResetCreditMessage(text: L10n.text(key), detail: detail, succeeded: used && receipt.reconciled)
         } catch {
-            let text = hasPendingReset(account) ? L10n.text("reset_uncertain") : L10n.format("reset_failed", error.localizedDescription)
-            return ResetCreditMessage(text: text, succeeded: false)
+            if hasPendingReset(account) { return ResetCreditMessage(text: L10n.text("reset_uncertain"), detail: nil, succeeded: false) }
+            return ResetCreditMessage(text: L10n.text("reset_failed"), detail: error.localizedDescription, succeeded: false)
         }
     }
 
@@ -448,7 +442,6 @@ final class AccountStore {
             try vault.remove(account.id)
             accounts.removeAll { $0.id == account.id }
             routingCredentials.removeValue(forKey: account.id)
-            resetNotices.removeValue(forKey: account.id)
             try persist()
             updateRouter()
             message = ""

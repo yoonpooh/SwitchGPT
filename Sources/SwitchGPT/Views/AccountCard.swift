@@ -32,21 +32,9 @@ struct AccountCard: View {
                     .buttonStyle(.plain)
             }
             // Kept outside the selection button so its own button stays clickable; aligned with the name.
-            if let notice {
-                feedbackRow(notice.text).padding(.leading, 32).transition(.opacity)
-            } else if hasReset {
-                resetRow.padding(.leading, 32).transition(.opacity)
-            }
+            if hasReset { resetRow.padding(.leading, 32) }
         }.padding(.horizontal, 7).padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
-            // The countdown runs only while the card is on screen, so a closed panel still shows it on reopening.
-            .task(id: notice?.id) {
-                guard let notice else { return }
-                do { try await Task.sleep(for: .seconds(6)) } catch { return }
-                withAnimation(.easeOut(duration: 0.2)) { store.clearResetNotice(notice, for: account.id) }
-            }
     }
-
-    private var notice: ResetNotice? { store.resetNotices[account.id] }
 
     private var summary: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -89,50 +77,42 @@ struct AccountCard: View {
             .contains { UsageBarTone.resolve(remaining: $0.remaining) != .normal }
     }
 
-    /// Count, earliest expiry and the action stay visible because the menu bar panel rarely shows tooltips.
+    /// Count, earliest expiry and the action stay visible; why a reset cannot be used is told in a popup on Use.
     private var resetRow: some View {
-        let usable = store.canUseReset(account)
         let pending = store.hasPendingReset(account)
         let working = store.resetInProgressID == account.id
         let expiry = store.resetExpirations(account).first
         let expiringSoon = expiry.map { $0.timeIntervalSinceNow < 86_400 } ?? false
-        let suggested = usable && (pending || needsReset)
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Image(systemName: pending ? "arrow.triangle.2.circlepath" : "ticket.fill")
-                    .foregroundStyle(suggested ? Color.accentColor : Color.secondary)
-                    .accessibilityHidden(true)
-                Text(L10n.format("reset_credits", resetCount))
-                    .fontWeight(.semibold).foregroundStyle(.primary).fixedSize()
-                if let expiry {
-                    Text(expiryText(expiry))
-                        .foregroundStyle(expiringSoon ? Color.orange : Color.secondary)
-                        .lineLimit(1).truncationMode(.tail)
-                }
-                Spacer(minLength: 4)
-                if working {
-                    HStack(spacing: 4) {
-                        ProgressView().controlSize(.mini)
-                        Text(L10n.text("reset_working"))
-                    }.fixedSize()
-                } else {
-                    let title = L10n.text(pending ? "reset_retry" : "reset_use_button")
-                    Group {
-                        // Draw attention to the button only when a reset would help right now.
-                        if suggested { Button(title, action: useReset).buttonStyle(.borderedProminent) }
-                        else { Button(title, action: useReset).buttonStyle(.bordered) }
-                    }
-                    .controlSize(.mini)
-                    .disabled(!usable)
-                    .help(store.resetHelp(account))
-                    .accessibilityLabel(L10n.text(pending ? "reset_retry" : "reset_use"))
-                }
+        let suggested = store.canUseReset(account) && (pending || needsReset)
+        return HStack(spacing: 6) {
+            Image(systemName: "arrow.counterclockwise.circle")
+                .foregroundStyle(suggested ? Color.accentColor : Color.secondary)
+                .accessibilityHidden(true)
+            Text(L10n.format("reset_credits", resetCount))
+                .fontWeight(.semibold).foregroundStyle(.primary).fixedSize()
+            if let expiry {
+                Text(expiryText(expiry))
+                    .foregroundStyle(expiringSoon ? Color.orange : Color.secondary)
+                    .lineLimit(1).truncationMode(.tail)
             }
-            // Explain a disabled button unless it is only waiting for another action to finish.
-            if !usable && !working && !store.busy && !store.loadingUsage {
-                Label(store.resetHelp(account), systemImage: "info.circle")
-                    .labelStyle(.titleAndIcon).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            if working {
+                HStack(spacing: 4) {
+                    ProgressView().controlSize(.mini)
+                    Text(L10n.text("reset_working"))
+                }.fixedSize()
+            } else {
+                let title = L10n.text(pending ? "reset_retry" : "reset_use_button")
+                Group {
+                    // Draw attention to the button only when a reset would help right now.
+                    if suggested { Button(title, action: useReset).buttonStyle(.borderedProminent) }
+                    else { Button(title, action: useReset).buttonStyle(.bordered) }
+                }
+                .controlSize(.mini)
+                // Stays clickable when a reset cannot be used, so the popup can say why.
+                .disabled(store.resetBlock(account) == .busy)
+                .help(L10n.text(pending ? "reset_retry_help" : "reset_use_help"))
+                .accessibilityLabel(L10n.text(pending ? "reset_retry" : "reset_use"))
             }
         }
         .font(.system(size: 9)).foregroundStyle(.secondary)
@@ -140,31 +120,19 @@ struct AccountCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(suggested ? Color.accentColor.opacity(0.1) : Color.primary.opacity(0.04),
                     in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .help(expiryList ?? "")
-    }
-
-    private func feedbackRow(_ text: String) -> some View {
-        Label(text, systemImage: "checkmark.circle.fill")
-            .labelStyle(.titleAndIcon)
-            .font(.system(size: 9, weight: .medium)).foregroundStyle(.green)
-            .padding(.horizontal, 7).padding(.vertical, 5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 
     /// Within a day of expiry, the remaining time reads faster than a clock time.
     private func expiryText(_ date: Date) -> String {
         let remaining = date.timeIntervalSinceNow
-        guard remaining > 0 && remaining < 86_400 else { return L10n.format("expires", L10n.compactDate(date)) }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = L10n.locale
+        guard remaining > 0 && remaining < 86_400 else { return L10n.format("reset_until", L10n.compactDate(date)) }
+        var calendar = Calendar.current
+        calendar.locale = L10n.locale
+        let formatter = DateComponentsFormatter()
+        formatter.calendar = calendar
         formatter.unitsStyle = .short
-        return L10n.format("expires_relative", formatter.localizedString(for: date, relativeTo: .now))
-    }
-
-    private var expiryList: String? {
-        let dates = store.resetExpirations(account)
-        return dates.isEmpty ? nil : L10n.format("reset_expiry_list", dates.map { L10n.date($0) }.joined(separator: ", "))
+        formatter.allowedUnits = remaining < 3600 ? [.minute] : [.hour]
+        return L10n.format("reset_time_left", formatter.string(from: max(60, remaining)) ?? "")
     }
 }
 
