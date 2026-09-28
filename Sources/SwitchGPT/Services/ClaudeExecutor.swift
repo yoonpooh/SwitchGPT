@@ -21,6 +21,8 @@ final class ClaudeExecutor: @unchecked Sendable {
     let models: ClaudeModelCatalog
     private let claudeExecutable: @Sendable () -> URL?
     private let relayExecutable: URL?
+    /// Codex's config.toml, for its output verbosity when a request carries none.
+    private let codexConfig: @Sendable () -> String?
     private let stallLimit: TimeInterval
     private let startLimit: TimeInterval
     private var timer: DispatchSourceTimer?
@@ -33,10 +35,12 @@ final class ClaudeExecutor: @unchecked Sendable {
     /// stallLimit: how long an open response may wait without any Claude Code output.
     /// startLimit: how long a new Claude Code process may take to report that it started.
     init(claudeExecutable: @escaping @Sendable () -> URL? = { ClaudeCLI.locate() }, models: ClaudeModelCatalog = ClaudeModelCatalog(),
-         relayExecutable: URL? = Bundle.main.executableURL, stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90) {
+         relayExecutable: URL? = Bundle.main.executableURL, codexConfig: @escaping @Sendable () -> String? = ClaudeExecutor.readCodexConfig,
+         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90) {
         self.claudeExecutable = claudeExecutable
         self.models = models
         self.relayExecutable = relayExecutable
+        self.codexConfig = codexConfig
         self.stallLimit = stallLimit
         self.startLimit = startLimit
         // A Claude process that already exited must not terminate SwitchGPT on a pipe write.
@@ -49,6 +53,11 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     deinit { timer?.cancel() }
+
+    @Sendable static func readCodexConfig() -> String? {
+        let file = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/config.toml")
+        return try? String(contentsOf: file, encoding: .utf8)
+    }
 
     var enabled: Bool { lock.withLock { isEnabled } }
     func setEnabled(_ enabled: Bool) {
@@ -140,9 +149,10 @@ final class ClaudeExecutor: @unchecked Sendable {
         }
         let results = Self.toolResults(inputs)
         let table = try ClaudeBridge.toolTable(data["tools"])
+        let verbosity = ClaudeBridge.verbosity(data, config: codexConfig)
         if let current = run, current.writer == nil {
             let answered = !current.waiting.isEmpty && current.waiting.isSubset(of: results.keys)
-            let changed = model != current.model || ClaudeBridge.effort(data) != current.effort
+            let changed = model != current.model || ClaudeBridge.effort(data) != current.effort || verbosity != current.verbosity
                 || ClaudeBridge.digest(Self.roles(inputs)) != ClaudeBridge.digest(Self.roles(current.inputs))
                 || ClaudeBridge.digest(data["instructions"]) != ClaudeBridge.digest(current.data["instructions"])
                 || ClaudeBridge.tableDigest(table) != ClaudeBridge.tableDigest(current.table)
@@ -159,7 +169,7 @@ final class ClaudeExecutor: @unchecked Sendable {
         let active: ClaudeRun
         if let run { active = run } else {
             // A fresh process reads the whole history, including tool calls of an ended run and their results.
-            active = ClaudeRun(key: key, turnID: turnID, model: model, data: data, inputs: inputs, table: table)
+            active = ClaudeRun(key: key, turnID: turnID, model: model, data: data, inputs: inputs, table: table, verbosity: verbosity)
             runs[key] = active
             runsByID[active.id] = active
         }
@@ -610,6 +620,8 @@ final class ClaudeRun: @unchecked Sendable {
     let model: ClaudeModel
     let data: [String: Any]
     let compacting: Bool
+    /// Codex's output verbosity, applied through the system prompt.
+    let verbosity: String?
     let permissionMode: ClaudePermissionMode
     /// Claude Code's WebSearch is allowed, because Codex offers web search.
     let search: Bool
@@ -641,7 +653,7 @@ final class ClaudeRun: @unchecked Sendable {
     private var errors = Data()
 
     init(key: String, turnID: String?, model: ClaudeModel, data: [String: Any], inputs: [Any], table: [String: ClaudeTool],
-         compacting: Bool = false) {
+         compacting: Bool = false, verbosity: String? = nil) {
         self.key = key
         self.turnID = turnID
         self.model = model
@@ -649,6 +661,7 @@ final class ClaudeRun: @unchecked Sendable {
         self.inputs = inputs
         self.table = table
         self.compacting = compacting
+        self.verbosity = verbosity
         permissionMode = compacting ? .dontAsk : .mirroring(inputs)
         search = ClaudeBridge.webSearch(data["tools"])
     }
@@ -684,6 +697,7 @@ final class ClaudeRun: @unchecked Sendable {
         let settings: [String: Any] = ["disableAllHooks": true, "enabledPlugins": [String: Any](), "autoMemoryEnabled": false]
         let prompt = compacting ? ClaudeBridge.compactionSystemPrompt
             : ClaudeBridge.systemPrompt + (permissionMode == .plan ? ClaudeBridge.planModePrompt : "") + ClaudeBridge.standingPrompt(data)
+                + ClaudeBridge.verbosityPrompt(verbosity)
         arguments += ["--permission-mode", permissionMode.rawValue, "--permission-prompts", "none", "--disable-slash-commands", "--no-chrome",
                       "--no-session-persistence", "--system-prompt-snapshot", "off", "--settings", ClaudeBridge.text(settings),
                       "--append-system-prompt", prompt]

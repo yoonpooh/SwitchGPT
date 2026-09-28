@@ -57,6 +57,7 @@ enum ClaudePermissionMode: String {
 /// Codex Responses <-> Claude Code stream-json translation for Claude models. Pure functions only.
 enum ClaudeBridge {
     static let efforts: Set<String> = ["low", "medium", "high", "xhigh", "max"]
+    static let verbosities: Set<String> = ["low", "medium", "high"]
     static let relayPath = "/backend-api/codex/switchgpt-claude-relay"
     static let callPrefix = "codex_claude_"
     static let compactionPrefix = "claude-code-bridge-summary-v1:"
@@ -154,6 +155,70 @@ enum ClaudeBridge {
 
     static func effort(_ data: [String: Any]) -> String {
         (data["reasoning"] as? [String: Any])?["effort"] as? String ?? "high"
+    }
+
+    /// Codex's output verbosity: the one the request carries, else model_verbosity from config.toml. Nil when neither is set.
+    /// The config is read only when the request has none.
+    static func verbosity(_ data: [String: Any], config: () -> String?) -> String? {
+        let requested = ((data["text"] as? [String: Any])?["verbosity"] as? String)?.lowercased()
+        if let requested, verbosities.contains(requested) { return requested }
+        return config().flatMap(configuredVerbosity)
+    }
+
+    /// model_verbosity from the top level of a Codex config.toml. Multi-line strings are skipped, so text inside them,
+    /// such as an example in developer_instructions, is never read as a key or a table.
+    static func configuredVerbosity(_ config: String) -> String? {
+        var closing: String? // Ends the multi-line string the scan is inside.
+        for line in config.components(separatedBy: .newlines) {
+            if let delimiter = closing {
+                if line.contains(delimiter) { closing = nil }
+                continue
+            }
+            let text = line.trimmingCharacters(in: .whitespaces)
+            if text.hasPrefix("[") { break }
+            guard !text.hasPrefix("#"), let equals = text.firstIndex(of: "=") else { continue }
+            let key = text[..<equals].trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            let value = text[text.index(after: equals)...].trimmingCharacters(in: .whitespaces)
+            if let delimiter = ["\"\"\"", "'''"].first(where: value.hasPrefix), !value.dropFirst(3).contains(delimiter) {
+                closing = delimiter
+                continue
+            }
+            guard key == "model_verbosity", let quote = value.first, quote == "\"" || quote == "'" else { continue }
+            let setting = value.dropFirst().prefix { $0 != quote }.lowercased()
+            return verbosities.contains(setting) ? setting : nil
+        }
+        return nil
+    }
+
+    /// Codex's output verbosity for Claude, which has no such parameter. It comes last in the system prompt, so it
+    /// replaces the length guidance of the Codex instructions. Medium, or no setting, keeps them as they are.
+    static func verbosityPrompt(_ verbosity: String?) -> String {
+        switch verbosity {
+        case "low":
+            return """
+
+                # Output verbosity: low
+
+                The user set Codex's output verbosity to low. This replaces the length guidance in the Codex instructions above for every message you write:
+                - Lead with the outcome in the first sentence. Do not restate the request, open with a preamble, or repeat what you already said in a closing summary.
+                - Keep each progress note to one short sentence.
+                - In the final answer, mention verification and remaining risk only when they matter, in one line each. Do not list steps that went as expected.
+                - Prefer a few short sentences over headings, lists and tables.
+                Still report failures and skipped steps. An explicit request from the user for specific content or detail takes precedence; give it, and keep everything else brief.
+
+                """
+        case "high":
+            return """
+
+                # Output verbosity: high
+
+                The user set Codex's output verbosity to high. Give fuller final answers: explain the reasoning behind the changes, what was verified and how, \
+                and alternatives or follow-ups worth knowing. Progress notes stay brief.
+
+                """
+        default:
+            return ""
+        }
     }
 
     /// Compressed bodies are decoded first so a Claude conversation is never sent to OpenAI.
