@@ -25,6 +25,7 @@ final class ClaudeExecutor: @unchecked Sendable {
     private let codexConfig: @Sendable () -> String?
     private let stallLimit: TimeInterval
     private let startLimit: TimeInterval
+    private let reattachLimit: TimeInterval
     private var timer: DispatchSourceTimer?
     // Confined to queue.
     private var runs: [String: ClaudeRun] = [:]
@@ -34,15 +35,17 @@ final class ClaudeExecutor: @unchecked Sendable {
 
     /// stallLimit: how long an open response may wait without any Claude Code output.
     /// startLimit: how long a new Claude Code process may take to report that it started.
+    /// reattachLimit: how long Claude keeps working after Codex lost its response, for Codex to retry it.
     init(claudeExecutable: @escaping @Sendable () -> URL? = { ClaudeCLI.locate() }, models: ClaudeModelCatalog = ClaudeModelCatalog(),
          relayExecutable: URL? = Bundle.main.executableURL, codexConfig: @escaping @Sendable () -> String? = ClaudeExecutor.readCodexConfig,
-         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90) {
+         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, reattachLimit: TimeInterval = 60) {
         self.claudeExecutable = claudeExecutable
         self.models = models
         self.relayExecutable = relayExecutable
         self.codexConfig = codexConfig
         self.stallLimit = stallLimit
         self.startLimit = startLimit
+        self.reattachLimit = reattachLimit
         // A Claude process that already exited must not terminate SwitchGPT on a pipe write.
         signal(SIGPIPE, SIG_IGN)
         let timer = DispatchSource.makeTimerSource(queue: queue)
@@ -132,9 +135,15 @@ final class ClaudeExecutor: @unchecked Sendable {
 
         if let cached = cache.last(where: { $0.key == fingerprint }) {
             // Codex retried a response that already completed; replay it instead of running Claude again.
+            runsByID[cached.run]?.detached = nil
             sink.beginEventStream()
             sink.write(cached.wire)
             sink.finish()
+            return
+        }
+        if let lost = allRuns().first(where: { $0.writer?.fingerprint == fingerprint }), let writer = lost.writer {
+            // Codex retried a response whose stream it lost, perhaps before SwitchGPT noticed: the same Claude process continues it.
+            reattach(lost, writer, sink: sink)
             return
         }
         var run = runs[key]
@@ -150,6 +159,12 @@ final class ClaudeExecutor: @unchecked Sendable {
         let results = Self.toolResults(inputs)
         let table = try ClaudeBridge.toolTable(data["tools"])
         let verbosity = ClaudeBridge.verbosity(data, config: codexConfig)
+        if let current = run, current.detached != nil, current.writer != nil {
+            // Codex sent another request instead of retrying the response it lost.
+            cancel(current, "Codex cancelled or disconnected")
+            forget(current)
+            run = nil
+        }
         if let current = run, current.writer == nil {
             let answered = !current.waiting.isEmpty && current.waiting.isSubset(of: results.keys)
             let changed = model != current.model || ClaudeBridge.effort(data) != current.effort || verbosity != current.verbosity
@@ -205,19 +220,35 @@ final class ClaudeExecutor: @unchecked Sendable {
         run.writer = writer
         run.touched = Date()
         run.output = Date()
-        sink.observeClose { [weak self, weak run, weak writer] in
-            guard let self, let run, let writer else { return }
-            self.queue.async { self.disconnected(run, writer) }
-        }
+        observe(run, writer, sink: sink)
         sink.beginEventStream()
         writer.event("response.created", ["response": writer.response("in_progress")])
     }
 
-    private func disconnected(_ run: ClaudeRun, _ writer: ClaudeResponseWriter) {
-        guard run.writer === writer else { return }
-        run.writer = nil
-        cancel(run, "Codex cancelled or disconnected")
-        forget(run)
+    private func reattach(_ run: ClaudeRun, _ writer: ClaudeResponseWriter, sink: ClaudeSink) {
+        run.detached = nil
+        let lost = writer.sink
+        writer.sink = sink
+        lost.finish()
+        observe(run, writer, sink: sink)
+        sink.beginEventStream()
+        // The retry gets a whole response: everything the lost stream carried, then whatever Claude does next.
+        sink.write(writer.wire)
+        pump(run)
+    }
+
+    private func observe(_ run: ClaudeRun, _ writer: ClaudeResponseWriter, sink: ClaudeSink) {
+        sink.observeClose { [weak self, weak run, weak writer, weak sink] in
+            guard let self, let run, let writer, let sink else { return }
+            self.queue.async { self.disconnected(run, writer, sink) }
+        }
+    }
+
+    private func disconnected(_ run: ClaudeRun, _ writer: ClaudeResponseWriter, _ sink: ClaudeSink) {
+        guard run.writer === writer, writer.sink === sink else { return }
+        // Codex retries a response whose stream it lost. Claude keeps working meanwhile, and the retry continues it;
+        // a stopped turn or another request ends the run instead.
+        run.detached = Date()
     }
 
     // MARK: MCP relay
@@ -441,13 +472,16 @@ final class ClaudeExecutor: @unchecked Sendable {
         let now = Date()
         cache.removeAll { now.timeIntervalSince($0.date) >= 600 }
         for run in allRuns() {
-            if let writer = run.writer {
+            if let detached = run.detached, now.timeIntervalSince(detached) > reattachLimit {
+                cancel(run, "Codex cancelled or disconnected")
+                forget(run)
+            } else if let writer = run.writer {
                 if let launched = run.launched, !run.initialized, now.timeIntervalSince(launched) > startLimit {
                     failResponse(run, writer, "Claude Code did not start within \(Int(startLimit)) seconds" + run.diagnostic
                                  + ". Check that Claude Code is signed in (run claude in Terminal), then send the message again.")
                 } else if now.timeIntervalSince(run.output) > stallLimit {
                     failResponse(run, writer, "Claude Code stopped responding; send the message again to continue")
-                } else { writer.sink.write(Data(": keepalive\n\n".utf8)) }
+                } else { writer.keepalive() }
             } else if now.timeIntervalSince(run.touched) > 3600 {
                 cancel(run, "Codex continuation idle for one hour; start a new message")
                 forget(run)
@@ -639,6 +673,8 @@ final class ClaudeRun: @unchecked Sendable {
     var calls: [String: ClaudePending] = [:]
     var waiting: Set<String> = []
     var writer: ClaudeResponseWriter?
+    /// When Codex lost the stream of the open response, which a retry may still continue.
+    var detached: Date?
     var cancelled = false
     var collected = false
     var initialized = false
@@ -727,7 +763,8 @@ final class ClaudePending: @unchecked Sendable {
 
 /// Builds one Codex Responses SSE stream. Confined to the executor queue.
 final class ClaudeResponseWriter: @unchecked Sendable {
-    let sink: ClaudeSink
+    /// The stream to Codex. A retry of a lost stream continues on its own.
+    var sink: ClaudeSink
     let fingerprint: String
     let model: String
     let responseID = "resp_" + ClaudeBridge.identifier()
@@ -765,6 +802,12 @@ final class ClaudeResponseWriter: @unchecked Sendable {
         data.append(Data("\n\n".utf8))
         wire.append(data)
         sink.write(data)
+    }
+
+    /// Codex's idle timeout counts SSE events, not comments, so a quiet Claude sends the keepalive event of the Codex backend.
+    /// It stays out of the wire: a replay carries none.
+    func keepalive() {
+        sink.write(Data("event: keepalive\ndata: {\"type\":\"keepalive\"}\n\n".utf8))
     }
 
     func response(_ status: String) -> [String: Any] {

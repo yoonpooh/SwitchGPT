@@ -867,6 +867,67 @@ final class ClaudeBridgeTests: XCTestCase {
         try await Harness.waitUntilGone(try harness.processes())
     }
 
+    @MainActor func testQuietClaudeSendsKeepaliveEventsNotComments() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "quiet", "input": [
+            harness.environment, ["role": "user", "content": "HOLD_LONG"]] as [Any]])
+        XCTAssertNotNil(response.completed, response.text)
+        // Codex's idle timeout ignores SSE comments.
+        XCTAssertTrue(response.text.contains("event: keepalive\ndata: {\"type\":\"keepalive\"}\n\n"), response.text)
+        XCTAssertFalse(response.text.components(separatedBy: "\n").contains(": keepalive"), response.text)
+    }
+
+    @MainActor func testRetryOfALostStreamContinuesTheSameClaudeProcess() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        @MainActor func send() async throws -> (status: Int, text: String, completed: [String: Any]?) {
+            try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "lost", "input": [
+                harness.environment, ["role": "user", "content": "HOLD_LONG"]] as [Any]])
+        }
+        let lost = Task { @MainActor in _ = try await send() }
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        lost.cancel()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let retry = try await send()
+        XCTAssertEqual(retry.status, 200, retry.text)
+        XCTAssertTrue(retry.text.contains("Hello from Opus"), retry.text)
+        XCTAssertNotNil(retry.completed, retry.text)
+        XCTAssertEqual(retry.text.components(separatedBy: "event: response.created\n").count, 2, retry.text)
+        XCTAssertEqual(try harness.launches().count, 1)
+    }
+
+    @MainActor func testAnotherRequestAfterALostStreamReplacesItsClaude() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        @MainActor func send(_ content: String) async throws -> (status: Int, text: String, completed: [String: Any]?) {
+            try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "replaced", "input": [
+                harness.environment, ["role": "user", "content": content]] as [Any]])
+        }
+        let lost = Task { @MainActor in _ = try await send("STALL_NOW") }
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        lost.cancel()
+        // SwitchGPT notices the lost stream when a keepalive fails to reach Codex.
+        try await Task.sleep(nanoseconds: 5_000_000_000)
+        let next = try await send("hello")
+        XCTAssertEqual(next.status, 200, next.text)
+        XCTAssertTrue(next.text.contains("Hello from Opus"), next.text)
+        XCTAssertEqual(try harness.launches().count, 2)
+        try await Harness.waitUntilGone(Array(try harness.processes().prefix(1)))
+    }
+
+    @MainActor func testLostStreamWithoutRetryEndsClaude() async throws {
+        let harness = try await Harness(enabled: true, reattachLimit: 1)
+        defer { harness.stop() }
+        let lost = Task { @MainActor in
+            _ = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "abandoned", "input": [
+                harness.environment, ["role": "user", "content": "STALL_NOW"]] as [Any]])
+        }
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        lost.cancel()
+        try await Harness.waitUntilGone(try harness.processes(), timeout: 10)
+    }
+
     @MainActor func testChangedEffortRestartsClaudeWithTheNewEffort() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
@@ -1178,7 +1239,7 @@ private final class Counter: @unchecked Sendable {
     }
 
     init(enabled: Bool, claude: URL? = nil, relayExecutable: URL = URL(fileURLWithPath: "/usr/bin/true"),
-         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, models: [ClaudeModel]? = nil,
+         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, reattachLimit: TimeInterval = 60, models: [ClaudeModel]? = nil,
          catalog: ClaudeModelCatalog? = nil, codexConfig: String? = nil) async throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
@@ -1190,7 +1251,8 @@ private final class Counter: @unchecked Sendable {
         try Data(#"{"tokens":{"access_token":"desktop-token"}}"#.utf8).write(to: auth)
         let upstreamPort = try await upstream.start()
         let executor = ClaudeExecutor(claudeExecutable: { fake }, models: catalog ?? ClaudeModelCatalog(models: models),
-                                      relayExecutable: relayExecutable, codexConfig: { codexConfig }, stallLimit: stallLimit, startLimit: startLimit)
+                                      relayExecutable: relayExecutable, codexConfig: { codexConfig }, stallLimit: stallLimit, startLimit: startLimit,
+                                      reattachLimit: reattachLimit)
         executor.setEnabled(enabled)
         relay = ModelRelay(desktopAuth: auth, upstreamBaseURL: URL(string: "http://127.0.0.1:\(upstreamPort)")!, claude: executor)
         let claims = Data(#"{"sub":"first-subject"}"#.utf8).base64EncodedString()
@@ -1312,6 +1374,7 @@ private final class Counter: @unchecked Sendable {
     out({'type': 'system', 'subtype': 'init', 'tools': ['mcp__codex__' + t for t in tools] + (['WebSearch'] if search else [])})
     if 'STALL_NOW' in prompt: time.sleep(300)
     if 'HOLD_ANSWER' in prompt: time.sleep(1.5)
+    if 'HOLD_LONG' in prompt: time.sleep(3)
     out({'type': 'stream_event', 'event': {'type': 'message_start', 'message': {'usage': {'input_tokens': 10, 'cache_read_input_tokens': 5, 'output_tokens': 1}}}})
     answer = 'Hello from Opus'
     if 'PROGRESS_NOTE' in prompt:
