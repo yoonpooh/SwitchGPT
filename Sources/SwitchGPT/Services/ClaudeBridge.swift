@@ -164,7 +164,7 @@ enum ClaudeBridge {
         let encoding = (request.headers["content-encoding"] ?? "identity").lowercased().trimmingCharacters(in: .whitespaces)
         let body: Data
         if encoding == "identity" { body = request.body }
-        else if let decoded = try decoded(request.body, encoding: encoding, claudeEnabled: claudeEnabled) { body = decoded }
+        else if let decoded = try decoded(request.body, encoding: encoding) { body = decoded }
         else if claudeEnabled { throw ClaudeFailure(status: 415, message: unreadableMessage(encoding)) }
         else { return .openAI(request) } // Claude is off: OpenAI receives it as before.
         guard let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return .openAI(request) }
@@ -222,12 +222,11 @@ enum ClaudeBridge {
             + "Send the message again."
     }
 
-    /// While Claude is on, a body that fails to decode is refused with the reason instead of an empty error.
-    /// Off, nil lets OpenAI receive it as before.
-    private static func decoded(_ data: Data, encoding: String, claudeEnabled: Bool) throws -> Data? {
+    /// A body that fails to decode is refused with the reason instead of an empty error. It may be a Claude
+    /// conversation, so it never goes to OpenAI, even while Claude is off.
+    private static func decoded(_ data: Data, encoding: String) throws -> Data? {
         do { return try decompress(data, encoding: encoding) }
         catch let failure as HTTPFailure {
-            guard claudeEnabled else { return nil }
             throw ClaudeFailure(status: failure.status, message: failure.status == 413 ? tooLargeMessage : corruptMessage(encoding))
         }
     }
@@ -509,8 +508,9 @@ enum ClaudeBridge {
         }
         let conversation = walk(inputs)
         let kept = latestImages(images, count: compacting ? compactionImages : promptImages)
-        let note = kept.count < images.count
-            ? "Only the last \(kept.count) of \(images.count) attached images follow, in order, starting with image \(images.count - kept.count + 1)." : ""
+        let note = kept.count == images.count ? ""
+            : kept.isEmpty ? "None of the \(images.count) attached images follow."
+            : "Only the last \(kept.count) of \(images.count) attached images follow, in order, starting with image \(images.count - kept.count + 1)."
         var content: [[String: Any]]
         if compacting {
             // Instructions are supplied again after compaction; only the latest images add useful state.
@@ -523,7 +523,7 @@ enum ClaudeBridge {
                 + (hosted.isEmpty ? "" : ",\"unavailable_hosted_tools\":" + text(hosted)) + "}"
             content = [["type": "text", "text": envelope]]
             if !note.isEmpty {
-                content.append(["type": "text", "text": note + " The earlier ones were left out to keep the request within Claude's limits; "
+                content.append(["type": "text", "text": note + " The others were left out to keep the request within Claude's limits; "
                                 + "view one again with a tool if you need it."])
             }
         }
@@ -533,12 +533,12 @@ enum ClaudeBridge {
         return content
     }
 
-    /// The latest images within a count and a size budget, in order. The newest one is always kept.
+    /// The latest images within a count and a size budget, in order. An image over the budget on its own is left out.
     static func latestImages(_ images: [[String: Any]], count: Int) -> [[String: Any]] {
         var kept: [[String: Any]] = [], bytes = 0
         for image in images.reversed() {
             let size = (image["data"] as? String)?.utf8.count ?? 0
-            guard kept.count < count, kept.isEmpty || bytes + size <= promptImageBytes else { break }
+            guard kept.count < count, bytes + size <= promptImageBytes else { break }
             kept.append(image)
             bytes += size
         }

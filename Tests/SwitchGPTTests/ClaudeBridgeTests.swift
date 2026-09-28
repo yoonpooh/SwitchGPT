@@ -316,18 +316,18 @@ final class ClaudeBridgeTests: XCTestCase {
         if ZstdLibrary.shared != nil, let compressed = try zstd(opus) {
             XCTAssertEqual(try claude(try request(compressed, encoding: "zstd"))?.body, opus)
         }
-        // Unreadable while Claude is on: it may be Opus, so it is refused locally. Off, OpenAI receives it as before.
+        // An unsupported encoding while Claude is on: it may be Opus, so it is refused locally. Off, OpenAI receives it as before.
         XCTAssertThrowsError(try ClaudeBridge.route(try request(opus, encoding: "br"), claudeEnabled: true)) { error in
             XCTAssertEqual((error as? ClaudeFailure)?.status, 415)
         }
         guard case .openAI = try ClaudeBridge.route(try request(opus, encoding: "br"), claudeEnabled: false) else { return XCTFail("Not forwarded") }
-        // A body that cannot be decompressed says why instead of failing with an empty error.
-        XCTAssertThrowsError(try ClaudeBridge.route(try request(Data("not gzip".utf8), encoding: "gzip"), claudeEnabled: true)) { error in
-            XCTAssertEqual((error as? ClaudeFailure)?.status, 400)
-            XCTAssertEqual((error as? ClaudeFailure)?.message, ClaudeBridge.corruptMessage("gzip"))
-        }
-        guard case .openAI = try ClaudeBridge.route(try request(Data("not gzip".utf8), encoding: "gzip"), claudeEnabled: false) else {
-            return XCTFail("Not forwarded")
+        // A body that cannot be decompressed says why instead of failing with an empty error. It may be Opus, so
+        // it never reaches OpenAI, even while Claude is off.
+        for enabled in [true, false] {
+            XCTAssertThrowsError(try ClaudeBridge.route(try request(Data("not gzip".utf8), encoding: "gzip"), claudeEnabled: enabled)) { error in
+                XCTAssertEqual((error as? ClaudeFailure)?.status, 400)
+                XCTAssertEqual((error as? ClaudeFailure)?.message, ClaudeBridge.corruptMessage("gzip"))
+            }
         }
     }
 
@@ -361,11 +361,20 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(content[1]["text"] as? String).contains("last 20 of 25 attached images follow, in order, starting with image 6"))
         XCTAssertEqual(data(content[2]), "FFFF")
         XCTAssertEqual(content.last.flatMap(data), "YYYY")
-        // Large screenshots fill the size budget first; the newest one always goes along.
+        // Large screenshots fill the size budget first.
         let half = ClaudeBridge.promptImageBytes / 2 + 4
         let sized = ClaudeBridge.promptContent(["input": [["role": "user", "content": [image("A", half), image("B", half)]]]], compacting: false)
         XCTAssertEqual(sized.count, 3)
         XCTAssertEqual(sized.last.flatMap(data)?.first, "B")
+        // An image exactly at the budget goes along; one over it is left out, in a replay and in compaction.
+        XCTAssertEqual(ClaudeBridge.latestImages([["data": String(repeating: "A", count: ClaudeBridge.promptImageBytes)]], count: 1).count, 1)
+        let over = [["role": "user", "content": [image("A", ClaudeBridge.promptImageBytes + 4)]]]
+        let replay = ClaudeBridge.promptContent(["input": over], compacting: false)
+        XCTAssertEqual(replay.count, 2)
+        XCTAssertTrue(try XCTUnwrap(replay[1]["text"] as? String).hasPrefix("None of the 1 attached images follow."))
+        let compaction = ClaudeBridge.promptContent(["input": over], compacting: true)
+        XCTAssertEqual(compaction.count, 1)
+        XCTAssertTrue(try XCTUnwrap(compaction[0]["text"] as? String).contains("None of the 1 attached images follow."))
     }
 
     /// Each case was rejected by the real OpenAI endpoint with a Claude-made item and accepted after this rewrite.
