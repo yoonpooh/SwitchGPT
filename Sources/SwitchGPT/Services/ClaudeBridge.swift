@@ -421,7 +421,7 @@ enum ClaudeBridge {
         var item = (try? JSONSerialization.jsonObject(with: Data(catalogJSON.utf8))) as? [String: Any] ?? [:]
         item["slug"] = model.slug
         item["visibility"] = listed ? "list" : "hide"
-        item["display_name"] = model.name
+        item["display_name"] = model.name.hasPrefix("Claude ") ? model.name : "Claude \(model.name)"
         item["base_instructions"] = codexGuide
         item["description"] = L10n.format("claude_model_description", model.name)
         item["priority"] = priority
