@@ -141,6 +141,7 @@ Keep SwitchGPT running in the menu bar while model routing is enabled.
 - **Desktop sign-in** — your desktop account, shown separately in the footer.
 - **Automatic switching** — on by default in `⋯`; the header shows Auto or Manual.
 - **Refresh** — retrieves usage and reset availability. Usage also refreshes 60 seconds after each refresh completes, even with the panel closed; login, switching, and overlapping refreshes are skipped.
+- Failed usage reads show the error and last checked time alongside the last successful reading.
 - **Manage accounts** — drag cards to reorder; use `⋯` or right-click to rename or remove a saved account. An empty display name restores its email. Removing an account from the list does not delete the OpenAI account.
 
 ### Reset credits
@@ -182,6 +183,7 @@ SwitchGPT asks Claude Code which models it offers, such as Fable 5.1, Opus 5.5, 
 - While the toggle is off, SwitchGPT refuses Claude requests locally instead of sending them to OpenAI, and turning it off ends any running Claude task. Compressed requests (gzip, deflate, zstd) are handled the same way. zstd needs Homebrew's `zstd`; while the toggle is on, a request SwitchGPT cannot read is refused locally instead of being forwarded.
 - Claude Code runs in an empty private folder, never in the thread's folder, so threads in protected folders such as Documents, or without a project, do not wait on a macOS permission prompt. Codex tools still run in the thread's folder.
 - If Claude Code has not started within 90 seconds, or exits early, the Claude response fails with Claude Code's error.
+- Model and usage probes clean up their subprocess when their deadline expires. Images over the existing size budget are skipped while the remaining attachments keep their original numbers.
 - If `~/.codex/config.toml` sets `model_catalog_json`, that list replaces the one SwitchGPT adds Claude models to. SwitchGPT warns about it when you turn Claude models on.
 
 </details>

@@ -83,15 +83,15 @@ final class ClaudeUsageTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let index = directory.appendingPathComponent("accounts.json")
-        let store = AccountStore(index: index)
+        let store = AccountStore(index: index, session: CodexSession(home: directory))
         store.claudeUsage = ClaudeAccountUsage(usage: ClaudeUsage(limits: []), plan: "max", email: "me@example.com")
         XCTAssertEqual(store.claudeDisplayName, "me@example.com")
         XCTAssertTrue(store.renameClaude(to: "  Work  "))
         XCTAssertEqual(store.claudeDisplayName, "Work")
-        XCTAssertEqual(AccountStore(index: index).claudeNickname, "Work")
+        XCTAssertEqual(AccountStore(index: index, session: CodexSession(home: directory)).claudeNickname, "Work")
         XCTAssertTrue(store.renameClaude(to: " \n "))
         XCTAssertEqual(store.claudeDisplayName, "me@example.com")
-        XCTAssertNil(AccountStore(index: index).claudeNickname)
+        XCTAssertNil(AccountStore(index: index, session: CodexSession(home: directory)).claudeNickname)
         store.busy = true
         XCTAssertFalse(store.renameClaude(to: "Blocked"))
     }

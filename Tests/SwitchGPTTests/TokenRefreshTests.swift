@@ -144,7 +144,9 @@ final class TokenRefreshTests: XCTestCase {
         let oauth = RefreshBackend(statuses: [200], bodies: ["{\"access_token\":\"new-access\",\"refresh_token\":\"new-refresh\"}"])
         let usage = RefreshBackend(statuses: [401, 500], bodies: ["{}", "{}"])
         let store = AccountStore(index: root.appendingPathComponent("accounts.json"),
-            usageClient: UsageClient(send: { try await usage.send($0) }), session: session, vault: vault,
+            usageClient: UsageClient(send: { try await usage.send($0) }),
+            claudeUsageClient: ClaudeUsageClient(answers: { throw SwitchError(message: "synthetic Claude unavailable") }),
+            session: session, vault: vault,
             tokenRefreshClient: TokenRefreshClient(send: { try await oauth.send($0) }))
         store.accounts = [Account(id: initial.id, name: "Test", savedAt: .now)]
         await store.refreshUsage()
@@ -165,7 +167,9 @@ final class TokenRefreshTests: XCTestCase {
         let oauth = RefreshBackend(statuses: [], bodies: [])
         let usage = RefreshBackend(statuses: [200, 200], bodies: ["{}", "{}"])
         let store = AccountStore(index: root.appendingPathComponent("accounts.json"),
-            usageClient: UsageClient(send: { try await usage.send($0) }), session: session, vault: vault,
+            usageClient: UsageClient(send: { try await usage.send($0) }),
+            claudeUsageClient: ClaudeUsageClient(answers: { throw SwitchError(message: "synthetic Claude unavailable") }),
+            session: session, vault: vault,
             tokenRefreshClient: TokenRefreshClient(send: { try await oauth.send($0) }))
         store.accounts = [Account(id: current.id, name: "Test", savedAt: .now)]
         await store.refreshUsage()

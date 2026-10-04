@@ -149,3 +149,5 @@
 "claude_usage_help" = "このMacのClaude Codeにサインインしているアカウントの利用枠";
 "claude_scoped_weekly" = "%@ 週間";
 "claude_signed_out" = "Claude Codeにサインインしていません。ターミナルでclaudeを実行してサインインしてください。";
+"usage_last_checked" = "最終確認: %@";
+"delete_rollback_failed" = "アカウントの削除に失敗しました。認証情報は保持されましたが、保存済みリストを復元できませんでした。再起動後にアカウントがない場合は、再度追加してください。";

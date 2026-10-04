@@ -117,7 +117,8 @@ enum ClaudeModelDiscovery {
     }
 
     /// Sends control requests to one such process in order and returns their answers in the same order.
-    static func controls(_ executable: URL, model: String? = nil, subtypes: [String], timeout: TimeInterval = 30) throws -> [[String: Any]] {
+    static func controls(_ executable: URL, model: String? = nil, subtypes: [String], timeout: TimeInterval = 30,
+                         cancellation: ProcessCancellation? = nil) throws -> [[String: Any]] {
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("switchgpt-claude-models-" + ClaudeBridge.identifier())
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: scratch) }
@@ -128,23 +129,13 @@ enum ClaudeModelDiscovery {
                              "--disable-slash-commands", "--no-chrome"] + (model.map { ["--model", $0] } ?? [])
         process.currentDirectoryURL = scratch
         process.environment = ClaudeCLI.environment(executable: executable)
-        let input = Pipe(), output = Pipe()
-        process.standardInput = input
-        process.standardOutput = output
         process.standardError = FileHandle.nullDevice
-        try process.run()
-        let deadline = DispatchWorkItem { if process.isRunning { process.terminate() } }
-        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
-        defer { deadline.cancel() }
         var lines = Data()
         for (index, subtype) in subtypes.enumerated() {
             lines.append(ClaudeBridge.encode(["type": "control_request", "request_id": "switchgpt-\(index)", "request": ["subtype": subtype]] as [String: Any]))
             lines.append(0x0a)
         }
-        try? input.fileHandleForWriting.write(contentsOf: lines)
-        try? input.fileHandleForWriting.close()
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        let data = try ControlledProcess.capture(process, input: lines, timeout: timeout, cancellation: cancellation)
         var answers = [[String: Any]?](repeating: nil, count: subtypes.count)
         for line in data.split(separator: 0x0a) {
             guard let event = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any],

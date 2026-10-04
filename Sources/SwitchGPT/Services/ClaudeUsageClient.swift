@@ -4,21 +4,25 @@ import Foundation
 /// SwitchGPT reads no Anthropic credentials and calls no Anthropic endpoint, and asking makes no model call.
 struct ClaudeUsageClient: Sendable {
     /// Claude Code's answers to its initialize and get_usage control requests, as JSON.
-    private let answers: @Sendable () throws -> (account: Data, usage: Data)
+    private let answers: @Sendable (ProcessCancellation) throws -> (account: Data, usage: Data)
 
-    init(answers: @escaping @Sendable () throws -> (account: Data, usage: Data) = Self.ask) {
-        self.answers = answers
+    init(answers: (@Sendable () throws -> (account: Data, usage: Data))? = nil) {
+        if let answers { self.answers = { _ in try answers() } }
+        else { self.answers = { try Self.ask(cancellation: $0) } }
     }
 
     func load() async -> Result<ClaudeAccountUsage, any Error> {
         // Claude Code takes a second or two to answer, so it is never asked on the calling thread.
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global().async { continuation.resume(returning: Result { try fetch() }) }
-        }
+        let cancellation = ProcessCancellation()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global().async { continuation.resume(returning: Result { try fetch(cancellation: cancellation) }) }
+            }
+        } onCancel: { cancellation.cancel() }
     }
 
-    func fetch() throws -> ClaudeAccountUsage {
-        let (account, usage) = try answers()
+    func fetch(cancellation: ProcessCancellation = ProcessCancellation()) throws -> ClaudeAccountUsage {
+        let (account, usage) = try answers(cancellation)
         struct Initialized: Decodable {
             struct Account: Decodable { let email: String?; let subscriptionType: String? }
             let account: Account?
@@ -36,10 +40,10 @@ struct ClaudeUsageClient: Sendable {
                                   plan: reported.subscriptionType ?? signedIn.subscriptionType, email: signedIn.email)
     }
 
-    static func ask() throws -> (account: Data, usage: Data) {
+    static func ask(cancellation: ProcessCancellation = ProcessCancellation()) throws -> (account: Data, usage: Data) {
         guard let executable = ClaudeCLI.locate() else { throw SwitchError(message: L10n.text("claude_signed_out")) }
         do {
-            let answers = try ClaudeModelDiscovery.controls(executable, subtypes: ["initialize", "get_usage"])
+            let answers = try ClaudeModelDiscovery.controls(executable, subtypes: ["initialize", "get_usage"], cancellation: cancellation)
             return (ClaudeBridge.encode(answers[0]), ClaudeBridge.encode(answers[1]))
         } catch let failure as ClaudeFailure {
             throw SwitchError(message: failure.message)

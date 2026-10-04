@@ -3,13 +3,38 @@ import Foundation
 /// One HTTP request per connection; responses explicitly close the connection.
 struct RelayRequest: Sendable {
     static let headerLimit = 65_536
-    static let bodyLimit = 64 * 1024 * 1024
-    /// A compressed body may decode to more. It stays on this Mac, and Claude receives only its latest images.
-    static let decodedLimit = 256 * 1024 * 1024
+    /// Compaction uploads the history before it can shrink it, including accumulated screenshots.
+    static let bodyLimit = 256 * 1024 * 1024
+    /// Keep decompression bounded by the same budget; Claude still receives only its latest images.
+    static let decodedLimit = bodyLimit
     let method: String
     let target: String
     let headers: [String: String]
     let body: Data
+    private enum Model: Sendable { case unread, decoded(String?) }
+    private var recordedModel: Model = .unread
+
+    init(method: String, target: String, headers: [String: String], body: Data) {
+        self.method = method
+        self.target = target
+        self.headers = headers
+        self.body = body
+    }
+
+    /// Reuses routing's model extraction, including a known absence, for every upstream attempt.
+    var modelForEvent: String? {
+        switch recordedModel {
+        case .decoded(let model): return model
+        case .unread:
+            return ((try? JSONSerialization.jsonObject(with: body)) as? [String: Any])?["model"] as? String
+        }
+    }
+
+    func recordingModel(_ model: String?) -> RelayRequest {
+        var copy = self
+        copy.recordedModel = .decoded(model)
+        return copy
+    }
     var path: String { target.components(separatedBy: "?")[0] }
     var isModelRequest: Bool {
         method == "POST" && path == "/backend-api/codex/responses"
@@ -28,7 +53,9 @@ struct RelayRequest: Sendable {
     func removingHeader(_ name: String) -> RelayRequest {
         var headers = headers
         headers[name] = nil
-        return RelayRequest(method: method, target: target, headers: headers, body: body)
+        var copy = RelayRequest(method: method, target: target, headers: headers, body: body)
+        copy.recordedModel = recordedModel
+        return copy
     }
 
     static func parse(_ data: Data) throws -> RelayRequest? {

@@ -12,9 +12,8 @@ struct CodexSession {
     func read() throws -> Credential { try Credential(data: Data(contentsOf: auth)) }
     func validateStore() throws {
         let config = (try? String(contentsOf: home.appendingPathComponent("config.toml"), encoding: .utf8)) ?? ""
-        for line in config.components(separatedBy: .newlines) where line.trimmingCharacters(in: .whitespaces).hasPrefix("cli_auth_credentials_store") {
-            let value = line.components(separatedBy: "#")[0]
-            if !value.contains("\"file\"") && !value.contains("'file'") {
+        for assignment in TOMLTopLevel.assignments(in: config) where assignment.key == "cli_auth_credentials_store" {
+            if TOMLTopLevel.valueString(assignment.value) != "file" {
                 throw SwitchError(message: L10n.text("store_unsupported"))
             }
         }

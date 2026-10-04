@@ -149,3 +149,5 @@
 "claude_usage_help" = "本机 Claude Code 已登录账号的使用额度";
 "claude_scoped_weekly" = "%@ 每周";
 "claude_signed_out" = "Claude Code 尚未登录。请在终端运行 claude 登录。";
+"usage_last_checked" = "上次确认：%@";
+"delete_rollback_failed" = "删除账户失败。认证信息已保留，但无法恢复已保存的列表。如果重启后账户缺失，请重新添加。";

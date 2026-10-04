@@ -85,18 +85,13 @@ final class ClaudeExecutor: @unchecked Sendable {
 
     /// Called while SwitchGPT quits: no Claude Code process may outlive the app.
     func shutdown() {
-        let processes: [Process] = queue.sync {
+        queue.sync {
             let all = allRuns()
-            let processes = all.compactMap(\.process)
             for run in all {
                 cancel(run, "SwitchGPT quit")
                 forget(run)
             }
-            return processes
         }
-        let deadline = Date().addingTimeInterval(2)
-        while processes.contains(where: \.isRunning), Date() < deadline { usleep(50_000) }
-        for process in processes where process.isRunning { kill(process.processIdentifier, SIGKILL) }
     }
 
     // MARK: Codex requests
@@ -344,6 +339,8 @@ final class ClaudeExecutor: @unchecked Sendable {
             process.standardInput = input
             process.standardOutput = output
             process.standardError = errors
+            run.process = try OwnedProcess(process)
+            run.launched = Date()
             // The end of stderr explains a CLI that never starts or exits early.
             errors.fileHandleForReading.readabilityHandler = { [weak self, weak run] handle in
                 let data = handle.availableData
@@ -357,9 +354,6 @@ final class ClaudeExecutor: @unchecked Sendable {
                 guard let self, let run else { return }
                 self.queue.async { self.consume(run, data) }
             }
-            try process.run()
-            run.process = process
-            run.launched = Date()
             var line = ClaudeBridge.encode(["type": "user", "message": ["role": "user", "content": prompt]] as [String: Any])
             line.append(0x0a)
             let message = line
@@ -441,15 +435,7 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     private func stopProcess(_ run: ClaudeRun) {
-        if let process = run.process, process.isRunning {
-            let pid = process.processIdentifier
-            // Claude Code's children (the MCP relay) are ended with it; they must not outlive the run.
-            for child in Self.descendants(of: pid) { kill(child, SIGTERM) }
-            process.terminate()
-            queue.asyncAfter(deadline: .now() + 5) { [run] in
-                if run.process?.isRunning == true { kill(pid, SIGKILL) }
-            }
-        }
+        run.process?.stop()
         if let scratch = run.scratch {
             try? FileManager.default.removeItem(at: scratch)
             run.scratch = nil
@@ -628,20 +614,6 @@ final class ClaudeExecutor: @unchecked Sendable {
         inputs.compactMap { $0 as? [String: Any] }.filter { ["user", "developer", "system"].contains($0["role"] as? String ?? "") }
     }
 
-    static func descendants(of pid: pid_t) -> [pid_t] {
-        var found: [pid_t] = []
-        var pending = [pid]
-        while let parent = pending.popLast() {
-            var buffer = [pid_t](repeating: 0, count: 256)
-            let count = proc_listchildpids(parent, &buffer, Int32(buffer.count * MemoryLayout<pid_t>.size))
-            guard count > 0 else { continue }
-            let children = buffer.prefix(min(Int(count), buffer.count)).filter { $0 > 0 && !found.contains($0) }
-            found += children
-            pending += children
-        }
-        return found
-    }
-
     private static func constantTimeEqual(_ lhs: String, _ rhs: String) -> Bool {
         let left = Array(lhs.utf8), right = Array(rhs.utf8)
         guard left.count == right.count else { return false }
@@ -697,7 +669,7 @@ final class ClaudeRun: @unchecked Sendable {
     var lastUsage: [String: Any]?
     var touched = Date()
     var output = Date()
-    var process: Process?
+    var process: OwnedProcess?
     var scratch: URL?
     var buffer = Data()
     private var errors = Data()

@@ -7,16 +7,16 @@ final class AccountOrderTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let index = directory.appendingPathComponent("accounts.json")
         let original = Account(id: "example", name: "user@example.com", savedAt: .now)
-        let store = AccountStore(index: index)
+        let store = AccountStore(index: index, session: CodexSession(home: directory))
         store.accounts = [original]
         XCTAssertEqual(store.displayName(original), "user@example.com")
         XCTAssertTrue(store.rename(original, to: "  Work  "))
-        let loaded = AccountStore(index: index)
+        let loaded = AccountStore(index: index, session: CodexSession(home: directory))
         XCTAssertEqual(loaded.displayName(loaded.accounts[0]), "Work")
         XCTAssertEqual(loaded.email(loaded.accounts[0]), "user@example.com")
         XCTAssertEqual(loaded.accounts[0].id, original.id)
         XCTAssertTrue(loaded.rename(loaded.accounts[0], to: " \n "))
-        XCTAssertEqual(AccountStore(index: index).accounts[0].nickname, nil)
+        XCTAssertEqual(AccountStore(index: index, session: CodexSession(home: directory)).accounts[0].nickname, nil)
         loaded.busy = true
         XCTAssertFalse(loaded.rename(original, to: "Blocked"))
     }
@@ -42,11 +42,11 @@ final class AccountOrderTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
         let index = directory.appendingPathComponent("accounts.json")
-        let store = AccountStore(index: index)
+        let store = AccountStore(index: index, session: CodexSession(home: directory))
         store.accounts = ["a", "b", "c"].map { Account(id: $0, name: $0, savedAt: .now) }
         XCTAssertTrue(store.reorder("a", onto: "c"))
         XCTAssertEqual(store.accounts.map(\.id), ["b", "c", "a"])
-        XCTAssertEqual(AccountStore(index: index).accounts.map(\.id), ["b", "c", "a"])
+        XCTAssertEqual(AccountStore(index: index, session: CodexSession(home: directory)).accounts.map(\.id), ["b", "c", "a"])
         XCTAssertTrue(store.reorder("a", onto: "b"))
         XCTAssertEqual(store.accounts.map(\.id), ["a", "b", "c"])
         XCTAssertFalse(store.reorder("unrelated text", onto: "b"))
@@ -57,7 +57,7 @@ final class AccountOrderTests: XCTestCase {
     @MainActor func testDesktopAccountMatchesSameAccountWithDifferentLoginSubject() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let store = AccountStore(index: directory.appendingPathComponent("accounts.json"))
+        let store = AccountStore(index: directory.appendingPathComponent("accounts.json"), session: CodexSession(home: directory))
         let other = Account(id: "other|google-oauth2|1", name: "other@example.com", savedAt: .now)
         let saved = Account(id: "account|auth0|email", name: "user@example.com", savedAt: .now)
         store.accounts = [other, saved]

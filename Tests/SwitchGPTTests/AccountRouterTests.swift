@@ -155,7 +155,7 @@ final class AccountRouterTests: XCTestCase {
     @MainActor func testSetupRemainsPendingUntilDesktopRequestAndSelectionStaysSeparate() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
-        let store = AccountStore(index: root.appendingPathComponent("accounts.json"))
+        let store = AccountStore(index: root.appendingPathComponent("accounts.json"), session: CodexSession(home: root))
         store.accounts = ["first", "second"].map { Account(id: $0, name: $0, savedAt: now) }
         store.currentID = "second"
         store.routingPreferences.configuredAt = now
@@ -176,7 +176,7 @@ final class AccountRouterTests: XCTestCase {
         XCTAssertTrue(store.routingPreferences.desktopVerified)
         XCTAssertEqual(store.lastRequestAccount?.id, "first")
         XCTAssertEqual(store.selectedAccount?.id, "second")
-        XCTAssertTrue(AccountStore(index: root.appendingPathComponent("accounts.json")).routingPreferences.desktopVerified)
+        XCTAssertTrue(AccountStore(index: root.appendingPathComponent("accounts.json"), session: CodexSession(home: root)).routingPreferences.desktopVerified)
     }
 
     private func credentials(_ name: String) throws -> RelayCredentials {

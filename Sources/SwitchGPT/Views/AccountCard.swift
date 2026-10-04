@@ -58,7 +58,14 @@ struct AccountCard: View {
                     Text(L10n.text(store.loadingUsage ? "loading" : "refresh_hint"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
-
+                if let notice = store.usageErrors[account.id] {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(notice).foregroundStyle(.orange)
+                        if let checked = store.usageUpdatedAt[account.id] {
+                            Text(L10n.format("usage_last_checked", L10n.compactDate(checked))).foregroundStyle(.secondary)
+                        }
+                    }.font(.caption2).fixedSize(horizontal: false, vertical: true)
+                }
             }
         }.frame(maxWidth: .infinity, alignment: .leading)
     }

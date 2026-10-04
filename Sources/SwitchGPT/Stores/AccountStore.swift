@@ -69,7 +69,7 @@ final class AccountStore {
             }
             let events = self.index.deletingLastPathComponent().appendingPathComponent("relay-events.jsonl")
             if let lines = try? String(contentsOf: events, encoding: .utf8).split(separator: "\n") {
-                let completed = lines.reversed().compactMap { try? JSONDecoder().decode(RelayEvent.self, from: Data($0.utf8)) }
+                let completed = lines.reversed().lazy.compactMap { try? JSONDecoder().decode(RelayEvent.self, from: Data($0.utf8)) }
                     .first { $0.completed && $0.status == 200 }
                 lastRequest = completed
                 lastCompletedEventAt = completed.map { $0.finishedAt ?? $0.date }
@@ -402,9 +402,9 @@ final class AccountStore {
         }
         catch { accounts = previous; message = L10n.text("order_save"); return false }
     }
-    private func persist() throws {
+    private func persist(_ saved: [Account]? = nil) throws {
         try FileManager.default.createDirectory(at: index.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(accounts).write(to: index, options: .atomic)
+        try JSONEncoder().encode(saved ?? accounts).write(to: index, options: .atomic)
     }
     private func store(_ credential: Credential) throws {
         let label = credential.email ?? L10n.text("email_missing")
@@ -438,12 +438,25 @@ final class AccountStore {
     func remove(_ account: Account) {
         guard !loadingUsage, !busy else { return }
         guard account.id != currentID else { message = L10n.text("routing_delete_active"); return }
+        guard accounts.contains(where: { $0.id == account.id }) else { return }
+        guard router.beginRemoving(RelayCredentials.fingerprint(account.id)) else {
+            message = L10n.text("routing_delete_active"); return
+        }
+        defer { updateRouter() }
+        let previous = accounts
+        let updated = accounts.filter { $0.id != account.id }
         do {
-            try vault.remove(account.id)
-            accounts.removeAll { $0.id == account.id }
+            // A failed index write must never delete usable authentication.
+            try persist(updated)
+            do { try vault.remove(account.id) }
+            catch {
+                let deletionError = error
+                do { try persist(previous) }
+                catch { message = L10n.text("delete_rollback_failed"); return }
+                throw deletionError
+            }
+            accounts = updated
             routingCredentials.removeValue(forKey: account.id)
-            try persist()
-            updateRouter()
             message = ""
         } catch { message = error.localizedDescription }
     }

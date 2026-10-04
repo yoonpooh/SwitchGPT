@@ -291,9 +291,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
             deferredBody.removeAll()
             eventLine.removeAll()
             let upstream = try request.upstreamRequest(baseURL: upstreamBaseURL, credentials: selected)
-            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             event = RelayEvent(accountFingerprint: selected.fingerprint,
-                               path: request.target.components(separatedBy: "?")[0], model: body?["model"] as? String,
+                               path: request.target.components(separatedBy: "?")[0], model: request.modelForEvent,
                                client: RelayEvent.client(for: request))
             let configuration = URLSessionConfiguration.ephemeral
             configuration.httpCookieStorage = nil

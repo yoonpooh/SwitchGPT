@@ -232,12 +232,16 @@ enum ClaudeBridge {
         else if let decoded = try decoded(request.body, encoding: encoding) { body = decoded }
         else if claudeEnabled { throw ClaudeFailure(status: 415, message: unreadableMessage(encoding)) }
         else { return .openAI(request) } // Claude is off: OpenAI receives it as before.
-        guard let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return .openAI(request) }
+        guard let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return .openAI(request.recordingModel(nil)) }
         if ClaudeModel.isClaude(object["model"]) { return .claude(request.replacingBody(body)) }
-        guard let input = object["input"] as? [Any], let cleaned = openAIInput(input) else { return .openAI(request) }
+        let model = object["model"] as? String
+        guard let input = object["input"] as? [Any], let cleaned = openAIInput(input) else {
+            // Unchanged compressed bodies previously had no model in the event log; preserve that behavior.
+            return .openAI(request.recordingModel(encoding == "identity" ? model : nil))
+        }
         var updated = object
         updated["input"] = cleaned
-        return .openAI(request.replacingBody(encode(updated)))
+        return .openAI(request.replacingBody(encode(updated)).recordingModel(model))
     }
 
     /// OpenAI rejects four kinds of items Claude leaves in a Codex history. Returns nil when there are none.
@@ -573,10 +577,12 @@ enum ClaudeBridge {
             return object.mapValues(walk)
         }
         let conversation = walk(inputs)
-        let kept = latestImages(images, count: compacting ? compactionImages : promptImages)
-        let note = kept.count == images.count ? ""
-            : kept.isEmpty ? "None of the \(images.count) attached images follow."
-            : "Only the last \(kept.count) of \(images.count) attached images follow, in order, starting with image \(images.count - kept.count + 1)."
+        let indices = latestImageIndices(images, count: compacting ? compactionImages : promptImages)
+        let contiguous = indices == Array((images.count - indices.count)..<images.count)
+        let note = indices.count == images.count ? ""
+            : indices.isEmpty ? "None of the \(images.count) attached images follow."
+            : contiguous ? "Only the last \(indices.count) of \(images.count) attached images follow, in order, starting with image \(images.count - indices.count + 1)."
+            : "Attached images \(indices.map { String($0 + 1) }.joined(separator: ", ")) of \(images.count) follow, in that order. Their original numbers are labeled below."
         var content: [[String: Any]]
         if compacting {
             // Instructions are supplied again after compaction; only the latest images add useful state.
@@ -593,7 +599,9 @@ enum ClaudeBridge {
                                 + "view one again with a tool if you need it."])
             }
         }
-        for image in kept {
+        for index in indices {
+            let image = images[index]
+            if !contiguous { content.append(["type": "text", "text": "Attached image \(index + 1):"]) }
             content.append(["type": "image", "source": ["type": "base64", "media_type": image["mimeType"] ?? "", "data": image["data"] ?? ""]])
         }
         return content
@@ -601,11 +609,16 @@ enum ClaudeBridge {
 
     /// The latest images within a count and a size budget, in order. An image over the budget on its own is left out.
     static func latestImages(_ images: [[String: Any]], count: Int) -> [[String: Any]] {
-        var kept: [[String: Any]] = [], bytes = 0
-        for image in images.reversed() {
-            let size = (image["data"] as? String)?.utf8.count ?? 0
-            guard kept.count < count, bytes + size <= promptImageBytes else { break }
-            kept.append(image)
+        latestImageIndices(images, count: count).map { images[$0] }
+    }
+
+    private static func latestImageIndices(_ images: [[String: Any]], count: Int) -> [Int] {
+        var kept: [Int] = [], bytes = 0
+        for index in images.indices.reversed() {
+            guard kept.count < count else { break }
+            let size = (images[index]["data"] as? String)?.utf8.count ?? 0
+            guard size <= promptImageBytes - bytes else { continue }
+            kept.append(index)
             bytes += size
         }
         return kept.reversed()

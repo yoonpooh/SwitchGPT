@@ -21,7 +21,8 @@ struct DaemonCommand {
         }
         return text.isEmpty ? L10n.text("stop_no_error") : String(text.prefix(500))
     }
-    static func run(executable: URL, arguments: [String], home: URL) async throws -> DaemonResult {
+    static func run(executable: URL, arguments: [String], home: URL, timeout: TimeInterval = 30) async throws -> DaemonResult {
+        try Task.checkCancellation()
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("CodexCommand-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -39,15 +40,15 @@ struct DaemonCommand {
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = handle
         process.standardError = handle
-        try process.run()
-        for _ in 0..<150 {
-            if !process.isRunning { break }
+        let owned = try OwnedProcess(process)
+        defer { owned.stop() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(max(0, timeout)))
+        while owned.isRunning {
+            try Task.checkCancellation()
+            guard ContinuousClock.now < deadline else { throw SwitchError(message: L10n.text("server_timeout")) }
             try await Task.sleep(for: .milliseconds(200))
         }
-        if process.isRunning {
-            process.terminate()
-            throw SwitchError(message: L10n.text("server_timeout"))
-        }
-        return DaemonResult(status: process.terminationStatus, output: (try? String(contentsOf: outputURL, encoding: .utf8)) ?? "")
+        try Task.checkCancellation()
+        return DaemonResult(status: try owned.terminationStatus(), output: (try? String(contentsOf: outputURL, encoding: .utf8)) ?? "")
     }
 }

@@ -44,6 +44,14 @@ final class AccountRouter: @unchecked Sendable {
         current = credentials
     }
 
+    /// Keep a deletion target out of new automatic selections until the store commits or restores its candidates.
+    func beginRemoving(_ fingerprint: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard current?.fingerprint != fingerprint else { return false }
+        candidates.removeAll { $0.credentials.fingerprint == fingerprint }
+        return true
+    }
+
     func update(_ candidates: [RoutingCandidate], automatic: Bool) {
         lock.lock(); defer { lock.unlock() }
         self.candidates = candidates

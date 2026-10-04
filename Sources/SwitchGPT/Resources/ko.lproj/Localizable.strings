@@ -149,3 +149,5 @@
 "claude_usage_help" = "이 Mac의 Claude Code에 로그인된 계정의 한도";
 "claude_scoped_weekly" = "%@ 주간";
 "claude_signed_out" = "Claude Code에 로그인되어 있지 않습니다. 터미널에서 claude를 실행해 로그인하세요.";
+"usage_last_checked" = "마지막 확인: %@";
+"delete_rollback_failed" = "계정 삭제에 실패했습니다. 인증 정보는 유지했지만 저장 목록을 복구하지 못했습니다. 재실행 후 계정이 없으면 다시 추가하세요.";

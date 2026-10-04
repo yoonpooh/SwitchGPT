@@ -149,3 +149,5 @@
 "claude_usage_help" = "Limits of the Claude Code account signed in on this Mac";
 "claude_scoped_weekly" = "%@ weekly";
 "claude_signed_out" = "Claude Code is not signed in. Run claude in Terminal to sign in.";
+"usage_last_checked" = "Last checked: %@";
+"delete_rollback_failed" = "Account deletion failed. Authentication was kept, but the saved list could not be restored. Add the account again if it is missing after restarting.";

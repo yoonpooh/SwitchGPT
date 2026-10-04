@@ -33,10 +33,14 @@ final class AccountLoginTests: XCTestCase {
         let marker = directory.appendingPathComponent("home-path")
         try "#!/bin/sh\nprintf '%s' \"$CODEX_HOME\" > '\(marker.path)'\nexec /bin/sleep 20\n".write(to: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+        // Cold process launch can exceed 300 ms on a busy machine. Keep the
+        // deadline well below the fixture's sleep while allowing it to start.
+        let started = ContinuousClock.now
         do {
-            _ = try await AccountLogin().run(executable: script, timeout: .milliseconds(300))
+            _ = try await AccountLogin().run(executable: script, timeout: .seconds(2))
             XCTFail("Expected timeout")
         } catch { XCTAssertEqual(error.localizedDescription, L10n.text("login_timeout")) }
+        XCTAssertLessThan(started.duration(to: .now), .seconds(5))
         let temporaryHome = try String(contentsOf: marker, encoding: .utf8)
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryHome))
     }

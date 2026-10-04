@@ -28,7 +28,12 @@ struct RoutingConfiguration {
 
     static func addRouting(to original: String, endpoint: String) throws -> String {
         let block = "\(begin)\nopenai_base_url = \"\(endpoint)\"\n\(end)\n"
-        if original.hasPrefix(block) { return original }
+        if original.hasPrefix(block) {
+            guard topLevelKeys(original).filter({ $0 == "openai_base_url" }).count == 1 else {
+                throw SwitchError(message: L10n.text("routing_conflict"))
+            }
+            return original
+        }
         // Do not silently replace an existing proxy, or rewrite a user-edited managed block.
         guard !original.contains(begin), !original.contains(end) else {
             throw SwitchError(message: L10n.text("routing_conflict"))
@@ -46,14 +51,6 @@ struct RoutingConfiguration {
     }
 
     static func topLevelKeys(_ config: String) -> [String] {
-        var keys: [String] = []
-        for line in config.components(separatedBy: .newlines) {
-            let text = line.trimmingCharacters(in: .whitespaces)
-            if text.hasPrefix("[") { break }
-            if text.hasPrefix("#") || !text.contains("=") { continue }
-            keys.append(text.components(separatedBy: "=")[0].trimmingCharacters(in: .whitespaces)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\"'")))
-        }
-        return keys
+        TOMLTopLevel.assignments(in: config).map(\.key)
     }
 }

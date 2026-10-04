@@ -221,7 +221,7 @@ final class ClaudeBridgeTests: XCTestCase {
         let items = try XCTUnwrap(object["models"] as? [[String: Any]]).dropFirst()
         XCTAssertEqual(items.map { $0["slug"] as? String }, models.map(\.slug))
         XCTAssertEqual(items.filter { $0["visibility"] as? String == "list" }.map { $0["display_name"] as? String },
-                       ["Opus 5.5", "Fable 5.1", "Sonnet 5", "Haiku 4.5"])
+                       ["Claude Opus 5.5", "Claude Fable 5.1", "Claude Sonnet 5", "Claude Haiku 4.5"])
         let hidden = try XCTUnwrap(items.first { $0["slug"] as? String == "claude-opus-4-8" })
         XCTAssertEqual(hidden["visibility"] as? String, "hide")
         XCTAssertEqual(hidden["context_window"] as? Int, 167_000)
@@ -357,6 +357,16 @@ final class ClaudeBridgeTests: XCTestCase {
             guard case .openAI(let forwarded) = try ClaudeBridge.route(gpt, claudeEnabled: true) else { return XCTFail("GPT request went to Claude") }
             XCTAssertEqual(forwarded.body, gpt.body)
             XCTAssertEqual(forwarded.headers["content-encoding"], encoding)
+            XCTAssertNil(forwarded.modelForEvent) // Preserve the original compressed request's event metadata.
+
+            let history = #"{"model":"gpt-6-astra","input":[{"type":"compaction","encrypted_content":"claude-code-bridge-summary-v1:earlier work"}]}"#
+            let replay = try request(try deflated(Data(history.utf8), windowBits: bits), encoding: encoding)
+            guard case .openAI(let rewritten) = try ClaudeBridge.route(replay, claudeEnabled: true) else { return XCTFail("GPT replay went to Claude") }
+            XCTAssertNil(rewritten.headers["content-encoding"])
+            XCTAssertEqual(rewritten.modelForEvent, "gpt-6-astra")
+            let rewrittenJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: rewritten.body) as? [String: Any])
+            XCTAssertEqual(rewrittenJSON["model"] as? String, "gpt-6-astra")
+            XCTAssertEqual((rewrittenJSON["input"] as? [[String: Any]])?.first?["role"] as? String, "user")
         }
         if ZstdLibrary.shared != nil, let compressed = try zstd(opus) {
             XCTAssertEqual(try claude(try request(compressed, encoding: "zstd"))?.body, opus)
@@ -376,10 +386,36 @@ final class ClaudeBridgeTests: XCTestCase {
         }
     }
 
-    /// A long thread of screenshots decoded to more than the 64 MB wire limit, and Codex then showed an empty error.
-    func testCompressedBodiesDecodePastTheWireLimit() throws {
+    func testModelEventMetadataPreservesForwardedRequestsAndBodyReplacement() throws {
+        for body in [#"{"model":"gpt-6-astra","input":[]}"#, #"{"input":[]}"#, #"{"model":null}"#,
+                     #"{"model":42}"#, "not JSON", "[1,2]"] {
+            let request = RelayRequest(method: "POST", target: "/backend-api/codex/responses",
+                                       headers: ["authorization": "Bearer synthetic", "x-test": "kept"], body: Data(body.utf8))
+            for enabled in [true, false] {
+                guard case .openAI(let forwarded) = try ClaudeBridge.route(request, claudeEnabled: enabled) else { return XCTFail("GPT request went to Claude") }
+                XCTAssertEqual(forwarded.body, request.body)
+                XCTAssertEqual(forwarded.headers, request.headers)
+                let previousModel = ((try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any])?["model"] as? String
+                XCTAssertEqual(forwarded.modelForEvent, previousModel)
+                XCTAssertEqual(forwarded.removingHeader("x-test").modelForEvent, previousModel)
+                XCTAssertEqual(forwarded.replacingBody(Data(#"{"model":"gpt-6-sol"}"#.utf8)).modelForEvent, "gpt-6-sol")
+            }
+        }
+        for (target, encoding) in [("/backend-api/codex/models", "identity"), ("/backend-api/codex/responses", "br")] {
+            let request = RelayRequest(method: "POST", target: target, headers: ["content-encoding": encoding],
+                                       body: Data(#"{"model":"gpt-6-astra"}"#.utf8))
+            guard case .openAI(let forwarded) = try ClaudeBridge.route(request, claudeEnabled: false) else { return XCTFail("Not forwarded") }
+            XCTAssertEqual(forwarded.modelForEvent, "gpt-6-astra")
+            XCTAssertEqual(forwarded.body, request.body)
+            XCTAssertEqual(forwarded.headers, request.headers)
+        }
+    }
+
+    /// Preserve decoding of screenshot histories that exceeded the former 64 MB wire limit.
+    func testCompressedBodiesDecodePastTheFormerWireLimit() throws {
+        let formerWireLimit = 64 * 1024 * 1024
         let body = Data(#"{"model":"claude-opus-5-5","input":""#.utf8)
-            + Data(repeating: UInt8(ascii: "A"), count: RelayRequest.bodyLimit + 1) + Data(#""}"#.utf8)
+            + Data(repeating: UInt8(ascii: "A"), count: formerWireLimit + 1) + Data(#""}"#.utf8)
         let gzip = try deflated(body, windowBits: 31)
         XCTAssertEqual(try ClaudeBridge.decompress(gzip, encoding: "gzip"), body)
         XCTAssertThrowsError(try ClaudeBridge.decompress(gzip, encoding: "gzip", limit: 1 << 20)) { error in
