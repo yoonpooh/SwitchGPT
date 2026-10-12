@@ -26,6 +26,9 @@ final class ClaudeExecutor: @unchecked Sendable {
     private let stallLimit: TimeInterval
     private let startLimit: TimeInterval
     private let reattachLimit: TimeInterval
+    private let idleLimit: TimeInterval
+    /// Claude Code processes that finished their turn and wait for the next message. Each holds a whole CLI, so only a few stay.
+    static let idleProcesses = 4
     private var timer: DispatchSourceTimer?
     // Confined to queue.
     private var runs: [String: ClaudeRun] = [:]
@@ -36,9 +39,10 @@ final class ClaudeExecutor: @unchecked Sendable {
     /// stallLimit: how long an open response may wait without any Claude Code output.
     /// startLimit: how long a new Claude Code process may take to report that it started.
     /// reattachLimit: how long Claude keeps working after Codex lost its response, for Codex to retry it.
+    /// idleLimit: how long a Claude Code process that finished its turn waits for the next message in its thread.
     init(claudeExecutable: @escaping @Sendable () -> URL? = { ClaudeCLI.locate() }, models: ClaudeModelCatalog = ClaudeModelCatalog(),
          relayExecutable: URL? = Bundle.main.executableURL, codexConfig: @escaping @Sendable () -> String? = ClaudeExecutor.readCodexConfig,
-         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, reattachLimit: TimeInterval = 60) {
+         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, reattachLimit: TimeInterval = 60, idleLimit: TimeInterval = 600) {
         self.claudeExecutable = claudeExecutable
         self.models = models
         self.relayExecutable = relayExecutable
@@ -46,6 +50,7 @@ final class ClaudeExecutor: @unchecked Sendable {
         self.stallLimit = stallLimit
         self.startLimit = startLimit
         self.reattachLimit = reattachLimit
+        self.idleLimit = idleLimit
         // A Claude process that already exited must not terminate SwitchGPT on a pipe write.
         signal(SIGPIPE, SIG_IGN)
         let timer = DispatchSource.makeTimerSource(queue: queue)
@@ -160,7 +165,17 @@ final class ClaudeExecutor: @unchecked Sendable {
             forget(current)
             run = nil
         }
-        if let current = run, current.writer == nil {
+        var followUp: [Any]?
+        if let current = run, current.idle != nil {
+            // Claude Code finished its last turn and still holds the conversation. When Codex only adds Claude's answer and new
+            // messages, they go to the same process; anything else replays the complete history in a fresh CLI.
+            followUp = continuation(current, data: data, inputs: inputs, model: model, table: table, verbosity: verbosity)
+            if followUp == nil {
+                cancel(current, "Codex changed the conversation; continuing from complete Codex history")
+                forget(current)
+                run = nil
+            }
+        } else if let current = run, current.writer == nil {
             let answered = !current.waiting.isEmpty && current.waiting.isSubset(of: results.keys)
             let changed = model != current.model || ClaudeBridge.effort(data) != current.effort || verbosity != current.verbosity
                 || ClaudeBridge.digest(Self.roles(inputs)) != ClaudeBridge.digest(Self.roles(current.inputs))
@@ -187,6 +202,11 @@ final class ClaudeExecutor: @unchecked Sendable {
         if !fresh {
             active.table = table
             active.inputs = inputs
+            if followUp != nil {
+                active.turnID = turnID
+                active.idle = nil
+                active.collected = false
+            }
             // Execution has already happened in Codex. Forward its success or denial unchanged.
             for callID in active.waiting {
                 active.calls[callID]?.resolve(["content": ClaudeBridge.resultContent(results[callID]?["output"] ?? "")])
@@ -194,8 +214,24 @@ final class ClaudeExecutor: @unchecked Sendable {
             active.waiting.removeAll()
         }
         attach(active, sink: sink, fingerprint: fingerprint)
-        if fresh { launch(active) }
+        if fresh { launch(active) } else if let followUp {
+            var next = data
+            next["input"] = followUp
+            write(ClaudeBridge.promptContent(next, compacting: false), to: active)
+        }
         pump(active)
+    }
+
+    /// The new Codex messages for a Claude Code process that finished its turn. nil when that process cannot take them: it
+    /// exited, or the model, effort, system prompt, permission mode or tools changed, or the history changed another way.
+    private func continuation(_ run: ClaudeRun, data: [String: Any], inputs: [Any], model: ClaudeModel, table: [String: ClaudeTool],
+                              verbosity: String?) -> [Any]? {
+        guard !run.cancelled, !run.exited, run.stdin != nil, model == run.model, ClaudeBridge.effort(data) == run.effort,
+              ClaudeBridge.webSearch(data["tools"]) == run.search, ClaudeBridge.tableDigest(table) == ClaudeBridge.tableDigest(run.table)
+        else { return nil }
+        let next = ClaudeRun(key: run.key, turnID: nil, model: model, data: data, inputs: inputs, table: table, verbosity: verbosity)
+        guard next.permissionMode == run.permissionMode, next.systemPrompt == run.systemPrompt else { return nil }
+        return ClaudeBridge.followUp(inputs, after: run.inputs)
     }
 
     /// One tool-less Claude call that turns the Codex history into a Codex compaction item.
@@ -318,14 +354,22 @@ final class ClaudeExecutor: @unchecked Sendable {
             let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("switchgpt-claude-" + run.id)
             try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
             run.scratch = scratch
-            let config = scratch.appendingPathComponent("relay.json")
-            let settings: [String: Any] = ["run_id": run.id, "token": token, "url": "http://127.0.0.1:\(relayPort)\(ClaudeBridge.relayPath)"]
-            guard FileManager.default.createFile(atPath: config.path, contents: ClaudeBridge.encode(settings), attributes: [.posixPermissions: 0o600]) else {
-                throw ClaudeFailure(status: 500, message: "Could not prepare the Codex tool relay")
+            func privateFile(_ name: String, _ contents: Data) throws -> URL {
+                let file = scratch.appendingPathComponent(name)
+                guard FileManager.default.createFile(atPath: file.path, contents: contents, attributes: [.posixPermissions: 0o600]) else {
+                    throw ClaudeFailure(status: 500, message: "Could not prepare the Codex tool relay")
+                }
+                return file
             }
+            let settings: [String: Any] = ["run_id": run.id, "token": token, "url": "http://127.0.0.1:\(relayPort)\(ClaudeBridge.relayPath)"]
+            let config = try privateFile("relay.json", ClaudeBridge.encode(settings))
+            // The system prompt carries the user's AGENTS.md; in argv any local process could read it, so it goes in a private file.
+            let systemPrompt = try privateFile("system-prompt.md", Data(run.systemPrompt.utf8))
+            var servers: URL?
+            if !run.table.isEmpty, let relay = relayExecutable { servers = try privateFile("mcp.json", run.mcpServers(relay: relay, config: config)) }
             let process = Process()
             process.executableURL = executable
-            process.arguments = run.arguments(relay: relayExecutable, config: config)
+            process.arguments = run.arguments(servers: servers, prompt: systemPrompt)
             // Claude Code has no local tools of its own, so it never needs the Codex folder. Starting it there would make it
             // read a protected folder such as Documents, where macOS blocks it behind a permission prompt.
             process.currentDirectoryURL = scratch
@@ -354,17 +398,23 @@ final class ClaudeExecutor: @unchecked Sendable {
                 guard let self, let run else { return }
                 self.queue.async { self.consume(run, data) }
             }
-            var line = ClaudeBridge.encode(["type": "user", "message": ["role": "user", "content": prompt]] as [String: Any])
-            line.append(0x0a)
-            let message = line
-            let stdin = input.fileHandleForWriting
-            // Large histories exceed the pipe buffer; never block the executor while Claude reads them.
-            DispatchQueue.global().async { try? stdin.write(contentsOf: message) }
+            run.stdin = input.fileHandleForWriting
+            write(prompt, to: run)
         } catch let failure as ClaudeFailure {
             cancel(run, failure.message)
         } catch {
             cancel(run, "Claude Code could not start: " + error.localizedDescription)
         }
+    }
+
+    /// One stream-json user message. stdin stays open, so the same process can take the next message of its thread.
+    private func write(_ content: [[String: Any]], to run: ClaudeRun) {
+        guard let stdin = run.stdin else { return }
+        var line = ClaudeBridge.encode(["type": "user", "message": ["role": "user", "content": content]] as [String: Any])
+        line.append(0x0a)
+        let message = line
+        // Large histories exceed the pipe buffer; never block the executor while Claude reads them.
+        DispatchQueue.global().async { try? stdin.write(contentsOf: message) }
     }
 
     private func consume(_ run: ClaudeRun, _ data: Data) {
@@ -423,19 +473,24 @@ final class ClaudeExecutor: @unchecked Sendable {
             } else {
                 run.events.append(.result(event))
                 pump(run)
-                stopProcess(run) // stream-json input otherwise keeps the CLI alive.
+                // A finished compaction has nothing more to do. Any other process keeps its conversation for the next message.
+                if run.compacting { stopProcess(run) }
             }
         default: break
         }
     }
 
     private func stdoutClosed(_ run: ClaudeRun) {
+        run.exited = true
         if !run.collected { cancel(run, "Claude Code exited without a result" + run.diagnostic) }
         stopProcess(run)
+        // A process that ended between turns cannot take the next message.
+        if run.idle != nil { forget(run) }
     }
 
     private func stopProcess(_ run: ClaudeRun) {
         run.process?.stop()
+        run.stdin = nil
         if let scratch = run.scratch {
             try? FileManager.default.removeItem(at: scratch)
             run.scratch = nil
@@ -472,6 +527,9 @@ final class ClaudeExecutor: @unchecked Sendable {
         for run in allRuns() {
             if let detached = run.detached, now.timeIntervalSince(detached) > reattachLimit {
                 cancel(run, "Codex cancelled or disconnected")
+                forget(run)
+            } else if let idle = run.idle, now.timeIntervalSince(idle) > idleLimit {
+                cancel(run, "No new message within \(Int(idleLimit)) seconds; the next one replays the complete history")
                 forget(run)
             } else if let writer = run.writer {
                 if let launched = run.launched, !run.initialized, now.timeIntervalSince(launched) > startLimit {
@@ -584,7 +642,15 @@ final class ClaudeExecutor: @unchecked Sendable {
         cache.append((writer.fingerprint, Date(), writer.wire, run.id, paused))
         run.writer = nil
         writer.sink.finish()
-        if !paused { forget(run) }
+        guard !paused else { return }
+        guard !run.compacting, !run.cancelled, !run.exited, run.stdin != nil else { forget(run); return }
+        // Claude Code keeps the conversation and waits for the next message of this thread.
+        run.idle = Date()
+        let idle = allRuns().compactMap { run in run.idle.map { (run, $0) } }.sorted { $0.1 < $1.1 }.map(\.0)
+        for old in idle.dropLast(Self.idleProcesses) {
+            cancel(old, "Too many idle Claude Code processes; the next message replays the complete history")
+            forget(old)
+        }
     }
 
     private func failResponse(_ run: ClaudeRun, _ writer: ClaudeResponseWriter, _ message: String) {
@@ -634,7 +700,7 @@ final class ClaudeRun: @unchecked Sendable {
 
     let id = ClaudeBridge.identifier()
     let key: String
-    let turnID: String?
+    var turnID: String?
     let model: ClaudeModel
     let data: [String: Any]
     let compacting: Bool
@@ -670,6 +736,12 @@ final class ClaudeRun: @unchecked Sendable {
     var touched = Date()
     var output = Date()
     var process: OwnedProcess?
+    /// Claude Code's stream-json input, open while the process lives.
+    var stdin: FileHandle?
+    /// When the process finished its turn and began waiting for the next message of its thread.
+    var idle: Date?
+    /// Claude Code closed its output, so the process is gone.
+    var exited = false
     var scratch: URL?
     var buffer = Data()
     private var errors = Data()
@@ -705,24 +777,32 @@ final class ClaudeRun: @unchecked Sendable {
         return line.map { ": " + String($0.trimmingCharacters(in: .whitespaces).prefix(300)) } ?? ""
     }
 
-    func arguments(relay: URL?, config: URL) -> [String] {
+    /// Claude Code's system prompt addition. A finished process takes the next message only while this stays the same.
+    var systemPrompt: String {
+        compacting ? ClaudeBridge.compactionSystemPrompt
+            : ClaudeBridge.systemPrompt + (permissionMode == .plan ? ClaudeBridge.planModePrompt : "") + ClaudeBridge.standingPrompt(data)
+                + ClaudeBridge.verbosityPrompt(verbosity)
+    }
+
+    /// The --mcp-config file: the private relay Claude Code starts as "SwitchGPT <flag> <relay.json>".
+    func mcpServers(relay: URL, config: URL) -> Data {
+        let server: [String: Any] = ["command": relay.path, "args": [ClaudeMCPRelay.flag, config.path]]
+        return ClaudeBridge.encode(["mcpServers": ["codex": server]])
+    }
+
+    /// servers: the --mcp-config file, nil without Codex tools. prompt: the file holding systemPrompt.
+    func arguments(servers: URL?, prompt: URL) -> [String] {
         // Claude Code refuses bypassPermissions in restricted mode. It still has no tools, settings or MCP servers of its own.
         var arguments = permissionMode == .bypassPermissions ? [] : ["--restricted"]
         arguments += ["-p", "--model", model.cliModel]
         if model.efforts.contains(effort) { arguments += ["--effort", effort] }
         arguments += ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                          "--tools", search ? ClaudeBridge.searchTool : "", "--setting-sources", "", "--strict-mcp-config"]
-        if !table.isEmpty, let relay {
-            let server: [String: Any] = ["command": relay.path, "args": [ClaudeMCPRelay.flag, config.path]]
-            arguments += ["--mcp-config", ClaudeBridge.text(["mcpServers": ["codex": server]])]
-        }
+        if let servers { arguments += ["--mcp-config", servers.path] }
         let settings: [String: Any] = ["disableAllHooks": true, "enabledPlugins": [String: Any](), "autoMemoryEnabled": false]
-        let prompt = compacting ? ClaudeBridge.compactionSystemPrompt
-            : ClaudeBridge.systemPrompt + (permissionMode == .plan ? ClaudeBridge.planModePrompt : "") + ClaudeBridge.standingPrompt(data)
-                + ClaudeBridge.verbosityPrompt(verbosity)
         arguments += ["--permission-mode", permissionMode.rawValue, "--permission-prompts", "none", "--disable-slash-commands", "--no-chrome",
                       "--no-session-persistence", "--system-prompt-snapshot", "off", "--settings", ClaudeBridge.text(settings),
-                      "--append-system-prompt", prompt]
+                      "--append-system-prompt-file", prompt.path]
         if !allowedTools.isEmpty { arguments += ["--allowedTools", allowedTools.joined(separator: ",")] }
         return arguments
     }

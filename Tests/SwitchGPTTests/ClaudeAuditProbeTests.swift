@@ -34,7 +34,8 @@ final class ClaudeAuditProbeTests: XCTestCase {
         """
         try script.write(to: executable, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
-        let executor = ClaudeExecutor(claudeExecutable: { executable }, stallLimit: 0.5, startLimit: 1)
+        // A completed conversation waits for the next message; its whole group must still end with the idle limit.
+        let executor = ClaudeExecutor(claudeExecutable: { executable }, stallLimit: 0.5, startLimit: 1, idleLimit: 1)
         executor.setEnabled(true)
         defer {
             executor.shutdown()

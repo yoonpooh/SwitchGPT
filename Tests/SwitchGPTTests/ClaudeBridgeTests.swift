@@ -72,6 +72,35 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertFalse(prompt.contains("secret rules"))
         XCTAssertFalse(prompt.contains("compaction_trigger"))
         XCTAssertTrue(ClaudeBridge.decodeSummary(["encrypted_content": "opaque"]).contains("cannot be read"))
+
+        // Codex's bookkeeping on each item stays out of Claude's context; call IDs stay.
+        let tagged = ClaudeBridge.promptContent(["input": [
+            ["type": "message", "role": "user", "id": "msg_1", "internal_chat_message_metadata_passthrough": ["turn_id": "t1"], "content": "hi"],
+            ["type": "function_call", "id": "fc_1", "call_id": "call_1", "name": "exec", "arguments": "{}"]] as [Any]], compacting: false)
+        let envelope2 = try XCTUnwrap(tagged.first?["text"] as? String)
+        XCTAssertFalse(envelope2.contains("msg_1") || envelope2.contains("fc_1") || envelope2.contains("internal_chat_message_metadata_passthrough"))
+        XCTAssertTrue(envelope2.contains("call_1") && envelope2.contains("hi"))
+    }
+
+    func testFollowUpCarriesOnlyNewMessagesAfterTheHeldHistory() {
+        let user: [String: Any] = ["type": "message", "role": "user", "content": "hi"]
+        let answer: [String: Any] = ["type": "message", "role": "assistant", "content": [["type": "output_text", "text": "hello"]]]
+        let next: [String: Any] = ["type": "message", "role": "user", "content": "again"]
+        let mode: [String: Any] = ["type": "message", "role": "developer", "content": "mode"]
+        var stored = user
+        stored["id"] = "msg_1"
+        stored["internal_chat_message_metadata_passthrough"] = ["turn_id": "t1"]
+        let known: [Any] = [user]
+        func followUp(_ inputs: [Any]) -> String? { ClaudeBridge.followUp(inputs, after: known).map { ClaudeBridge.digest($0) } }
+        XCTAssertEqual(followUp([stored, answer, next]), ClaudeBridge.digest([next]))
+        XCTAssertEqual(followUp([user, answer, mode, next]), ClaudeBridge.digest([mode, next]))
+        // Nothing new, an edited message, a tool call, only a developer message, or an answer after the new message
+        // (another model replied) needs the complete history.
+        XCTAssertNil(followUp([user, answer]))
+        XCTAssertNil(followUp([next, answer, next]))
+        XCTAssertNil(followUp([user, ["type": "function_call", "call_id": "c"], next]))
+        XCTAssertNil(followUp([user, answer, mode]))
+        XCTAssertNil(followUp([user, next, answer, next]))
     }
 
     func testCodexInstructionsAndAgentsMdMoveToTheSystemPrompt() throws {
@@ -95,9 +124,7 @@ final class ClaudeBridgeTests: XCTestCase {
         let conversation = try XCTUnwrap((try JSONSerialization.jsonObject(with: Data(envelope.utf8)) as? [String: Any])?["conversation"] as? [Any])
         XCTAssertEqual(conversation.count, 3)
 
-        let prompt = ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: [:])
-            .arguments(relay: nil, config: URL(fileURLWithPath: "/tmp/relay.json"))
-            .drop { $0 != "--append-system-prompt" }.dropFirst().first ?? ""
+        let prompt = ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: [:]).systemPrompt
         XCTAssertTrue(prompt.hasPrefix(ClaudeBridge.systemPrompt))
         let instructions = try XCTUnwrap(prompt.range(of: "Be brief")).lowerBound
         let korean = try XCTUnwrap(prompt.range(of: "Write all responses in Korean")).lowerBound
@@ -105,8 +132,21 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertTrue(instructions < korean && korean < tabs)
         XCTAssertEqual(prompt.components(separatedBy: "Write all responses in Korean").count, 2)
         XCTAssertTrue(prompt.contains("An explicit later request from the user takes precedence."))
+        XCTAssertTrue(prompt.contains("in the language of the user's messages and instructions"))
         // Without either, nothing is added.
         XCTAssertEqual(ClaudeBridge.standingPrompt(["input": [Any]()]), "")
+    }
+
+    func testOnlyTheLatestAgentsMdOfEachScopeApplies() {
+        let global = "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nWrite in Korean.\n</INSTRUCTIONS>"
+        let cleared = "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nThe previously provided AGENTS.md instructions no longer apply.\n</INSTRUCTIONS>"
+        let nested = "# AGENTS.md instructions for /repo/app\n\n<INSTRUCTIONS>\nUse tabs.\n</INSTRUCTIONS>"
+        func blocks(_ texts: [String]) -> [String] {
+            ClaudeBridge.agentsInstructions(texts.map { ["type": "message", "role": "user", "content": [["type": "input_text", "text": $0]]] })
+        }
+        XCTAssertEqual(blocks([global, nested, cleared]), [cleared, nested])
+        // Restored instructions apply again instead of staying cleared.
+        XCTAssertEqual(blocks([global, cleared, global]), [global])
     }
 
     func testVerbosityComesFromTheRequestThenConfig() {
@@ -133,9 +173,7 @@ final class ClaudeBridgeTests: XCTestCase {
         let data: [String: Any] = ["instructions": ClaudeBridge.codexGuide,
                                    "input": [["type": "message", "role": "user", "content": [["type": "input_text", "text": "# AGENTS.md instructions\n\nWrite all responses in Korean."]]]] as [Any]]
         func prompt(_ verbosity: String?) -> String {
-            ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: [:], verbosity: verbosity)
-                .arguments(relay: nil, config: URL(fileURLWithPath: "/tmp/relay.json"))
-                .drop { $0 != "--append-system-prompt" }.dropFirst().first ?? ""
+            ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: [:], verbosity: verbosity).systemPrompt
         }
         let low = prompt("low")
         let guide = try XCTUnwrap(low.range(of: "<communication>")).lowerBound
@@ -149,8 +187,7 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertFalse(prompt(nil).contains("Output verbosity"))
         // A compaction run writes a summary, not an answer.
         let compaction = ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: [:], compacting: true, verbosity: "low")
-            .arguments(relay: nil, config: URL(fileURLWithPath: "/tmp/relay.json"))
-        XCTAssertFalse(compaction.contains { $0.contains("Output verbosity") })
+        XCTAssertFalse(compaction.systemPrompt.contains("Output verbosity"))
     }
 
     func testPromptNamesHostedToolsAndDropsUnreadableGPTState() throws {
@@ -221,7 +258,7 @@ final class ClaudeBridgeTests: XCTestCase {
         let items = try XCTUnwrap(object["models"] as? [[String: Any]]).dropFirst()
         XCTAssertEqual(items.map { $0["slug"] as? String }, models.map(\.slug))
         XCTAssertEqual(items.filter { $0["visibility"] as? String == "list" }.map { $0["display_name"] as? String },
-                       ["Claude Opus 5.5", "Claude Fable 5.1", "Claude Sonnet 5", "Claude Haiku 4.5"])
+                       ["Opus 5.5", "Fable 5.1", "Sonnet 5", "Haiku 4.5"])
         let hidden = try XCTUnwrap(items.first { $0["slug"] as? String == "claude-opus-4-8" })
         XCTAssertEqual(hidden["visibility"] as? String, "hide")
         XCTAssertEqual(hidden["context_window"] as? Int, 167_000)
@@ -239,8 +276,8 @@ final class ClaudeBridgeTests: XCTestCase {
         let models = try XCTUnwrap(object["models"] as? [[String: Any]])
         XCTAssertEqual(models.map { $0["slug"] as? String }, ["gpt-6-astra", "gpt-6-luna", "claude-opus-5-5", "claude-haiku-4-5"])
         XCTAssertEqual(models.map { $0["priority"] as? Int }, [3, 7, 8, 9])
-        XCTAssertEqual(models[2]["display_name"] as? String, "Claude Opus 5.5")
-        XCTAssertEqual(models[3]["display_name"] as? String, "Claude Haiku 4.5")
+        XCTAssertEqual(models[2]["display_name"] as? String, "Opus 5.5")
+        XCTAssertEqual(models[3]["display_name"] as? String, "Haiku 4.5")
         XCTAssertEqual(models[2]["context_window"] as? Int, 967_000)
         XCTAssertEqual(models[2]["max_context_window"] as? Int, 967_000)
         XCTAssertEqual(models[2]["comp_hash"] as? String, "3000")
@@ -488,13 +525,17 @@ final class ClaudeBridgeTests: XCTestCase {
         let alias = try XCTUnwrap(table.keys.first)
         func arguments(_ data: [String: Any], table: [String: ClaudeTool], compacting: Bool = false) -> [String] {
             ClaudeRun(key: "k", turnID: nil, model: .fallback, data: data, inputs: [], table: table, compacting: compacting)
-                .arguments(relay: URL(fileURLWithPath: "/usr/bin/true"), config: URL(fileURLWithPath: "/tmp/relay.json"))
+                .arguments(servers: URL(fileURLWithPath: "/tmp/mcp.json"), prompt: URL(fileURLWithPath: "/tmp/system-prompt.md"))
         }
         func value(_ arguments: [String], _ flag: String) -> String? { arguments.firstIndex(of: flag).map { arguments[$0 + 1] } }
         let search = arguments(["tools": tools], table: table)
         XCTAssertEqual(value(search, "--tools"), "WebSearch")
         XCTAssertEqual(value(search, "--allowedTools"), "mcp__codex__" + alias + ",WebSearch")
         XCTAssertTrue(search.contains("--restricted"))
+        // Long values go in private files, never in argv.
+        XCTAssertEqual(value(search, "--append-system-prompt-file"), "/tmp/system-prompt.md")
+        XCTAssertEqual(value(search, "--mcp-config"), "/tmp/mcp.json")
+        XCTAssertFalse(search.contains("--append-system-prompt"))
         let plain = arguments(["tools": [tools[0]]], table: table)
         XCTAssertEqual(value(plain, "--tools"), "")
         XCTAssertEqual(value(plain, "--allowedTools"), "mcp__codex__" + alias)
@@ -785,6 +826,56 @@ final class ClaudeBridgeTests: XCTestCase {
         XCTAssertEqual(try harness.launches().count, 3)
     }
 
+    @MainActor func testNextUserMessageGoesToTheClaudeProcessThatFinishedTheTurn() async throws {
+        let harness = try await Harness(enabled: true)
+        defer { harness.stop() }
+        let tools: [Any] = [["type": "function", "name": "exec_command", "parameters": ["type": "object"]]]
+        var input: [Any] = [harness.environment, ["role": "user", "content": "first question"]]
+        var request: [String: Any] = ["model": ClaudeModel.fallback.slug, "tools": tools, "prompt_cache_key": "follow", "input": input]
+        let first = try await harness.send(request)
+        let call = try XCTUnwrap((first.completed?["output"] as? [[String: Any]])?.first { $0["type"] as? String == "function_call" }, first.text)
+        input += [call, ["type": "function_call_output", "call_id": try XCTUnwrap(call["call_id"] as? String), "output": "42"]]
+        request["input"] = input
+        let second = try await harness.send(request)
+        var answer = try XCTUnwrap((second.completed?["output"] as? [[String: Any]])?.last, second.text)
+        XCTAssertEqual(answer["phase"] as? String, "final_answer")
+        let pids = try harness.processes()
+        XCTAssertTrue(pids.allSatisfy(Harness.alive)) // Kept for the next message.
+
+        // Codex sends Claude's answer back with its own bookkeeping, then the user's next message.
+        answer["internal_chat_message_metadata_passthrough"] = ["turn_id": "t1"]
+        input += [answer, ["role": "user", "content": "second question"]]
+        request["input"] = input
+        let third = try await harness.send(request)
+        XCTAssertEqual(third.status, 200, third.text)
+        XCTAssertTrue(third.text.contains("Follow-up from Opus"), third.text)
+        XCTAssertEqual((third.completed?["output"] as? [[String: Any]])?.last?["phase"] as? String, "final_answer")
+        XCTAssertEqual(try harness.launches().count, 1)
+        let followUps = try harness.followUps()
+        XCTAssertEqual(followUps.count, 1)
+        let envelope = try XCTUnwrap(followUps.first?.first?["text"] as? String)
+        XCTAssertTrue(envelope.contains("second question"), envelope)
+        XCTAssertFalse(envelope.contains("first question") || envelope.contains("result was 42"), envelope)
+
+        // An edited earlier message replays the complete history in a fresh process, and the idle one ends.
+        request["input"] = [harness.environment, ["role": "user", "content": "edited question"]] as [Any]
+        let edited = try await harness.send(request)
+        XCTAssertEqual(edited.status, 200, edited.text)
+        XCTAssertEqual(try harness.launches().count, 2)
+        try await Harness.waitUntilGone(pids)
+    }
+
+    @MainActor func testIdleClaudeProcessEndsAfterTheIdleLimit() async throws {
+        let harness = try await Harness(enabled: true, idleLimit: 1)
+        defer { harness.stop() }
+        let response = try await harness.send(["model": ClaudeModel.fallback.slug, "prompt_cache_key": "idle", "input": [
+            harness.environment, ["role": "user", "content": "hello"]] as [Any]])
+        XCTAssertTrue(response.text.contains("Hello from Opus"), response.text)
+        let pids = try harness.processes()
+        XCTAssertTrue(pids.allSatisfy(Harness.alive))
+        try await Harness.waitUntilGone(pids, timeout: 10)
+    }
+
     @MainActor func testNewChatWithoutProjectRunsClaudeOutsideTheCodexFolder() async throws {
         let harness = try await Harness(enabled: true)
         defer { harness.stop() }
@@ -1006,7 +1097,7 @@ final class ClaudeBridgeTests: XCTestCase {
         // Only the verbosity changes; without one in the request, config.toml decides.
         let second = try await harness.send(["model": ClaudeModel.fallback.slug, "input": input, "tools": tools, "prompt_cache_key": "verbosity"])
         XCTAssertEqual(second.status, 200, second.text)
-        let prompts = try harness.launches().map { arguments in arguments.firstIndex(of: "--append-system-prompt").map { arguments[$0 + 1] } ?? "" }
+        let prompts = try harness.prompts()
         XCTAssertEqual(prompts.map { $0.contains("# Output verbosity: low") }, [true, false])
         XCTAssertEqual(prompts.map { $0.contains("# Output verbosity: high") }, [false, true])
     }
@@ -1030,7 +1121,7 @@ final class ClaudeBridgeTests: XCTestCase {
                        ["plan", "bypassPermissions"])
         // Claude Code refuses bypassPermissions in restricted mode.
         XCTAssertEqual(launches.map { $0.contains("--restricted") }, [true, false])
-        let prompts = launches.map { arguments in arguments.firstIndex(of: "--append-system-prompt").map { arguments[$0 + 1] } ?? "" }
+        let prompts = try harness.prompts()
         XCTAssertEqual(prompts.map { $0.contains("mirrors Codex Plan mode") }, [true, false])
         XCTAssertNil(try harness.listedTools().last?.first?["annotations"])
     }
@@ -1289,8 +1380,8 @@ private final class Counter: @unchecked Sendable {
     }
 
     init(enabled: Bool, claude: URL? = nil, relayExecutable: URL = URL(fileURLWithPath: "/usr/bin/true"),
-         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, reattachLimit: TimeInterval = 60, models: [ClaudeModel]? = nil,
-         catalog: ClaudeModelCatalog? = nil, codexConfig: String? = nil) async throws {
+         stallLimit: TimeInterval = 1200, startLimit: TimeInterval = 90, reattachLimit: TimeInterval = 60, idleLimit: TimeInterval = 600,
+         models: [ClaudeModel]? = nil, catalog: ClaudeModelCatalog? = nil, codexConfig: String? = nil) async throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
         let fake = claude ?? root.appendingPathComponent("claude")
@@ -1302,7 +1393,7 @@ private final class Counter: @unchecked Sendable {
         let upstreamPort = try await upstream.start()
         let executor = ClaudeExecutor(claudeExecutable: { fake }, models: catalog ?? ClaudeModelCatalog(models: models),
                                       relayExecutable: relayExecutable, codexConfig: { codexConfig }, stallLimit: stallLimit, startLimit: startLimit,
-                                      reattachLimit: reattachLimit)
+                                      reattachLimit: reattachLimit, idleLimit: idleLimit)
         executor.setEnabled(enabled)
         relay = ModelRelay(desktopAuth: auth, upstreamBaseURL: URL(string: "http://127.0.0.1:\(upstreamPort)")!, claude: executor)
         let claims = Data(#"{"sub":"first-subject"}"#.utf8).base64EncodedString()
@@ -1320,6 +1411,20 @@ private final class Counter: @unchecked Sendable {
         let file = root.appendingPathComponent("launches.jsonl")
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
         return try text.split(separator: "\n").map { try JSONDecoder().decode([String].self, from: Data($0.utf8)) }
+    }
+
+    /// The system prompt each fake Claude read from its private prompt file, in launch order.
+    func prompts() throws -> [String] {
+        let file = root.appendingPathComponent("prompts.jsonl")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
+        return try text.split(separator: "\n").map { try JSONDecoder().decode(String.self, from: Data($0.utf8)) }
+    }
+
+    /// The content of each later user message a running fake Claude received.
+    func followUps() throws -> [[[String: Any]]] {
+        let file = root.appendingPathComponent("followups.jsonl")
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
+        return try text.split(separator: "\n").map { try XCTUnwrap(JSONSerialization.jsonObject(with: Data($0.utf8)) as? [[String: Any]]) }
     }
 
     /// Directories the fake Claude was started in.
@@ -1398,6 +1503,8 @@ private final class Counter: @unchecked Sendable {
     home = os.path.dirname(os.path.abspath(__file__))
     with open(os.path.join(home, 'launches.jsonl'), 'a') as f: f.write(json.dumps(args) + '\n')
     with open(os.path.join(home, 'cwds.jsonl'), 'a') as f: f.write(json.dumps(os.getcwd()) + '\n')
+    if '--append-system-prompt-file' in args:
+        with open(os.path.join(home, 'prompts.jsonl'), 'a') as f: f.write(json.dumps(open(args[args.index('--append-system-prompt-file') + 1]).read()) + '\n')
     def out(o): print(json.dumps(o), flush=True)
     prompt = sys.stdin.readline()
     json.loads(prompt)
@@ -1411,7 +1518,7 @@ private final class Counter: @unchecked Sendable {
         sys.exit(1)
     tools, conf = [], None
     if '--mcp-config' in args:
-        conf = json.load(open(json.loads(args[args.index('--mcp-config') + 1])['mcpServers']['codex']['args'][1]))
+        conf = json.load(open(json.load(open(args[args.index('--mcp-config') + 1]))['mcpServers']['codex']['args'][1]))
     def call(method, params):
         body = json.dumps({'run_id': conf['run_id'], 'method': method, 'params': params}).encode()
         request = urllib.request.Request(conf['url'], data=body, headers={'Authorization': 'Bearer ' + conf['token'], 'Content-Type': 'application/json'})
@@ -1421,7 +1528,8 @@ private final class Counter: @unchecked Sendable {
         with open(os.path.join(home, 'tools.jsonl'), 'a') as f: f.write(json.dumps(listed) + '\n')
         tools = [t['name'] for t in listed]
     search = '--tools' in args and 'WebSearch' in args[args.index('--tools') + 1]
-    out({'type': 'system', 'subtype': 'init', 'tools': ['mcp__codex__' + t for t in tools] + (['WebSearch'] if search else [])})
+    available = ['mcp__codex__' + t for t in tools] + (['WebSearch'] if search else [])
+    out({'type': 'system', 'subtype': 'init', 'tools': available})
     if 'HIT_LIMIT' in prompt:
         limit = "You've hit your session limit · resets 3:50pm (Asia/Seoul)"
         out({'type': 'rate_limit_event', 'rate_limit_info': {'status': 'rejected', 'resetsAt': 1790578180, 'rateLimitType': 'five_hour'}})
@@ -1479,7 +1587,13 @@ private final class Counter: @unchecked Sendable {
         for part in parts:
             out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': part}}})
     out({'type': 'result', 'is_error': False, 'result': answer})
-    sys.stdin.read()
+    for line in sys.stdin:
+        # Like Claude Code, a later user message on stdin starts another turn in the same session.
+        with open(os.path.join(home, 'followups.jsonl'), 'a') as f: f.write(json.dumps(json.loads(line)['message']['content']) + '\n')
+        out({'type': 'system', 'subtype': 'init', 'tools': available})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_start', 'content_block': {'type': 'text'}}})
+        out({'type': 'stream_event', 'event': {'type': 'content_block_delta', 'delta': {'type': 'text_delta', 'text': 'Follow-up from Opus'}}})
+        out({'type': 'result', 'is_error': False, 'result': 'Follow-up from Opus'})
     """#
 }
 
