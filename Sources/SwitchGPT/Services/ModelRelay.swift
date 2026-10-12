@@ -142,16 +142,30 @@ final class ModelRelay: @unchecked Sendable {
 
     private func record(_ event: RelayEvent) {
         didRecord(event)
-        guard let file = eventURL, var data = try? JSONEncoder().encode(event) else { return }
+        // Successful catalog polls were three quarters of the log and pushed account switches out of it.
+        guard let file = eventURL, !(event.path == "/backend-api/codex/models" && event.status == 200),
+              var data = try? JSONEncoder().encode(event) else { return }
         data.append(0x0a)
         // Only model, opaque account fingerprint, status, and usage counts; never prompts or tokens.
+        Self.append(data, to: file)
+    }
+
+    /// Appends one line, keeping roughly the newest half of the file once it passes the limit.
+    static func append(_ line: Data, to file: URL, limit: UInt64 = 262_144) {
         if !FileManager.default.fileExists(atPath: file.path) {
             FileManager.default.createFile(atPath: file.path, contents: nil, attributes: [.posixPermissions: 0o600])
         }
-        guard let handle = try? FileHandle(forWritingTo: file) else { return }
+        guard let handle = try? FileHandle(forUpdating: file) else { return }
         defer { try? handle.close() }
-        if let size = try? handle.seekToEnd(), size > 262_144 { try? handle.truncate(atOffset: 0); try? handle.seek(toOffset: 0) }
-        try? handle.write(contentsOf: data)
+        if let size = try? handle.seekToEnd(), size > limit {
+            try? handle.seek(toOffset: size - limit / 2)
+            let tail = (try? handle.readToEnd()) ?? Data()
+            // Drop the partial first line.
+            let kept = tail.firstIndex(of: 0x0a).map { Data(tail[tail.index(after: $0)...]) } ?? Data()
+            try? handle.truncate(atOffset: 0)
+            try? handle.write(contentsOf: kept)
+        }
+        try? handle.write(contentsOf: line)
     }
 }
 

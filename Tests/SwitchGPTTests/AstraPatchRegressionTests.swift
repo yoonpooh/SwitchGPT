@@ -99,4 +99,17 @@ final class AstraPatchRegressionTests: XCTestCase {
         try "not JSON\n".write(to: file, atomically: true, encoding: .utf8)
         XCTAssertNil(AccountStore(index: root.appendingPathComponent("accounts.json"), session: CodexSession(home: root)).lastRequest)
     }
+
+    func testEventLogKeepsNewestWholeLinesWhenTrimmed() throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("relay-events.jsonl")
+        for index in 0..<100 { ModelRelay.append(Data("line-\(index)\n".utf8), to: file, limit: 200) }
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n", omittingEmptySubsequences: false)
+        XCTAssertEqual(lines.last, "")
+        XCTAssertEqual(lines.dropLast().last, "line-99")
+        XCTAssertTrue(lines.dropLast().allSatisfy { $0.hasPrefix("line-") })
+        XCTAssertGreaterThan(lines.count, 5)
+        XCTAssertLessThanOrEqual(try Data(contentsOf: file).count, 220)
+    }
 }

@@ -15,7 +15,7 @@ final class AccountRouterTests: XCTestCase {
         XCTAssertEqual(try AccountUsage.decode(Data("{}".utf8)).availability(at: now), .unknown)
     }
 
-    func testKnownZeroSkipsUnknownAndStaleCandidatesInListOrder() throws {
+    func testKnownZeroSkipsUnknownAndFallsBackToStaleQuotaInListOrder() throws {
         let router = AccountRouter()
         let first = try credentials("first"), second = try credentials("second"), third = try credentials("third")
         router.select(first)
@@ -24,7 +24,9 @@ final class AccountRouterTests: XCTestCase {
             RoutingCandidate(credentials: second, availability: .unknown, observedAt: now),
             RoutingCandidate(credentials: third, availability: .available, observedAt: now.addingTimeInterval(-121))
         ], automatic: true)
-        XCTAssertNil(router.resolve(now: now))
+        XCTAssertEqual(router.resolve(now: now)?.fingerprint, third.fingerprint)
+        XCTAssertNil(router.resolve(now: now, excluding: [third.fingerprint])) // Never the unknown second account.
+        router.select(first)
         router.update([
             RoutingCandidate(credentials: first, availability: .exhausted, observedAt: now),
             RoutingCandidate(credentials: third, availability: .available, observedAt: now),

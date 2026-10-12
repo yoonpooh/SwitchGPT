@@ -79,13 +79,21 @@ final class AccountRouter: @unchecked Sendable {
         }
         // Re-evaluate priority even while the current account still has quota.
         // A recovered earlier account is used by the next request, not an active stream.
-        let next = candidates.first {
+        var next = candidates.first {
             $0.availability == .available && now.timeIntervalSince($0.observedAt) <= 120
                 && exhaustedAt[$0.credentials.fingerprint] == nil && !excluding.contains($0.credentials.fingerprint)
         }?.credentials
         // A failed or delayed quota refresh alone must not stop a working account.
         if next == nil && !knownExhausted && !excluding.contains(previous.fingerprint) {
             lock.unlock(); return previous
+        }
+        // No fresh quota read (after sleep, or while a login blocks refreshes): try the next account that last reported quota.
+        // Its usage_limit_reached reply marks it, so each account is tried at most once. Unknown accounts may have broken auth.
+        if next == nil {
+            next = candidates.first {
+                $0.availability == .available && exhaustedAt[$0.credentials.fingerprint] == nil
+                    && !excluding.contains($0.credentials.fingerprint)
+            }?.credentials
         }
         if let next { current = next }
         lock.unlock()

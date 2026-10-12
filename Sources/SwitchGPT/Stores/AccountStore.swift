@@ -36,6 +36,7 @@ final class AccountStore {
     private let index: URL
     private var relay: ModelRelay?
     @ObservationIgnored private var lastCompletedEventAt: Date?
+    @ObservationIgnored private var profileLoaded: Set<String> = []
     private(set) var routingCredentials: [String: RelayCredentials] = [:]
     @ObservationIgnored private lazy var router = AccountRouter { [weak self] credentials in
         Task { @MainActor [weak self] in self?.didAutomaticallySwitch(credentials) }
@@ -164,9 +165,13 @@ final class AccountStore {
                 usages[account.id] = usage
                 try updateRoutingCredential(credential, account: account)
                 emails[account.id] = credential.email ?? L10n.text("email_missing")
-                if let photoData = try? await usageClient.fetchProfileImage(credential) {
-                    profileImages[account.id] = NSImage(data: photoData)
-                } else { profileImages[account.id] = nil }
+                // The photo rarely changes; load it once per launch or login, not twice a minute per account.
+                if !profileLoaded.contains(account.id) {
+                    do {
+                        profileImages[account.id] = try await usageClient.fetchProfileImage(credential).flatMap(NSImage.init(data:))
+                        profileLoaded.insert(account.id)
+                    } catch { profileImages[account.id] = nil }
+                }
                 if (usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 {
                     resetDetails[account.id] = try? await usageClient.fetchResetCredits(credential)
                 } else { resetDetails[account.id] = nil }
@@ -409,6 +414,7 @@ final class AccountStore {
     private func store(_ credential: Credential) throws {
         let label = credential.email ?? L10n.text("email_missing")
         emails[credential.id] = label
+        profileLoaded.remove(credential.id)
         try vault.save(credential.data, id: credential.id)
         let previous = accounts
         let nickname = accounts.first { $0.id == credential.id || $0.id == credential.id.components(separatedBy: "|")[0] }?.nickname

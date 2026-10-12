@@ -74,10 +74,11 @@ struct UsageClient: Sendable {
         return data
     }
 
+    /// One session for every account so the minute refresh reuses its connection; requests carry their own credentials.
+    private static let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
+
     private static func sendRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
-        return try await session.data(for: request)
+        try await session.data(for: request)
     }
 }
 
