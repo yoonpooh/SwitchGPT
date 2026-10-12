@@ -72,7 +72,10 @@ final class OpenCodeGo: @unchecked Sendable {
         item["priority"] = (models.compactMap { $0["priority"] as? Int }.max() ?? 0) + 1
         item["context_window"] = 1_000_000
         item["max_context_window"] = 1_000_000
-        item["supported_reasoning_levels"] = ["high", "max"].map { ["effort": $0, "description": $0] }
+        // DeepSeek documents three thinking levels for this model; none would disable thinking entirely.
+        item["supported_reasoning_levels"] = [["effort": "low", "description": "Fast responses with lighter reasoning"],
+                                              ["effort": "high", "description": "Extra high reasoning depth for complex problems"],
+                                              ["effort": "max", "description": "Maximum reasoning depth for the hardest problems"]]
         item["default_reasoning_level"] = "high"
         item["tool_mode"] = "standard"
         item["support_verbosity"] = false
