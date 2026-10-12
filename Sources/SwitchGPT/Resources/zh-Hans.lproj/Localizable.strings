@@ -151,3 +151,18 @@
 "claude_signed_out" = "Claude Code 尚未登录。请在终端运行 claude 登录。";
 "usage_last_checked" = "上次确认：%@";
 "delete_rollback_failed" = "删除账户失败。认证信息已保留，但无法恢复已保存的列表。如果重启后账户缺失，请重新添加。";
+
+// OpenCode Go
+"go_invalid_key" = "请输入不含空格或换行的 API 密钥。";
+"go_missing_key" = "请先在 SwitchGPT 中添加 OpenCode Go API 密钥。";
+"go_model_description" = "使用 OpenCode Go 订阅，工具由 Codex 执行。";
+"go_add_key" = "添加 OpenCode Go API 密钥…";
+"go_change_key" = "更改 API 密钥…";
+"go_remove_key" = "删除 API 密钥…";
+"go_console" = "打开控制台";
+"go_key_hint" = "请输入已订阅 Go 的工作区 API 密钥。密钥保存在 macOS 钥匙串中，DeepSeek 请求使用 Go 额度。";
+"go_saved" = "Go 密钥已保存。重启 Codex 后可在模型列表中选择 DeepSeek。";
+"go_removed" = "Go 密钥已删除。请重启 Codex 更新模型列表。";
+"go_remove_hint" = "删除已保存的密钥并停用 DeepSeek 连接，不会取消 Go 订阅。";
+"go_restart" = "更新 DeepSeek 模型列表";
+"go_catalog_override" = "自定义模型列表正在覆盖 SwitchGPT 列表。请移除该设置以显示 DeepSeek。";

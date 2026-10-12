@@ -151,3 +151,18 @@
 "claude_signed_out" = "Claude Code is not signed in. Run claude in Terminal to sign in.";
 "usage_last_checked" = "Last checked: %@";
 "delete_rollback_failed" = "Account deletion failed. Authentication was kept, but the saved list could not be restored. Add the account again if it is missing after restarting.";
+
+// OpenCode Go
+"go_invalid_key" = "Enter a valid API key without spaces or line breaks.";
+"go_missing_key" = "SwitchGPT: add your OpenCode Go API key first.";
+"go_model_description" = "Uses your OpenCode Go subscription. Codex executes the tools.";
+"go_add_key" = "Add OpenCode Go API key…";
+"go_change_key" = "Change API key…";
+"go_remove_key" = "Remove API key…";
+"go_console" = "Open Console";
+"go_key_hint" = "Paste the API key from the workspace with your Go subscription. It is saved in macOS Keychain. DeepSeek requests use your Go allowance.";
+"go_saved" = "Go key saved. Restart Codex to show DeepSeek in the model picker.";
+"go_removed" = "Go key removed. Restart Codex to refresh the model picker.";
+"go_remove_hint" = "This removes the saved key and disables DeepSeek routing. It does not cancel your Go subscription.";
+"go_restart" = "Refresh the DeepSeek model list";
+"go_catalog_override" = "A custom model catalog is overriding the SwitchGPT model list. Remove that override to show DeepSeek.";

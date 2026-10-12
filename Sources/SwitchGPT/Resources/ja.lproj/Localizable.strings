@@ -151,3 +151,18 @@
 "claude_signed_out" = "Claude Codeにサインインしていません。ターミナルでclaudeを実行してサインインしてください。";
 "usage_last_checked" = "最終確認: %@";
 "delete_rollback_failed" = "アカウントの削除に失敗しました。認証情報は保持されましたが、保存済みリストを復元できませんでした。再起動後にアカウントがない場合は、再度追加してください。";
+
+// OpenCode Go
+"go_invalid_key" = "空白や改行のないAPIキーを入力してください。";
+"go_missing_key" = "SwitchGPTにOpenCode Go APIキーを登録してください。";
+"go_model_description" = "OpenCode Goサブスクリプションを使用。ツールはCodexが実行します。";
+"go_add_key" = "OpenCode Go APIキーを追加…";
+"go_change_key" = "APIキーを変更…";
+"go_remove_key" = "APIキーを削除…";
+"go_console" = "コンソールを開く";
+"go_key_hint" = "Go契約済みワークスペースのAPIキーを入力してください。macOSキーチェーンに保存され、DeepSeekはGoの利用枠を使います。";
+"go_saved" = "Goキーを保存しました。Codexを再起動するとDeepSeekが表示されます。";
+"go_removed" = "Goキーを削除しました。Codexを再起動してモデル一覧を更新してください。";
+"go_remove_hint" = "保存したキーを削除しDeepSeek接続を無効にします。Go契約は解約されません。";
+"go_restart" = "DeepSeekモデル一覧を更新";
+"go_catalog_override" = "カスタムモデル一覧がSwitchGPTの一覧を上書きしています。DeepSeekを表示するには解除してください。";

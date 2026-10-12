@@ -36,9 +36,10 @@ final class ModelRelay: @unchecked Sendable {
     private let eventURL: URL?
     private let didRecord: @Sendable (RelayEvent) -> Void
     let claude: ClaudeExecutor
+    let openCode: OpenCodeGo
 
     init(desktopAuth: URL, upstreamBaseURL: URL = URL(string: "https://chatgpt.com")!, eventURL: URL? = nil,
-         router: AccountRouter = AccountRouter(), claude: ClaudeExecutor = ClaudeExecutor(),
+         router: AccountRouter = AccountRouter(), claude: ClaudeExecutor = ClaudeExecutor(), openCode: OpenCodeGo = OpenCodeGo(),
          didRecord: @escaping @Sendable (RelayEvent) -> Void = { _ in }) {
         self.desktopAuth = desktopAuth
         initialDesktopToken = Self.accessToken(at: desktopAuth)
@@ -46,6 +47,7 @@ final class ModelRelay: @unchecked Sendable {
         self.eventURL = eventURL
         self.router = router
         self.claude = claude
+        self.openCode = openCode
         self.didRecord = didRecord
     }
 
@@ -124,7 +126,7 @@ final class ModelRelay: @unchecked Sendable {
 
     private func accept(_ connection: NWConnection) {
         let id = UUID()
-        let client = RelayConnection(connection: connection, queue: queue, upstreamBaseURL: upstreamBaseURL, claude: claude,
+        let client = RelayConnection(connection: connection, queue: queue, upstreamBaseURL: upstreamBaseURL, claude: claude, openCode: openCode,
                                      credentials: { [weak self] request in
                                          guard let self else { throw HTTPFailure(status: 503) }
                                          return try self.credentials(for: request)
@@ -183,6 +185,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
     private let queue: DispatchQueue
     private let upstreamBaseURL: URL
     private let claude: ClaudeExecutor
+    private let openCode: OpenCodeGo
+    private var isOpenCode = false
     private let credentials: @Sendable (RelayRequest) throws -> RelayCredentials
     private let authorize: @Sendable (RelayRequest) throws -> Void
     private let fallback: @Sendable (RelayCredentials, Set<String>) -> RelayCredentials?
@@ -205,7 +209,7 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
     private var catalogBody = Data()
     private var closeHandlers: [@Sendable () -> Void] = []
 
-    init(connection: NWConnection, queue: DispatchQueue, upstreamBaseURL: URL, claude: ClaudeExecutor,
+    init(connection: NWConnection, queue: DispatchQueue, upstreamBaseURL: URL, claude: ClaudeExecutor, openCode: OpenCodeGo,
          credentials: @escaping @Sendable (RelayRequest) throws -> RelayCredentials,
          authorize: @escaping @Sendable (RelayRequest) throws -> Void,
          fallback: @escaping @Sendable (RelayCredentials, Set<String>) -> RelayCredentials?,
@@ -215,6 +219,7 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
         self.queue = queue
         self.upstreamBaseURL = upstreamBaseURL
         self.claude = claude
+        self.openCode = openCode
         self.credentials = credentials
         self.authorize = authorize
         self.fallback = fallback
@@ -259,7 +264,7 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
                 return
             }
             var request = request
-            switch try ClaudeBridge.route(request, claudeEnabled: claude.enabled) {
+            switch try ClaudeBridge.route(request, claudeEnabled: claude.enabled, openCodeEnabled: openCode.apiKey != nil) {
             case .claude(let decoded):
                 // Claude requests never select an account or reach OpenAI, even while Claude is turned off.
                 try authorize(request)
@@ -269,6 +274,14 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
                 }
                 claude.respond(to: decoded, sink: self)
                 return
+            case .openCode(let decoded):
+                try authorize(decoded)
+                isOpenCode = true
+                let upstream = try openCode.request(decoded)
+                event = RelayEvent(accountFingerprint: "opencode-go", path: decoded.path,
+                                   model: decoded.modelForEvent, client: RelayEvent.client(for: decoded))
+                start(upstream)
+                return
             case .openAI(let forwarded):
                 request = forwarded
             }
@@ -277,10 +290,15 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
             // retaining the old account across turns after the user selects a new one.
             if request.headers["upgrade"]?.lowercased() == "websocket" { fail(426); return }
             // A cached catalog without the Claude models must not be revalidated while Claude is enabled.
-            if claude.enabled && request.isCatalogRequest {
+            if request.isCatalogRequest && (claude.enabled || openCode.apiKey != nil) {
                 let catalogRequest = request.removingHeader("if-none-match")
                 // After a Claude Code update the list waits for its models; otherwise the picker would show the
                 // old ones until the next ChatGPT restart.
+                if !claude.enabled {
+                    originalRequest = catalogRequest
+                    startAttempt(catalogRequest, selected: selected)
+                    return
+                }
                 claude.models.refresh(waitingAtMost: ClaudeModelCatalog.catalogWait) { [self] in
                     queue.async { [self] in
                         originalRequest = catalogRequest
@@ -308,20 +326,24 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
             event = RelayEvent(accountFingerprint: selected.fingerprint,
                                path: request.target.components(separatedBy: "?")[0], model: request.modelForEvent,
                                client: RelayEvent.client(for: request))
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.httpCookieStorage = nil
-            configuration.urlCache = nil
-            configuration.timeoutIntervalForRequest = 300
-            configuration.timeoutIntervalForResource = 3600
-            let delegateQueue = OperationQueue()
-            delegateQueue.maxConcurrentOperationCount = 1
-            delegateQueue.underlyingQueue = queue
-            let session = URLSession(configuration: configuration, delegate: self, delegateQueue: delegateQueue)
-            self.session = session
-            let task = session.dataTask(with: upstream)
-            self.task = task
-            task.resume()
+            start(upstream)
         } catch { fail(400) }
+    }
+
+    private func start(_ upstream: URLRequest) {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCache = nil
+        configuration.timeoutIntervalForRequest = 300
+        configuration.timeoutIntervalForResource = 3600
+        let delegateQueue = OperationQueue()
+        delegateQueue.maxConcurrentOperationCount = 1
+        delegateQueue.underlyingQueue = queue
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: delegateQueue)
+        self.session = session
+        let task = session.dataTask(with: upstream)
+        self.task = task
+        task.resume()
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
@@ -333,9 +355,9 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
         guard !closed, let response = response as? HTTPURLResponse else { completionHandler(.cancel); return }
         event?.status = response.statusCode
-        if originalRequest?.isCatalogRequest == true && response.statusCode == 200 && claude.enabled {
+        if originalRequest?.isCatalogRequest == true && response.statusCode == 200 && (claude.enabled || openCode.apiKey != nil) {
             catalogResponse = response
-        } else if originalRequest?.isModelRequest == true && response.statusCode == 429 {
+        } else if !isOpenCode && originalRequest?.isModelRequest == true && response.statusCode == 429 {
             // Hold retryable error responses before any bytes reach Codex. Successful streams are never replayed.
             deferredResponse = response
         } else { sendHead(response) }
@@ -395,9 +417,16 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
         event?.finishedAt = .now
         if let response = catalogResponse {
             catalogResponse = nil
-            let models = claude.models.models
-            let updated = error == nil ? ClaudeBridge.addingCatalogItems(to: catalogBody, models: models) : nil
-            let etag = updated == nil ? nil : response.value(forHTTPHeaderField: "ETag").map { ClaudeBridge.catalogETag($0, models: models) }
+            let models = claude.enabled ? claude.models.models : []
+            var updated = error == nil ? ClaudeBridge.addingCatalogItems(to: catalogBody, models: models) : nil
+            if error == nil, openCode.apiKey != nil {
+                updated = OpenCodeGo.addingCatalogItem(to: updated ?? catalogBody) ?? updated
+            }
+            let etag = updated.flatMap { body -> String? in
+                openCode.apiKey != nil
+                    ? "\"switchgpt-" + ClaudeBridge.digest(String(decoding: body, as: UTF8.self)) + "\""
+                    : response.value(forHTTPHeaderField: "ETag").map { ClaudeBridge.catalogETag($0, models: models) }
+            }
             sendHead(response, etag: etag)
             sendChunk(updated ?? catalogBody)
             catalogBody.removeAll()

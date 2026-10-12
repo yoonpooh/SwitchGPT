@@ -27,6 +27,8 @@ final class AccountStore {
     var claudeUsage: ClaudeAccountUsage?
     var claudeUsageError: String?
     var claudeNickname: String?
+    private(set) var openCodeConfigured = false
+    @ObservationIgnored private let openCode = OpenCodeGo()
     private let vault: any CredentialVault
     private let session: CodexSession
     private let usageClient: UsageClient
@@ -74,6 +76,11 @@ final class AccountStore {
                     .first { $0.completed && $0.status == 200 }
                 lastRequest = completed
                 lastCompletedEventAt = completed.map { $0.finishedAt ?? $0.date }
+            }
+            if let saved = try? vault.read(OpenCodeGo.vaultID), let key = String(data: saved, encoding: .utf8),
+               let valid = try? OpenCodeGo.validatedKey(key) {
+                openCode.setKey(valid)
+                openCodeConfigured = true
             }
             refresh()
         } catch { message = L10n.text("list_read") }
@@ -323,6 +330,31 @@ final class AccountStore {
         } catch { message = error.localizedDescription; return false }
     }
 
+    @discardableResult
+    func saveOpenCodeKey(_ value: String) -> Bool {
+        do {
+            let key = try OpenCodeGo.validatedKey(value)
+            try vault.save(Data(key.utf8), id: OpenCodeGo.vaultID)
+            openCode.setKey(key)
+            openCodeConfigured = true
+            session.clearModelCache()
+            message = L10n.text(RoutingConfiguration(home: session.home).overridesCatalog ? "go_catalog_override" : "go_saved")
+            return true
+        } catch { message = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func removeOpenCodeKey() -> Bool {
+        do {
+            try vault.remove(OpenCodeGo.vaultID)
+            openCode.setKey(nil)
+            openCodeConfigured = false
+            session.clearModelCache()
+            message = L10n.text("go_removed")
+            return true
+        } catch { message = error.localizedDescription; return false }
+    }
+
     func setAutomatic(_ enabled: Bool) {
         var updated = routingPreferences
         updated.automatic = enabled
@@ -483,6 +515,7 @@ final class AccountStore {
             let activeRelay = relay ?? ModelRelay(desktopAuth: session.auth, eventURL: support.appendingPathComponent("relay-events.jsonl"),
                                                  router: router,
                                                  claude: ClaudeExecutor(models: ClaudeModelCatalog(file: models, discover: ClaudeModelDiscovery.run)),
+                                                 openCode: openCode,
                                                  didRecord: { [weak self] event in
                 Task { @MainActor [weak self] in self?.received(event) }
             })

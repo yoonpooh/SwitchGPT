@@ -7,9 +7,10 @@ struct ClaudeFailure: Error {
     let message: String
 }
 
-/// Where a Codex request goes: Claude models to Claude Code, everything else to OpenAI.
+/// Routes decoded model requests before choosing any OpenAI account.
 enum ClaudeRoute {
     case claude(RelayRequest)
+    case openCode(RelayRequest)
     case openAI(RelayRequest)
 }
 
@@ -226,15 +227,16 @@ enum ClaudeBridge {
     /// Compressed bodies are decoded first so a Claude conversation is never sent to OpenAI.
     /// While Claude is on, a model request SwitchGPT cannot read is refused locally: it may be a Claude conversation.
     /// A GPT request continuing a conversation that used Claude is rewritten only where OpenAI would reject it.
-    static func route(_ request: RelayRequest, claudeEnabled: Bool) throws -> ClaudeRoute {
+    static func route(_ request: RelayRequest, claudeEnabled: Bool, openCodeEnabled: Bool = false) throws -> ClaudeRoute {
         guard request.isModelRequest else { return .openAI(request) }
         let encoding = (request.headers["content-encoding"] ?? "identity").lowercased().trimmingCharacters(in: .whitespaces)
         let body: Data
         if encoding == "identity" { body = request.body }
         else if let decoded = try decoded(request.body, encoding: encoding) { body = decoded }
-        else if claudeEnabled { throw ClaudeFailure(status: 415, message: unreadableMessage(encoding)) }
+        else if claudeEnabled || openCodeEnabled { throw ClaudeFailure(status: 415, message: unreadableMessage(encoding)) }
         else { return .openAI(request) } // Claude is off: OpenAI receives it as before.
         guard let object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] else { return .openAI(request.recordingModel(nil)) }
+        if OpenCodeGo.isModel(object["model"]) { return .openCode(request.replacingBody(body).recordingModel(object["model"] as? String)) }
         if ClaudeModel.isClaude(object["model"]) { return .claude(request.replacingBody(body)) }
         let model = object["model"] as? String
         guard let input = object["input"] as? [Any], let cleaned = openAIInput(input) else {
@@ -423,11 +425,15 @@ enum ClaudeBridge {
 
     /// The same comp_hash as GPT-6, so switching between them never forces a compaction by itself; only a smaller
     /// context window does. An unlisted model is hidden from the picker but keeps its metadata for threads that use it.
+    static func catalogTemplate() -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: Data(catalogJSON.utf8))) as? [String: Any] ?? [:]
+    }
+
     static func catalogItem(_ model: ClaudeModel, priority: Int, listed: Bool = true) -> [String: Any] {
-        var item = (try? JSONSerialization.jsonObject(with: Data(catalogJSON.utf8))) as? [String: Any] ?? [:]
+        var item = catalogTemplate()
         item["slug"] = model.slug
         item["visibility"] = listed ? "list" : "hide"
-        let displayName = model.name.hasPrefix("Claude ") ? String(model.name.dropFirst("Claude ".count)) : model.name
+        let displayName = model.name.hasPrefix("Claude ") ? model.name : "Claude " + model.name
         item["display_name"] = displayName
         item["base_instructions"] = codexGuide
         item["description"] = L10n.format("claude_model_description", displayName)

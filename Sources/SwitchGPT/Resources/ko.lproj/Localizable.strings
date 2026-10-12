@@ -151,3 +151,18 @@
 "claude_signed_out" = "Claude Code에 로그인되어 있지 않습니다. 터미널에서 claude를 실행해 로그인하세요.";
 "usage_last_checked" = "마지막 확인: %@";
 "delete_rollback_failed" = "계정 삭제에 실패했습니다. 인증 정보는 유지했지만 저장 목록을 복구하지 못했습니다. 재실행 후 계정이 없으면 다시 추가하세요.";
+
+// OpenCode Go
+"go_invalid_key" = "공백이나 줄바꿈이 없는 API 키를 입력하세요.";
+"go_missing_key" = "SwitchGPT에서 OpenCode Go API 키를 먼저 등록하세요.";
+"go_model_description" = "OpenCode Go 구독으로 실행하며 도구는 Codex가 실행합니다.";
+"go_add_key" = "OpenCode Go API 키 입력…";
+"go_change_key" = "API 키 변경…";
+"go_remove_key" = "API 키 삭제…";
+"go_console" = "콘솔 열기";
+"go_key_hint" = "Go를 구독한 워크스페이스에서 발급한 API 키를 입력하세요. macOS 키체인에 저장하며, DeepSeek 요청은 Go 사용량에서 차감됩니다.";
+"go_saved" = "Go 키 저장됨. Codex를 재시작하면 모델 목록에 DeepSeek이 표시됩니다.";
+"go_removed" = "Go 키 삭제됨. 모델 목록을 갱신하려면 Codex를 재시작하세요.";
+"go_remove_hint" = "저장된 키를 삭제하고 DeepSeek 연결을 끕니다. Go 구독은 취소되지 않습니다.";
+"go_restart" = "DeepSeek 모델 목록 갱신";
+"go_catalog_override" = "사용자 지정 모델 목록이 SwitchGPT 목록을 덮어쓰고 있습니다. 해당 설정을 해제해야 DeepSeek이 표시됩니다.";

@@ -188,6 +188,12 @@ SwitchGPT는 Claude Code에 제공 모델(예: Fable 5.1, Opus 5.5, Sonnet 5, Ha
 
 </details>
 
+## OpenCode Go (선택)
+
+OpenCode Go 구독의 API 키를 메뉴의 **⋯ → OpenCode Go → API 키 추가**에 입력하면 **DeepSeek V4.1 Flash**가 모델 목록에 추가됩니다. 키는 macOS 키체인에 저장합니다. 모델 목록이 갱신되지 않으면 Codex를 재시작하고 새 대화에서 모델을 선택하세요.
+
+DeepSeek 요청만 OpenCode Go Responses API로 전달하며 GPT 계정 전환과 Claude 경로는 유지됩니다. Go 오류나 한도 소진 시 GPT로 자동 전환하지 않습니다. Go 구독은 GPT 사용 권한을 추가하지 않습니다. 현재 DeepSeek V4.1 Flash만 지원하며 Codex의 내장 웹 검색은 지원하지 않습니다. 키 삭제는 로컬 연결만 해제하며 구독을 취소하지 않습니다.
+
 ## 개인정보와 로컬 데이터
 
 인증 정보는 macOS 키체인에 저장합니다. 실행 계정을 선택해도 `~/.codex/auth.json`은 유지하며, 선택한 모델 계정의 인증을 메모리로 읽습니다. 모델 요청은 `127.0.0.1:19565`의 중계를 거쳐 OpenAI로 직접 전달되며, 외부 SwitchGPT 서버는 없습니다.

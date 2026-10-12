@@ -188,6 +188,12 @@ SwitchGPT asks Claude Code which models it offers, such as Fable 5.1, Opus 5.5, 
 
 </details>
 
+## OpenCode Go (optional)
+
+Enter your OpenCode Go subscription API key under **⋯ → OpenCode Go → Add API key** to add **DeepSeek V4.1 Flash** to the model picker. The key is stored in macOS Keychain. Restart Codex if the model list is stale, then select the model in a new chat.
+
+Only DeepSeek requests go to the OpenCode Go Responses API; GPT account switching and Claude routing keep their existing behavior. Go errors and quota exhaustion never trigger a fallback to GPT. Go does not grant access to GPT models. Currently only DeepSeek V4.1 Flash is supported, without Codex hosted web search. Removing the key disconnects the local integration without canceling your subscription.
+
 ## Privacy and local data
 
 Credentials are stored in macOS Keychain. Account selection keeps `~/.codex/auth.json` unchanged and reads the selected model account's credentials into memory. Model requests go directly to OpenAI through a relay at `127.0.0.1:19565`; there is no external SwitchGPT server.

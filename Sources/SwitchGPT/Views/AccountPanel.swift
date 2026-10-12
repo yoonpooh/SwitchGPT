@@ -43,6 +43,11 @@ struct AccountPanel: View {
                     .contentShape(Rectangle())
                     .contextMenu { Button(L10n.text("edit_name"), action: editClaudeName) }
             }
+            if store.openCodeConfigured {
+                Divider()
+                Label("DeepSeek V4.1 Flash · OpenCode Go", systemImage: "key.fill")
+                    .font(.caption).help(L10n.text("go_saved"))
+            }
             if !store.message.isEmpty {
                 Label(store.message, systemImage: store.addingAccount ? "person.crop.circle" : "exclamationmark.circle")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -97,6 +102,13 @@ struct AccountPanel: View {
                 Toggle(L10n.text(store.claudeAvailable ? "claude_toggle" : "claude_missing"), isOn: Binding(
                     get: { store.routingPreferences.claudeEnabled }, set: { toggleClaude($0) }))
                     .disabled(!store.claudeAvailable && !store.routingPreferences.claudeEnabled)
+                Menu("OpenCode Go") {
+                    Button(L10n.text(store.openCodeConfigured ? "go_change_key" : "go_add_key"), action: editOpenCodeKey)
+                    Link(L10n.text("go_console"), destination: URL(string: "https://opencode.ai/console")!)
+                    if store.openCodeConfigured {
+                        Button(L10n.text("go_remove_key"), role: .destructive) { removeOpenCodeKey() }
+                    }
+                }
                 Divider()
                 ForEach(store.accounts) { account in
                     Menu(store.displayName(account)) { accountActions(account) }
@@ -181,6 +193,46 @@ struct AccountPanel: View {
     private func editClaudeName() {
         guard !store.busy else { return }
         if let name = askName(current: store.claudeNickname, placeholder: store.claudeEmail) { store.renameClaude(to: name) }
+    }
+
+    private func editOpenCodeKey() {
+        let alert = NSAlert()
+        alert.messageText = L10n.text("go_add_key")
+        alert.informativeText = L10n.text("go_key_hint")
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        field.placeholderString = "OpenCode Go API key"
+        field.setAccessibilityLabel("OpenCode Go API key")
+        alert.accessoryView = field
+        alert.addButton(withTitle: L10n.text("save"))
+        alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
+        alert.window.initialFirstResponder = field
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        let value = field.stringValue
+        field.stringValue = ""
+        guard response == .alertFirstButtonReturn else { return }
+        if store.saveOpenCodeKey(value) { promptOpenCodeRestart() }
+    }
+
+    private func removeOpenCodeKey() {
+        let alert = NSAlert()
+        alert.messageText = L10n.text("go_remove_key")
+        alert.informativeText = L10n.text("go_remove_hint")
+        alert.addButton(withTitle: L10n.text("delete")).hasDestructiveAction = true
+        alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn, store.removeOpenCodeKey() { promptOpenCodeRestart() }
+    }
+
+    private func promptOpenCodeRestart() {
+        guard store.desktopRunning else { return }
+        let alert = NSAlert()
+        alert.messageText = L10n.text("go_restart")
+        alert.informativeText = L10n.text("claude_restart_detail")
+        alert.addButton(withTitle: L10n.text("claude_restart_action"))
+        alert.addButton(withTitle: L10n.text("claude_restart_later")).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { Task { await store.restartDesktop(clearingModelCache: true) } }
     }
 
     private func askName(current: String?, placeholder: String) -> String? {
