@@ -125,7 +125,12 @@ final class OpenCodeGoTests: XCTestCase {
         call.setValue("stable-session", forHTTPHeaderField: "session_id")
         let (data, response) = try await client.data(for: call)
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
-        XCTAssertTrue(String(decoding: data, as: UTF8.self).contains("response.completed"))
+        let stream = String(decoding: data, as: UTF8.self)
+        XCTAssertTrue(stream.contains("response.completed"))
+        // DeepSeek's chain of thought never reaches a client that renders reasoning_text as the answer.
+        XCTAssertFalse(stream.contains("secret thinking"), stream)
+        XCTAssertTrue(stream.contains(#""delta":"4""#), stream)
+        XCTAssertTrue(stream.contains(#""text":"4""#), stream)
         go.setKey("exhausted-key")
         let (_, limited) = try await client.data(for: call)
         XCTAssertEqual((limited as? HTTPURLResponse)?.statusCode, 429)
@@ -173,7 +178,15 @@ private final class GoTestServer: @unchecked Sendable {
             let head = String(decoding: data[..<split.lowerBound], as: UTF8.self)
             lock.lock(); captured.append(head); lock.unlock()
             let limited = head.contains("Bearer exhausted-key")
-            let body = limited ? #"{"error":{"type":"usage_limit_reached"}}"# : "data: {\"type\":\"response.completed\",\"response\":{\"model\":\"deepseek-v4.1-flash\"}}\n\n"
+            let events = [
+                #"{"type":"response.reasoning_text.delta","delta":"secret thinking"}"#,
+                #"{"type":"response.reasoning_text.done","text":"secret thinking"}"#,
+                #"{"type":"response.content_part.done","part":{"type":"reasoning_text","text":"secret thinking"}}"#,
+                #"{"type":"response.output_item.done","item":{"type":"reasoning","content":[{"type":"reasoning_text","text":"secret thinking"}]}}"#,
+                #"{"type":"response.output_text.delta","delta":"4"}"#,
+                #"{"type":"response.completed","response":{"model":"deepseek-v4.1-flash","output":[{"type":"reasoning","content":[{"type":"reasoning_text","text":"secret thinking"}]},{"type":"message","content":[{"type":"output_text","text":"4"}]}]}}"#,
+            ]
+            let body = limited ? #"{"error":{"type":"usage_limit_reached"}}"# : events.map { "data: " + $0 + "\n\n" }.joined()
             let response = "HTTP/1.1 \(limited ? 429 : 200) Test\r\nContent-Type: text/event-stream\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
             connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
         }

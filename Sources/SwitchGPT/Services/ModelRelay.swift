@@ -199,6 +199,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
     private var responseStarted = false
     private var event: RelayEvent?
     private var eventLine = Data()
+    /// Holds an unterminated line so the Go stream can be rewritten per event.
+    private var heldLine = Data()
     private var timeout: DispatchWorkItem?
     private var originalRequest: RelayRequest?
     private var selected: RelayCredentials?
@@ -400,7 +402,7 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
             return
         }
         inspectEvents(data)
-        sendChunk(data)
+        sendChunk(isOpenCode ? hidingReasoning(data) : data)
     }
 
     private func sendChunk(_ data: Data) {
@@ -447,10 +449,62 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
             deferredBody.removeAll()
             deferredResponse = nil
         }
+        if !heldLine.isEmpty { sendChunk(heldLine); heldLine.removeAll() }
         if let event { report(event) }
         if !responseStarted { fail(502) }
         else if error != nil { close() } // A truncated upstream response must stay truncated.
         else { send(Data("0\r\n\r\n".utf8), final: true) }
+    }
+
+    /// DeepSeek streams its raw chain of thought, and a client that renders reasoning_text shows it as the answer.
+    /// Blanking keeps every event's shape, so nothing downstream sees a missing or malformed part.
+    private static func blankingReasoningText(_ event: [String: Any]) -> [String: Any] {
+        func blanked(_ item: [String: Any]) -> [String: Any] {
+            guard item["type"] as? String == "reasoning", var content = item["content"] as? [[String: Any]] else { return item }
+            for index in content.indices { content[index]["text"] = "" }
+            var item = item
+            item["content"] = content
+            return item
+        }
+        var event = event
+        if (event["type"] as? String)?.hasPrefix("response.reasoning_text") == true {
+            for key in ["delta", "text"] where event[key] != nil { event[key] = "" }
+        }
+        if var part = event["part"] as? [String: Any], part["type"] as? String == "reasoning_text" {
+            part["text"] = ""
+            event["part"] = part
+        }
+        if let item = event["item"] as? [String: Any] { event["item"] = blanked(item) }
+        if var response = event["response"] as? [String: Any], let output = response["output"] as? [[String: Any]] {
+            response["output"] = output.map(blanked)
+            event["response"] = response
+        }
+        return event
+    }
+
+    private static func blankingReasoningText(_ line: Data) -> Data {
+        guard line.starts(with: Data("data: ".utf8)),
+              let text = String(data: Data(line.dropFirst(6)), encoding: .utf8), text.contains("reasoning_text"),
+              let event = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any],
+              let clean = try? JSONSerialization.data(withJSONObject: blankingReasoningText(event)) else { return line }
+        return Data("data: ".utf8) + clean
+    }
+
+    /// Rewrites the Go stream one line at a time; a line boundary can land anywhere inside a read.
+    private func hidingReasoning(_ data: Data) -> Data {
+        heldLine.append(data)
+        var out = Data()
+        while let end = heldLine.firstIndex(of: 0x0a) {
+            let line = Data(heldLine[..<end])
+            heldLine.removeSubrange(...end)
+            out.append(Self.blankingReasoningText(line))
+            out.append(0x0a)
+        }
+        if heldLine.count > 4 * 1024 * 1024 { // An unterminated line this long is not something we can rewrite.
+            out.append(heldLine)
+            heldLine.removeAll()
+        }
+        return out
     }
 
     private func inspectEvents(_ data: Data) {
