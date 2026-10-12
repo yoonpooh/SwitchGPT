@@ -244,10 +244,14 @@ Install Xcode with Swift 6 and a macOS SDK, and select its command-line tools. T
 ```sh
 git clone https://github.com/yoonpooh/SwitchGPT.git
 cd SwitchGPT
+security find-identity -v -p codesigning
+export SWITCHGPT_SIGNING_IDENTITY="<certificate SHA-1 from the command above>"
 ./script/build_and_run.sh --verify
 ```
 
-This builds `dist/SwitchGPT.app` and signs it ad hoc. If SwitchGPT is not already running, it briefly launches the build, verifies its exact process, and stops it again. If an installed copy is running, verification does not launch a competing relay on port 19565. It does not install the app into Applications.
+This builds `dist/SwitchGPT.app` using the selected signing identity. You can persist the certificate SHA-1 (not a private key) in `~/Library/Application Support/SwitchGPT/code-signing-identity`; the environment variable takes precedence. Use the same identity and bundle identifier for subsequent builds to preserve Keychain authorization. The script stops if the identity is missing or expired instead of falling back to ad-hoc signing. Switching from an ad-hoc build may require one new **Always Allow** approval. Keychain item recreation or signing-requirement changes can still require approval again.
+
+If SwitchGPT is not already running, `--verify` briefly launches the build, verifies its exact process, and stops it again. If an installed copy is running, verification does not launch a competing relay on port 19565. It does not install the app into Applications. Use `--release` to build and sign without launching.
 
 ```sh
 ./script/build_and_run.sh           # Build and launch a debug app

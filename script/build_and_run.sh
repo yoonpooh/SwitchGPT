@@ -3,6 +3,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 MODE="${1:-run}"
 case "$MODE" in run|--verify|--build|--release) ;; *) echo 'usage: build_and_run.sh [run|--verify|--build|--release]'; exit 2;; esac
+# Pin a real identity outside the checkout so rebuilds keep the same Keychain
+# designated requirement. Never silently fall back to per-build ad-hoc signing.
+SIGNING_IDENTITY_FILE="$HOME/Library/Application Support/SwitchGPT/code-signing-identity"
+SIGNING_IDENTITY="${SWITCHGPT_SIGNING_IDENTITY:-}"
+if [ -z "$SIGNING_IDENTITY" ] && [ -f "$SIGNING_IDENTITY_FILE" ]; then
+    SIGNING_IDENTITY="$(cat "$SIGNING_IDENTITY_FILE")"
+fi
+if [[ ! "$SIGNING_IDENTITY" =~ ^[[:xdigit:]]{40}$ ]]; then
+    echo 'Set SWITCHGPT_SIGNING_IDENTITY to a code-signing certificate SHA-1 from security find-identity -v -p codesigning, or save it in the SwitchGPT code-signing-identity file.' >&2
+    exit 1
+fi
+AVAILABLE_IDENTITIES="$(security find-identity -v -p codesigning)"
+if ! awk -v wanted="$SIGNING_IDENTITY" 'toupper($2) == toupper(wanted) { found=1 } END { exit !found }' <<< "$AVAILABLE_IDENTITIES"; then
+    echo 'The pinned code-signing identity is unavailable or expired. Restore it or explicitly select its replacement; ad-hoc signing is disabled.' >&2
+    exit 1
+fi
 CONFIGURATION=debug
 if [ "$MODE" = '--release' ]; then CONFIGURATION=release; fi
 if [ "$MODE" = run ]; then pkill -x SwitchGPT || true; fi
@@ -35,7 +51,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 xattr -cr "$APP"
-codesign --force --sign - "$APP"
+codesign --force --sign "$SIGNING_IDENTITY" "$APP"
 codesign --verify --strict "$APP"
 if [ "$MODE" = run ]; then open -n "$APP"; fi
 if [ "$MODE" = '--verify' ]; then
