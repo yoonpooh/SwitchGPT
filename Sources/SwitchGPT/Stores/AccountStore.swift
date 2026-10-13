@@ -176,7 +176,7 @@ final class AccountStore {
                 if refreshProfiles || !profileLoaded.contains(account.id) {
                     do {
                         profileImages[account.id] = try await usageClient.fetchProfileImage(credential).flatMap(NSImage.init(data:))
-                        profileLoaded.insert(account.id)
+                        if profileImages[account.id] != nil { profileLoaded.insert(account.id) }
                     } catch { profileImages[account.id] = nil }
                 }
                 if (usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 {

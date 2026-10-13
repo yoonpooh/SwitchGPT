@@ -3,7 +3,7 @@ import AppKit
 @testable import SwitchGPT
 
 final class ProfileImageTests: XCTestCase {
-    @MainActor func testManualRefreshReloadsChangedPhotoAtTheSameURL() async throws {
+    @MainActor func testRefreshRetriesMissingPhotoAndManualRefreshReloadsChangedPhotoAtTheSameURL() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -19,12 +19,15 @@ final class ProfileImageTests: XCTestCase {
             for x in 0..<width { bitmap.setColor(.red, atX: x, y: 0) }
             return try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         }
-        let backend = ProfileBackend(photo: try photo(width: 1))
+        let backend = ProfileBackend(photo: nil)
         let store = AccountStore(index: root.appendingPathComponent("accounts.json"),
             usageClient: UsageClient(send: { try await backend.send($0) }),
             claudeUsageClient: ClaudeUsageClient(answers: { throw SwitchError(message: "synthetic") }),
             session: session, vault: ProfileVault(data: credential.data))
         store.accounts = [Account(id: credential.id, name: "Synthetic", savedAt: .now)]
+        await store.refreshUsage()
+        XCTAssertNil(store.profileImages[credential.id])
+        await backend.replacePhoto(try photo(width: 1))
         await store.refreshUsage()
         XCTAssertEqual(store.profileImages[credential.id]?.size.width, 1)
         await backend.replacePhoto(try photo(width: 2))
@@ -33,7 +36,7 @@ final class ProfileImageTests: XCTestCase {
         await store.refreshUsage(refreshProfiles: true)
         XCTAssertEqual(store.profileImages[credential.id]?.size.width, 2)
         let requests = await backend.profileRequests
-        XCTAssertEqual(requests.count, 4)
+        XCTAssertEqual(requests.count, 5)
         XCTAssertTrue(requests.allSatisfy { $0.cachePolicy == .reloadIgnoringLocalCacheData })
     }
 
@@ -46,19 +49,20 @@ final class ProfileImageTests: XCTestCase {
 }
 
 private actor ProfileBackend {
-    var photo: Data
+    var photo: Data?
     var profileRequests: [URLRequest] = []
-    init(photo: Data) { self.photo = photo }
+    init(photo: Data?) { self.photo = photo }
     func replacePhoto(_ photo: Data) { self.photo = photo }
     func send(_ request: URLRequest) throws -> (Data, URLResponse) {
         let url = try XCTUnwrap(request.url)
         let data: Data
         if url.path.hasSuffix("profiles/me") {
             profileRequests.append(request)
-            data = Data(#"{"profile":{"profile_picture_url":"https://chatgpt.com/backend-api/estuary/content?id=same"}}"#.utf8)
+            data = photo == nil ? Data(#"{"profile":{"profile_picture_url":null}}"#.utf8)
+                : Data(#"{"profile":{"profile_picture_url":"https://chatgpt.com/backend-api/estuary/content?id=same"}}"#.utf8)
         } else if url.path.hasSuffix("content") {
             profileRequests.append(request)
-            data = photo
+            data = try XCTUnwrap(photo)
         } else { data = Data("{}".utf8) }
         return (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
     }
