@@ -3,6 +3,16 @@ import Network
 @testable import SwitchGPT
 
 final class OpenCodeGoTests: XCTestCase {
+    func testGoModelDisplayNamesKeepProviderIDsIntact() {
+        for (id, name) in [("deepseek-v4.1-flash", "DeepSeek V4.1 Flash"), ("mimo-v2.6-flash", "MiMo V2.6 Flash"),
+                           ("glm-5.3", "GLM 5.3"), ("gpt-6-luna", "GPT 6 Luna"), ("kimi-k3", "Kimi K3"),
+                           ("qwen3.8-max", "Qwen3.8 Max"), ("claude-haiku-5-5", "Claude Haiku 5.5"),
+                           ("minimax-m3", "MiniMax M3"), ("hy4-preview", "Hy4 Preview")] {
+            let model = OpenCodeModel(id: id)
+            XCTAssertEqual(model.name, name)
+            XCTAssertEqual(model.id, id)
+        }
+    }
     func testUsageAndModelDiscoveryUseOnlyGoCredentials() async throws {
         let go = OpenCodeGo(send: { request in
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-go")
@@ -60,6 +70,7 @@ final class OpenCodeGoTests: XCTestCase {
         XCTAssertTrue(store.saveModelSelection(claude: [ClaudeModel.fallback.slug], go: [OpenCodeGo.model]))
         if store.claudeAvailable { XCTAssertTrue(store.routingPreferences.claudeEnabled) }
         XCTAssertTrue(store.saveModelSelection(claude: [], go: [OpenCodeGo.model]))
+        XCTAssertFalse(store.routingPreferences.claudeEnabled)
         XCTAssertTrue(catalog.listedSlugs.isEmpty)
         XCTAssertNotNil(catalog.model(for: ClaudeModel.fallback.slug))
         let preferences = try JSONDecoder().decode(RoutingPreferences.self, from: Data(contentsOf: root.appendingPathComponent("routing-preferences.json")))

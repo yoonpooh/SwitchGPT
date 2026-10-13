@@ -4,6 +4,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = AccountStore()
+    private let modelsWindow = ProviderModelsWindow()
     private var refreshTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -21,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshTask?.cancel()
         store.shutdown()
     }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        modelsWindow.show(store: store)
+        return true
+    }
+    func showModels() { modelsWindow.show(store: store) }
 }
 
 @main
@@ -44,7 +50,7 @@ struct SwitchGPTApp: App {
     }()
     var body: some Scene {
         MenuBarExtra {
-            AccountPanel(store: delegate.store)
+            AccountPanel(store: delegate.store, showModels: delegate.showModels)
         } label: {
             Image(nsImage: Self.menuIcon)
                 .resizable()
@@ -52,8 +58,5 @@ struct SwitchGPTApp: App {
                 .accessibilityLabel("SwitchGPT")
         }.menuBarExtraStyle(.window)
             .windowResizability(.contentSize)
-        Settings {
-            ProviderModelsView(store: delegate.store)
-        }.defaultSize(width: 460, height: 560)
     }
 }

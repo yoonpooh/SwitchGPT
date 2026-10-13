@@ -3,7 +3,19 @@ import Foundation
 struct OpenCodeModel: Codable, Identifiable, Sendable {
     let id: String
     var slug: String { id.hasPrefix("deepseek-") ? id : OpenCodeGo.prefix + id }
-    var name: String { id == OpenCodeGo.model ? "DeepSeek V4.1 Flash" : id }
+    var name: String {
+        let brands = ["deepseek": "DeepSeek", "mimo": "MiMo", "glm": "GLM", "gpt": "GPT", "minimax": "MiniMax",
+                      "qwen": "Qwen", "hy": "Hy", "longcat": "LongCat"]
+        let versioned = id.replacingOccurrences(of: #"(?<=[0-9])-(?=[0-9])"#, with: ".", options: .regularExpression)
+        return versioned.split(separator: "-").map { part in
+            let word = String(part)
+            if let brand = brands[word] { return brand }
+            for (prefix, brand) in brands where word.hasPrefix(prefix) && word.dropFirst(prefix.count).first?.isNumber == true {
+                return brand + word.dropFirst(prefix.count)
+            }
+            return word.prefix(1).uppercased() + word.dropFirst()
+        }.joined(separator: " ")
+    }
 
     init(id: String) { self.id = id }
     init(from decoder: Decoder) throws {

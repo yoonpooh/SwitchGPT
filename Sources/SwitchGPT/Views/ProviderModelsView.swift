@@ -2,16 +2,17 @@ import SwiftUI
 
 struct ProviderModelsView: View {
     var store: AccountStore
-    @Environment(\.dismiss) private var dismiss
+    let close: () -> Void
     @State private var claude: Set<String> = []
     @State private var go: Set<String> = []
     @State private var loading = true
     @State private var loaded = false
     @State private var error: String?
 
-    init(store: AccountStore) {
+    init(store: AccountStore, close: @escaping () -> Void) {
         self.store = store
-        _claude = State(initialValue: Set(store.routingPreferences.claudeModelSlugs ?? ClaudeModel.newest(store.availableClaudeModels).map(\.slug)))
+        self.close = close
+        _claude = State(initialValue: Set(store.selectedClaudeSlugs))
         _go = State(initialValue: Set(store.routingPreferences.goModelIDs ?? [OpenCodeGo.model]))
     }
 
@@ -40,9 +41,9 @@ struct ProviderModelsView: View {
             HStack {
                 Button(L10n.text("models_refresh")) { Task { await load() } }.disabled(loading)
                 Spacer()
-                Button(L10n.text("cancel")) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button(L10n.text("cancel"), action: close).keyboardShortcut(.cancelAction)
                 Button(L10n.text("save")) {
-                    if store.saveModelSelection(claude: claude, go: go) { dismiss() }
+                    if store.saveModelSelection(claude: claude, go: go) { close() }
                     else { error = store.message }
                 }.keyboardShortcut(.defaultAction).disabled(loading)
             }
@@ -63,7 +64,7 @@ struct ProviderModelsView: View {
         do { try await store.loadProviderModels() }
         catch { self.error = error.localizedDescription }
         if !loaded {
-            claude = Set(store.routingPreferences.claudeModelSlugs ?? ClaudeModel.newest(store.availableClaudeModels).map(\.slug))
+            claude = Set(store.selectedClaudeSlugs)
             go = Set(store.routingPreferences.goModelIDs ?? [OpenCodeGo.model])
             loaded = true
         }
@@ -72,10 +73,13 @@ struct ProviderModelsView: View {
 
 struct OpenCodeUsageCard: View {
     var store: AccountStore
+    private static let icon = Bundle.module.url(forResource: "OpenCodeGoIcon", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "key.fill").resizable().scaledToFit().foregroundStyle(.secondary)
-                .frame(width: 24, height: 24).accessibilityHidden(true)
+            Group {
+                if let icon = Self.icon { Image(nsImage: icon).resizable().renderingMode(.template).scaledToFit().foregroundStyle(.primary) }
+                else { Image(systemName: "key.fill").resizable().scaledToFit().foregroundStyle(.secondary) }
+            }.frame(width: 24, height: 24).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text("OpenCode Go").font(.caption.weight(.semibold))
                 if let usage = store.openCodeUsage {
@@ -96,5 +100,24 @@ struct OpenCodeUsageCard: View {
                 }
             }
         }.padding(.horizontal, 7).padding(.vertical, 6).frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+@MainActor final class ProviderModelsWindow {
+    private var window: NSWindow?
+
+    func show(store: AccountStore) {
+        let window = window ?? NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 560),
+            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        window.title = L10n.text("models_manage")
+        window.isReleasedWhenClosed = false
+        window.contentMinSize = NSSize(width: 420, height: 400)
+        if !window.isVisible {
+            window.contentView = NSHostingView(rootView: ProviderModelsView(store: store, close: { [weak window] in window?.close() }))
+            window.center()
+        }
+        self.window = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
