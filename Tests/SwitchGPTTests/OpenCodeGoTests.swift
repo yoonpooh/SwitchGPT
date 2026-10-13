@@ -80,6 +80,10 @@ final class OpenCodeGoTests: XCTestCase {
         if store.claudeAvailable { XCTAssertTrue(store.routingPreferences.claudeEnabled) }
         XCTAssertTrue(store.saveModelSelection(claude: [], go: [OpenCodeGo.model]))
         XCTAssertFalse(store.routingPreferences.claudeEnabled)
+        XCTAssertEqual(store.message, "")
+        XCTAssertFalse(store.modelSelectionDiffers(claude: [], go: [OpenCodeGo.model]))
+        XCTAssertTrue(store.modelSelectionDiffers(claude: [ClaudeModel.fallback.slug], go: [OpenCodeGo.model]))
+        XCTAssertTrue(store.modelSelectionDiffers(claude: [], go: []))
         XCTAssertTrue(catalog.listedSlugs.isEmpty)
         XCTAssertNotNil(catalog.model(for: ClaudeModel.fallback.slug))
         let preferences = try JSONDecoder().decode(RoutingPreferences.self, from: Data(contentsOf: root.appendingPathComponent("routing-preferences.json")))

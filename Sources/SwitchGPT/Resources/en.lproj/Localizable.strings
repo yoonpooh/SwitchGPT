@@ -169,6 +169,7 @@
 
 // Provider model selection
 "models_manage" = "Choose provider models…";
-"models_saved" = "Model selection saved. Restart Codex to refresh the picker.";
 "models_invalid" = "Refresh the model list before saving.";
 "models_refresh" = "Refresh model list";
+"models_restart" = "Restart Codex to apply the model selection?";
+"models_restart_action" = "Restart Codex";

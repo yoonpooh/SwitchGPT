@@ -226,6 +226,10 @@ final class AccountStore {
         }
     }
 
+    func modelSelectionDiffers(claude: Set<String>, go: Set<String>) -> Bool {
+        claude != Set(selectedClaudeSlugs) || go != Set(routingPreferences.goModelIDs ?? [OpenCodeGo.model])
+    }
+
     @discardableResult func saveModelSelection(claude: Set<String>, go: Set<String>) -> Bool {
         guard claude.isSubset(of: Set(availableClaudeModels.map(\.slug) + (routingPreferences.claudeModelSlugs ?? []))),
               go.isSubset(of: Set(goModels.map(\.id) + (routingPreferences.goModelIDs ?? []))) else {
@@ -242,7 +246,7 @@ final class AccountStore {
             relay?.claude.setEnabled(updated.claudeEnabled)
             openCode.setSelection(updated.goModelIDs)
             session.clearModelCache()
-            message = L10n.text("models_saved")
+            message = ""
             return true
         } catch { message = error.localizedDescription; return false }
     }

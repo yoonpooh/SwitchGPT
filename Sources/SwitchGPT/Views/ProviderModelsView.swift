@@ -42,12 +42,29 @@ struct ProviderModelsView: View {
                 Spacer()
                 Button(L10n.text("cancel"), action: close).keyboardShortcut(.cancelAction)
                 Button(L10n.text("save")) {
-                    if store.saveModelSelection(claude: claude, go: go) { close() }
-                    else { error = store.message }
+                    let changed = store.modelSelectionDiffers(claude: claude, go: go)
+                    guard store.saveModelSelection(claude: claude, go: go) else {
+                        error = store.message
+                        return
+                    }
+                    if changed { DispatchQueue.main.async { promptRestart() } }
+                    close()
                 }.keyboardShortcut(.defaultAction).disabled(loading)
             }
         }.padding(20).frame(minWidth: 420, minHeight: 400)
             .task { await load() }
+    }
+
+    private func promptRestart() {
+        let alert = NSAlert()
+        alert.messageText = L10n.text("models_restart")
+        alert.informativeText = L10n.text("claude_restart_detail")
+        alert.addButton(withTitle: L10n.text("models_restart_action"))
+        alert.addButton(withTitle: L10n.text("claude_restart_later")).keyEquivalent = "\u{1b}"
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn {
+            Task { await store.restartDesktop(clearingModelCache: true) }
+        }
     }
 
     private func selection(_ id: String, in values: Binding<Set<String>>) -> Binding<Bool> {

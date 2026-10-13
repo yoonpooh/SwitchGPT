@@ -169,6 +169,7 @@
 
 // Provider model selection
 "models_manage" = "选择模型…";
-"models_saved" = "模型选择已保存。重启Codex以更新模型列表。";
 "models_invalid" = "请刷新模型列表后再保存。";
 "models_refresh" = "刷新模型列表";
+"models_restart" = "重启Codex以应用模型选择？";
+"models_restart_action" = "重启Codex";
