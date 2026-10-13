@@ -34,7 +34,7 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 ## Contents
 
 - [Features](#features)
-- [What's new in 0.4.4](#whats-new-in-044)
+- [What's new in 0.5.0](#whats-new-in-050)
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
@@ -61,10 +61,13 @@ SwitchGPT is a macOS menu bar app that keeps your ChatGPT desktop account signed
 - **Local and private** — credentials stay in macOS Keychain, and requests go directly to OpenAI through a local relay. There is no SwitchGPT server.
 - **Localized** — English, Korean, Japanese, and Simplified Chinese.
 
-## What's new in 0.4.4
+## What's new in 0.5.0
 
-- **Long Claude turns keep going:** while Claude works quietly, SwitchGPT sends keepalive events, so Codex no longer drops the response after five minutes. If Codex still loses the stream and retries, the same Claude Code run continues instead of starting over.
-- **Claude usage limits are named:** when Claude Code hits its session, weekly or model limit, Codex shows Claude's message with the reset time right away instead of reconnecting five times.
+- **DeepSeek through OpenCode Go:** save an OpenCode Go API key under **⋯ → OpenCode Go** to run DeepSeek V4.1 Flash at every thinking level from the model picker. Its raw chain of thought stays out of the answer, and Go errors never fall back to a GPT account.
+- **Choose provider models:** **⋯ → Choose provider models** sets which Claude and Go models the picker lists, shows Go usage, and offers to restart Codex when the list changes.
+- **Faster Claude follow-ups:** a Claude Code process that finished its turn takes the next message of the same thread instead of replaying the whole history.
+- **Lighter in the background:** model requests reuse their connection to OpenAI, accounts refresh in parallel, and Claude and Go usage are read only when you open the panel, not every minute.
+- **Switching after sleep:** when no account has a fresh quota reading, automatic switching tries the next account that last reported quota.
 
 Earlier changes are listed on the [Releases page](https://github.com/yoonpooh/SwitchGPT/releases).
 
@@ -100,7 +103,7 @@ Routing applies to Codex requests that use the built-in `openai` provider on thi
 
 ### Download
 
-1. Download `SwitchGPT-v0.4.4-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
+1. Download `SwitchGPT-v0.5.0-macos-arm64.zip` and `SHA256SUMS.txt` from the [latest release](https://github.com/yoonpooh/SwitchGPT/releases/latest).
 2. With both files in the same directory, verify the checksum:
 
    ```sh
@@ -111,7 +114,7 @@ Routing applies to Codex requests that use the built-in `openai` provider on thi
 
 ### First launch
 
-The release is **signed ad hoc and is not notarized by Apple**. If macOS blocks it, verify the download, try opening the app, then use **System Settings → Privacy & Security → Open Anyway** if offered. See [Apple's instructions](https://support.apple.com/en-ca/guide/mac-help/mh40616/mac). Managed Macs may restrict this option.
+The release is **signed with an Apple Development certificate and is not notarized by Apple**. If macOS blocks it, verify the download, try opening the app, then use **System Settings → Privacy & Security → Open Anyway** if offered. See [Apple's instructions](https://support.apple.com/en-ca/guide/mac-help/mh40616/mac). Managed Macs may restrict this option.
 
 ### Update
 
@@ -281,8 +284,8 @@ The script builds for the host architecture. Published artifacts are Apple silic
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.5.0-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.5.0-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### Project structure

@@ -34,7 +34,7 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 ## 目次
 
 - [主な機能](#主な機能)
-- [0.4.4 の新機能](#044-の新機能)
+- [0.5.0 の新機能](#050-の新機能)
 - [仕組み](#仕組み)
 - [動作要件](#動作要件)
 - [インストール](#インストール)
@@ -61,10 +61,13 @@ SwitchGPT は、ChatGPT デスクトップのログインを維持しながら�
 - **ローカルで完結** — 認証情報は macOS キーチェーンに保存し、リクエストはローカル中継から OpenAI へ直接送ります。SwitchGPT のサーバーはありません。
 - **多言語対応** — 英語、韓国語、日本語、中国語（簡体字）。
 
-## 0.4.4 の新機能
+## 0.5.0 の新機能
 
-- **長い Claude の作業が途切れない：** Claude が静かに作業している間も keepalive イベントを送るため、Codex が 5 分で応答を切らなくなりました。それでも接続が切れて Codex が再試行した場合は、Claude Code を最初からやり直さずに同じ作業を続けます。
-- **Claude の使用上限を表示：** Claude Code がセッション・週間・モデルの上限に達すると、Codex は 5 回再接続する代わりに、リセット時刻を含む Claude のメッセージをすぐに表示します。
+- **OpenCode Go で DeepSeek：** **⋯ → OpenCode Go** に API キーを保存すると、モデル一覧から DeepSeek V4.1 Flash をすべての思考レベルで使えます。モデルの生の思考過程は回答に混ざらず、Go のエラー時も GPT アカウントには切り替わりません。
+- **プロバイダーのモデルを選択：** **⋯ → モデルを選択…** で一覧に表示する Claude と Go のモデルを選び、Go の使用量を確認できます。一覧が変わると Codex の再起動を案内します。
+- **Claude の続きのメッセージが速く：** ターンを終えた Claude Code プロセスが同じスレッドの次のメッセージを引き継ぎ、履歴全体を最初から送り直しません。
+- **バックグラウンドが軽く：** モデルのリクエストが OpenAI への接続を再利用し、アカウントの使用量を並行して更新します。Claude と Go の使用量は毎分ではなく、パネルを開いたときだけ読み込みます。
+- **スリープ後の切り替え：** 最新の使用量を持つアカウントがない場合、自動切り替えは最後に残量があると報告した次のアカウントを試します。
 
 以前の変更は[リリースページ](https://github.com/yoonpooh/SwitchGPT/releases)で確認できます。
 
@@ -100,7 +103,7 @@ flowchart LR
 
 ### ダウンロード
 
-1. [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)から `SwitchGPT-v0.4.4-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
+1. [最新リリース](https://github.com/yoonpooh/SwitchGPT/releases/latest)から `SwitchGPT-v0.5.0-macos-arm64.zip` と `SHA256SUMS.txt` をダウンロードします。
 2. 両方のファイルを同じフォルダに置き、チェックサムを確認します。
 
    ```sh
@@ -111,7 +114,7 @@ flowchart LR
 
 ### 初回起動
 
-配布版は **ad-hoc 署名**を使用しており、**Apple の公証は受けていません**。macOS が起動をブロックした場合はダウンロード元を確認して起動を試し、表示される場合は **システム設定 → プライバシーとセキュリティ → このまま開く**を使ってください。[Apple の手順](https://support.apple.com/en-ca/guide/mac-help/mh40616/mac)を参照してください。管理対象の Mac では利用が制限される場合があります。
+配布版は **Apple Development 証明書で署名**しており、**Apple の公証は受けていません**。macOS が起動をブロックした場合はダウンロード元を確認して起動を試し、表示される場合は **システム設定 → プライバシーとセキュリティ → このまま開く**を使ってください。[Apple の手順](https://support.apple.com/en-ca/guide/mac-help/mh40616/mac)を参照してください。管理対象の Mac では利用が制限される場合があります。
 
 ### アップデート
 
@@ -247,7 +250,7 @@ cd SwitchGPT
 ./script/build_and_run.sh --verify
 ```
 
-`dist/SwitchGPT.app` をビルドし、ad-hoc 署名します。SwitchGPT が起動していなければ、ビルドしたアプリを一時的に起動してそのプロセスを確認し、再び終了します。インストール済みのアプリが起動中なら、19565 番ポートで競合する中継は起動しません。アプリケーションへの自動インストールは行いません。
+`dist/SwitchGPT.app` をビルドし、選択した署名証明書で署名します。SwitchGPT が起動していなければ、ビルドしたアプリを一時的に起動してそのプロセスを確認し、再び終了します。インストール済みのアプリが起動中なら、19565 番ポートで競合する中継は起動しません。アプリケーションへの自動インストールは行いません。
 
 ```sh
 ./script/build_and_run.sh           # デバッグ版をビルドして起動
@@ -271,8 +274,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.5.0-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.5.0-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### プロジェクト構成

@@ -34,7 +34,7 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 ## 목차
 
 - [주요 기능](#주요-기능)
-- [0.4.4의 새로운 기능](#044의-새로운-기능)
+- [0.5.0의 새로운 기능](#050의-새로운-기능)
 - [동작 방식](#동작-방식)
 - [요구 사항](#요구-사항)
 - [설치](#설치)
@@ -61,10 +61,13 @@ SwitchGPT는 ChatGPT 데스크톱의 로그인 계정을 유지하면서 Codex �
 - **로컬 전용** — 인증 정보는 macOS 키체인에 저장하고, 요청은 로컬 중계를 거쳐 OpenAI로 직접 전달합니다. SwitchGPT 서버는 없습니다.
 - **다국어 지원** — 영어, 한국어, 일본어, 중국어 간체.
 
-## 0.4.4의 새로운 기능
+## 0.5.0의 새로운 기능
 
-- **긴 Claude 작업이 끊기지 않음:** Claude가 조용히 작업하는 동안 keepalive 이벤트를 보내므로 Codex가 5분 뒤 응답을 끊지 않습니다. 그래도 연결이 끊겨 Codex가 다시 요청하면 Claude Code를 처음부터 다시 시작하지 않고 하던 작업을 이어 갑니다.
-- **Claude 사용 한도 안내:** Claude Code가 세션·주간·모델 한도에 도달하면 Codex가 다섯 번 재연결하는 대신 초기화 시각이 담긴 Claude 메시지를 바로 보여 줍니다.
+- **OpenCode Go로 DeepSeek 사용:** **⋯ → OpenCode Go**에 API 키를 저장하면 모델 목록에서 DeepSeek V4.1 Flash를 모든 사고 수준으로 쓸 수 있습니다. 모델의 원본 사고 과정은 답변에 섞이지 않으며, Go 오류가 나도 GPT 계정으로 넘어가지 않습니다.
+- **제공자 모델 선택:** **⋯ → 모델 선택…**에서 목록에 보일 Claude·Go 모델을 고르고 Go 사용량을 확인합니다. 목록이 바뀌면 Codex 재시작을 안내합니다.
+- **더 빠른 Claude 후속 메시지:** 턴을 마친 Claude Code 프로세스가 같은 대화의 다음 메시지를 이어 받아, 전체 기록을 처음부터 다시 보내지 않습니다.
+- **가벼워진 백그라운드:** 모델 요청이 OpenAI 연결을 재사용하고 계정 사용량을 동시에 갱신합니다. Claude·Go 사용량은 매분이 아니라 패널을 열 때만 읽습니다.
+- **잠자기 후 전환:** 최신 한도 정보가 있는 계정이 없으면, 자동 전환이 마지막으로 한도가 남아 있다고 보고한 다음 계정을 시도합니다.
 
 이전 변경 사항은 [릴리스 페이지](https://github.com/yoonpooh/SwitchGPT/releases)에서 확인할 수 있습니다.
 
@@ -100,7 +103,7 @@ flowchart LR
 
 ### 다운로드
 
-1. [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)에서 `SwitchGPT-v0.4.4-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
+1. [최신 릴리스](https://github.com/yoonpooh/SwitchGPT/releases/latest)에서 `SwitchGPT-v0.5.0-macos-arm64.zip`과 `SHA256SUMS.txt`를 다운로드합니다.
 2. 두 파일을 같은 폴더에 두고 체크섬을 확인합니다.
 
    ```sh
@@ -111,7 +114,7 @@ flowchart LR
 
 ### 첫 실행
 
-배포본은 **ad-hoc 서명**을 사용하며 **Apple 공증을 받지 않았습니다**. macOS가 실행을 차단하면 다운로드한 파일을 확인하고 앱 실행을 시도한 뒤, 해당 옵션이 나타나는 경우 **시스템 설정 → 개인정보 보호 및 보안 → 확인 없이 열기**를 사용하세요. [Apple 안내](https://support.apple.com/en-ca/guide/mac-help/mh40616/mac)를 참고하세요. 조직에서 관리하는 Mac에서는 이 옵션이 제한될 수 있습니다.
+배포본은 **Apple Development 인증서로 서명**했으며 **Apple 공증을 받지 않았습니다**. macOS가 실행을 차단하면 다운로드한 파일을 확인하고 앱 실행을 시도한 뒤, 해당 옵션이 나타나는 경우 **시스템 설정 → 개인정보 보호 및 보안 → 확인 없이 열기**를 사용하세요. [Apple 안내](https://support.apple.com/en-ca/guide/mac-help/mh40616/mac)를 참고하세요. 조직에서 관리하는 Mac에서는 이 옵션이 제한될 수 있습니다.
 
 ### 업데이트
 
@@ -253,7 +256,7 @@ cd SwitchGPT
 ./script/build_and_run.sh --verify
 ```
 
-`dist/SwitchGPT.app`을 빌드하고 ad-hoc 서명합니다. SwitchGPT가 실행 중이 아니면 빌드한 앱을 잠시 실행해 해당 프로세스를 확인한 뒤 종료합니다. 설치된 앱이 실행 중이면 19565 포트에서 경쟁하는 중계를 띄우지 않습니다. 응용 프로그램 폴더에 자동 설치하지는 않습니다.
+`dist/SwitchGPT.app`을 빌드하고 선택한 서명 인증서로 서명합니다. SwitchGPT가 실행 중이 아니면 빌드한 앱을 잠시 실행해 해당 프로세스를 확인한 뒤 종료합니다. 설치된 앱이 실행 중이면 19565 포트에서 경쟁하는 중계를 띄우지 않습니다. 응용 프로그램 폴더에 자동 설치하지는 않습니다.
 
 ```sh
 ./script/build_and_run.sh           # 디버그 앱 빌드 및 실행
@@ -277,8 +280,8 @@ swift test --scratch-path /tmp/switchgpt-tests
 
 ```sh
 ./script/build_and_run.sh --release
-ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.4.4-macos-arm64.zip
-(cd dist && shasum -a 256 SwitchGPT-v0.4.4-macos-arm64.zip > SHA256SUMS.txt)
+ditto -c -k --norsrc --keepParent dist/SwitchGPT.app dist/SwitchGPT-v0.5.0-macos-arm64.zip
+(cd dist && shasum -a 256 SwitchGPT-v0.5.0-macos-arm64.zip > SHA256SUMS.txt)
 ```
 
 ### 프로젝트 구조
