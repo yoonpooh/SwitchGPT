@@ -2,6 +2,22 @@ import XCTest
 @testable import SwitchGPT
 
 final class AccountLoginTests: XCTestCase {
+    @MainActor func testBundledCLISupportsCurrentAndLegacyLayouts() throws {
+        let app = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: app) }
+        let legacy = app.appendingPathComponent("Contents/Resources/codex")
+        let current = app.appendingPathComponent("Contents/Resources/codex-cli/bin/codex")
+        try FileManager.default.createDirectory(at: current.deletingLastPathComponent(), withIntermediateDirectories: true)
+        XCTAssertThrowsError(try CodexSession.bundledCLI(in: app))
+        try "#!/bin/sh\n".write(to: legacy, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: legacy.path)
+        XCTAssertEqual(try CodexSession.bundledCLI(in: app), legacy)
+        try "#!/bin/sh\n".write(to: current, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: current.path)
+        XCTAssertEqual(try CodexSession.bundledCLI(in: app), legacy)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: current.path)
+        XCTAssertEqual(try CodexSession.bundledCLI(in: app), current)
+    }
     @MainActor func testLoginUsesIsolatedHomeAndCleansItUp() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)

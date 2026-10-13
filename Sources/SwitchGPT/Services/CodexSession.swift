@@ -24,6 +24,13 @@ struct CodexSession {
         }
         return url
     }
+    static func bundledCLI(in app: URL) throws -> URL {
+        for path in ["Contents/Resources/codex-cli/bin/codex", "Contents/Resources/codex"] {
+            let executable = app.appendingPathComponent(path)
+            if FileManager.default.isExecutableFile(atPath: executable.path) { return executable }
+        }
+        throw CocoaError(.fileNoSuchFile)
+    }
     func stop(app: URL) async throws {
         for running in NSRunningApplication.runningApplications(withBundleIdentifier: "com.openai.codex") {
             guard running.terminate() else { throw SwitchError(message: L10n.text("quit_refused")) }
@@ -38,7 +45,7 @@ struct CodexSession {
         let socket = home.appendingPathComponent("app-server-control/app-server-control.sock")
         // Closing the desktop app may already have removed its local server.
         if !FileManager.default.fileExists(atPath: socket.path) { return }
-        let bundledCLI = app.appendingPathComponent("Contents/Resources/codex")
+        let bundledCLI = try Self.bundledCLI(in: app)
         let probe = try await DaemonCommand.run(executable: bundledCLI, arguments: ["app-server", "daemon", "version"], home: home)
         let executable = DaemonCommand.managedExecutable(from: probe.output) ?? bundledCLI
         let result = try await DaemonCommand.run(executable: executable, arguments: ["app-server", "daemon", "stop"], home: home)

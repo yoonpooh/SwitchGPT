@@ -465,7 +465,7 @@ final class AccountStore {
         addingAccount = true
         defer { busy = false; addingAccount = false }
         do {
-            let executable = try session.appURL().appendingPathComponent("Contents/Resources/codex")
+            let executable = try CodexSession.bundledCLI(in: session.appURL())
             message = L10n.text("login_browser")
             let credential = try await login.run(executable: executable)
             try store(credential)
