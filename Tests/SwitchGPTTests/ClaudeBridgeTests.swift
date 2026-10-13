@@ -26,6 +26,16 @@ final class ClaudeBridgeTests: XCTestCase {
                        table.first { $0.value.name == "exec" }?.key)
     }
 
+    func testVisualizeReferenceGetsCodexMarkers() {
+        let plain = "아래를 보세요.\n\nvisualize{\"path\":\"/tmp/a.html\",\"title\":\"전후\"}\n\n- 끝"
+        XCTAssertEqual(ClaudeResponseWriter.markingDirectives(plain),
+                       "아래를 보세요.\n\n\u{E200}visualize\u{E202}{\"path\":\"/tmp/a.html\",\"title\":\"전후\"}\u{E201}\n\n- 끝")
+        // Already marked references and prose that only mentions visualize stay as written.
+        let marked = "\u{E200}visualize\u{E202}{\"path\":\"/tmp/a.html\"}\u{E201}"
+        XCTAssertEqual(ClaudeResponseWriter.markingDirectives(marked), marked)
+        XCTAssertEqual(ClaudeResponseWriter.markingDirectives("use `visualize{...}` here"), "use `visualize{...}` here")
+    }
+
     func testPermissionModeMirrorsTheLatestCodexSelection() {
         XCTAssertEqual(ClaudePermissionMode.mirroring([Self.askMode]), .manual)
         XCTAssertEqual(ClaudePermissionMode.mirroring([Self.autoMode]), .auto)

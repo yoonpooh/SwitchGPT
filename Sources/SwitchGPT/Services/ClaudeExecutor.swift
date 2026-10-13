@@ -976,12 +976,22 @@ final class ClaudeResponseWriter: @unchecked Sendable {
         // A tool call followed after all, so the message was work in progress.
         if guessed { items[current.index]["phase"] = "commentary" }
         guessed = false
-        let part = contentPart(current.text)
+        let text = Self.markingDirectives(current.text)
+        let part = contentPart(text)
         items[current.index]["status"] = "completed"
         items[current.index]["content"] = [part]
-        event("response.output_text.done", ["item_id": id, "output_index": current.index, "content_index": 0, "text": current.text])
+        event("response.output_text.done", ["item_id": id, "output_index": current.index, "content_index": 0, "text": text])
         event("response.content_part.done", ["item_id": id, "output_index": current.index, "content_index": 0, "part": part])
         event("response.output_item.done", ["output_index": current.index, "item": items[current.index]])
+    }
+
+    /// Codex renders a visualize reference only between its private-use markers, which Claude writes back as plain text.
+    static func markingDirectives(_ text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false).map { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("visualize{"), trimmed.hasSuffix("}") else { return String(line) }
+            return "\u{E200}visualize\u{E202}\(trimmed.dropFirst("visualize".count))\u{E201}"
+        }.joined(separator: "\n")
     }
 
     /// Claude Code usually omits thinking text, and such a block adds no item. Text in it is a progress note written to
