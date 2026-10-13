@@ -169,7 +169,6 @@
 
 // Provider model selection
 "models_manage" = "选择模型…";
-"models_hint" = "Codex模型保持默认列表。勾选要显示的Claude和Go模型，保存后重启Codex。";
 "models_saved" = "模型选择已保存。重启Codex以更新模型列表。";
 "models_invalid" = "请刷新模型列表后再保存。";
 "models_refresh" = "刷新模型列表";

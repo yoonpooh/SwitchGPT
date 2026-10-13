@@ -169,7 +169,6 @@
 
 // Provider model selection
 "models_manage" = "모델 선택…";
-"models_hint" = "Codex 모델은 기본 목록을 유지합니다. 선택기에 표시할 Claude·Go 모델을 체크하고 저장한 뒤 Codex를 재시작하세요.";
 "models_saved" = "모델 선택을 저장했습니다. Codex를 재시작하면 선택기에 반영됩니다.";
 "models_invalid" = "모델 목록을 새로고침한 뒤 저장하세요.";
 "models_refresh" = "목록 새로고침";

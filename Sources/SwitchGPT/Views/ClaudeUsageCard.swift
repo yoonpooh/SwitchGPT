@@ -3,19 +3,19 @@ import SwiftUI
 /// Limits of the Claude Code account signed in on this Mac, shown below the ChatGPT accounts.
 struct ClaudeUsageCard: View {
     var store: AccountStore
-    private static let icon = Bundle.module.url(forResource: "ClaudeAppIcon", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+    private static let icon = Bundle.module.url(forResource: "ClaudeLogo", withExtension: "png").flatMap { NSImage(contentsOf: $0) }
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Group {
-                if let icon = Self.icon { Image(nsImage: icon).resizable().scaledToFill() }
-                else { Image(systemName: "asterisk.circle.fill").resizable().scaledToFit().foregroundStyle(.orange) }
-            }.frame(width: 24, height: 24).clipShape(Circle()).accessibilityHidden(true)
+                if let icon = Self.icon { Image(nsImage: icon).resizable().scaledToFit() }
+                else { Image(systemName: "asterisk").resizable().scaledToFit().foregroundStyle(.orange) }
+            }.frame(width: 24, height: 24).accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 7) {
-                    Text(store.claudeDisplayName).font(.caption.weight(.semibold))
+                    Text("Claude").font(.caption.weight(.semibold))
                         .lineLimit(1).truncationMode(.middle)
-                        .help(store.claudeEmail + " · " + L10n.text("claude_usage_help"))
+                        .help(L10n.text("claude_usage_help"))
                     if let plan = store.claudeUsage?.plan { PlanBadge(plan: plan) }
                     Spacer(minLength: 0)
                 }

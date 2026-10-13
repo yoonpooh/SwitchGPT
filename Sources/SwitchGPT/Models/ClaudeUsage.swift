@@ -62,7 +62,3 @@ struct ClaudeAccountUsage: Equatable, Sendable {
     let plan: String?
     let email: String?
 }
-
-struct ClaudeAccountSettings: Codable {
-    var nickname: String?
-}

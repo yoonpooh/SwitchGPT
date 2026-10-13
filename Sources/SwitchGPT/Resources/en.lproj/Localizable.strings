@@ -169,7 +169,6 @@
 
 // Provider model selection
 "models_manage" = "Choose provider models…";
-"models_hint" = "Codex models stay unchanged. Check the Claude and Go models to show in the picker. Restart Codex after saving.";
 "models_saved" = "Model selection saved. Restart Codex to refresh the picker.";
 "models_invalid" = "Refresh the model list before saving.";
 "models_refresh" = "Refresh model list";

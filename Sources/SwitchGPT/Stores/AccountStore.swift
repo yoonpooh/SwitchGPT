@@ -26,7 +26,6 @@ final class AccountStore {
     var emails: [String: String] = [:]
     var claudeUsage: ClaudeAccountUsage?
     var claudeUsageError: String?
-    var claudeNickname: String?
     private(set) var openCodeConfigured = false
     var openCodeUsage: OpenCodeUsage?
     var openCodeUsageError: String?
@@ -50,7 +49,6 @@ final class AccountStore {
     }
     private var selectionURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-selection.json") }
     private var preferencesURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-preferences.json") }
-    private var claudeAccountURL: URL { index.deletingLastPathComponent().appendingPathComponent("claude-account.json") }
 
     init(index: URL? = nil, usageClient: UsageClient = UsageClient(), claudeUsageClient: ClaudeUsageClient = ClaudeUsageClient(), session: CodexSession = CodexSession(), vault: any CredentialVault = Vault(), tokenRefreshClient: TokenRefreshClient = TokenRefreshClient(), openCode: OpenCodeGo = OpenCodeGo(), claudeModels: ClaudeModelCatalog? = nil) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -81,10 +79,6 @@ final class AccountStore {
             }
             goModels = openCode.models.filter(\.isPickerModel)
             availableClaudeModels = self.claudeModels.models
-            if let data = try? Data(contentsOf: claudeAccountURL),
-               let saved = try? JSONDecoder().decode(ClaudeAccountSettings.self, from: data) {
-                claudeNickname = saved.nickname
-            }
             let events = self.index.deletingLastPathComponent().appendingPathComponent("relay-events.jsonl")
             if let lines = try? String(contentsOf: events, encoding: .utf8).split(separator: "\n") {
                 let completed = lines.reversed().lazy.compactMap { try? JSONDecoder().decode(RelayEvent.self, from: Data($0.utf8)) }
@@ -137,20 +131,6 @@ final class AccountStore {
     }
     func email(_ account: Account) -> String { emails[account.id] ?? account.name }
     func displayName(_ account: Account) -> String { account.nickname ?? email(account) }
-    var claudeEmail: String { claudeUsage?.email ?? "Claude Code" }
-    var claudeDisplayName: String { claudeNickname ?? claudeEmail }
-    @discardableResult
-    func renameClaude(to name: String) -> Bool {
-        guard !busy else { return false }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let settings = ClaudeAccountSettings(nickname: trimmed.isEmpty ? nil : trimmed)
-        do {
-            try FileManager.default.createDirectory(at: claudeAccountURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(settings).write(to: claudeAccountURL, options: .atomic)
-            claudeNickname = settings.nickname
-            return true
-        } catch { message = L10n.text("rename_failed"); return false }
-    }
     @discardableResult
     func rename(_ account: Account, to name: String) -> Bool {
         guard !busy, let position = accounts.firstIndex(where: { $0.id == account.id }) else { return false }

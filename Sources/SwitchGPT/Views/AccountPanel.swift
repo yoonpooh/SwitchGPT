@@ -41,8 +41,6 @@ struct AccountPanel: View {
             if store.claudeAvailable {
                 Divider()
                 ClaudeUsageCard(store: store)
-                    .contentShape(Rectangle())
-                    .contextMenu { Button(L10n.text("edit_name"), action: editClaudeName) }
             }
             if store.openCodeConfigured {
                 Divider()
@@ -110,9 +108,6 @@ struct AccountPanel: View {
                 Divider()
                 ForEach(store.accounts) { account in
                     Menu(store.displayName(account)) { accountActions(account) }
-                }
-                if store.claudeAvailable {
-                    Menu(store.claudeDisplayName) { Button(L10n.text("edit_name"), action: editClaudeName) }
                 }
                 Divider()
                 Button(L10n.text("quit"), action: quit)
@@ -186,11 +181,6 @@ struct AccountPanel: View {
     private func editName(_ account: Account) {
         guard !store.busy else { return }
         if let name = askName(current: account.nickname, placeholder: store.email(account)) { store.rename(account, to: name) }
-    }
-
-    private func editClaudeName() {
-        guard !store.busy else { return }
-        if let name = askName(current: store.claudeNickname, placeholder: store.claudeEmail) { store.renameClaude(to: name) }
     }
 
     private func editOpenCodeKey() {
