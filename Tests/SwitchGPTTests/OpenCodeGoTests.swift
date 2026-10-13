@@ -134,6 +134,24 @@ final class OpenCodeGoTests: XCTestCase {
         XCTAssertEqual(store.openCodeUsage?.usage.rolling?.remaining, 75)
     }
 
+    @MainActor func testPanelRefreshReadsProvidersWhileAccountsAreStillLoading() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let go = OpenCodeGo(send: { request in
+            (Data(#"{"usage":{"rolling":{"percent":25}}}"#.utf8),
+             HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        let store = AccountStore(index: root.appendingPathComponent("accounts.json"),
+            claudeUsageClient: ClaudeUsageClient(answers: { throw SwitchError(message: "synthetic") }),
+            session: CodexSession(home: root), vault: GoTestVault(), openCode: go)
+        XCTAssertTrue(store.saveOpenCodeKey("test-go"))
+        // The minute refresh is still running when the panel opens.
+        store.loadingUsage = true
+        await store.refreshUsage()
+        XCTAssertEqual(store.openCodeUsage?.usage.rolling?.remaining, 75)
+    }
+
     private func request(_ model: String = OpenCodeGo.model) -> RelayRequest {
         RelayRequest(method: "POST", target: "/backend-api/codex/responses", headers: [
             "authorization": "Bearer desktop-secret", "chatgpt-account-id": "private-account",

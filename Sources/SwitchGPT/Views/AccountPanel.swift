@@ -69,7 +69,7 @@ struct AccountPanel: View {
             }.font(.caption).padding(.vertical, 4)
         }.padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 7)
             .frame(width: 320).fixedSize(horizontal: false, vertical: true)
-            .task { await store.refreshUsage() }
+            .background(PanelShown { Task { await store.refreshUsage() } })
             .onDisappear { NSCursor.arrow.set() }
             .onChange(of: store.busy) { _, _ in NSCursor.arrow.set() }
             .onChange(of: store.currentID) { _, _ in NSCursor.arrow.set() }
@@ -318,5 +318,36 @@ struct AccountPanel: View {
         alert.addButton(withTitle: L10n.text("cancel")).keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertFirstButtonReturn { NSApp.terminate(nil) }
+    }
+}
+
+/// MenuBarExtra keeps its window and view after the first open, so .task and onAppear run only once.
+/// This calls action each time the panel window comes on screen.
+private struct PanelShown: NSViewRepresentable {
+    let action: () -> Void
+    func makeNSView(context: Context) -> ShownView { ShownView(action: action) }
+    func updateNSView(_ view: ShownView, context: Context) { view.action = action }
+
+    final class ShownView: NSView {
+        var action: () -> Void
+        init(action: @escaping () -> Void) {
+            self.action = action
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            // Selector observers are removed automatically when the view goes away.
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeOcclusionStateNotification, object: nil)
+            guard let window else { return }
+            NotificationCenter.default.addObserver(self, selector: #selector(occlusionChanged),
+                                                   name: NSWindow.didChangeOcclusionStateNotification, object: window)
+            occlusionChanged()
+        }
+
+        @objc private func occlusionChanged() {
+            if window?.occlusionState.contains(.visible) == true { action() }
+        }
     }
 }

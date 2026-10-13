@@ -43,6 +43,7 @@ final class AccountStore {
     private var relay: ModelRelay?
     @ObservationIgnored private var lastCompletedEventAt: Date?
     @ObservationIgnored private var profileLoaded: Set<String> = []
+    @ObservationIgnored private var loadingProviders = false
     private(set) var routingCredentials: [String: RelayCredentials] = [:]
     @ObservationIgnored private lazy var router = AccountRouter { [weak self] credentials in
         Task { @MainActor [weak self] in self?.didAutomaticallySwitch(credentials) }
@@ -142,14 +143,19 @@ final class AccountStore {
     }
     /// providers: false skips the display-only Claude Code and Go readings; asking Claude Code starts a whole CLI.
     func refreshUsage(refreshProfiles: Bool = false, providers: Bool = true) async {
+        // Provider readings have their own guard, so a background account refresh never swallows the panel's request.
+        if providers {
+            async let readings: Void = refreshProviderUsage()
+            await refreshAccountUsage(refreshProfiles: refreshProfiles)
+            await readings
+        } else { await refreshAccountUsage(refreshProfiles: refreshProfiles) }
+    }
+
+    private func refreshAccountUsage(refreshProfiles: Bool) async {
         guard !loadingUsage, !busy else { return }
         loadingUsage = true
         defer { loadingUsage = false }
         refresh()
-        // The Claude Code account is independent of the ChatGPT accounts; query it alongside them.
-        let claudeClient = providers && claudeAvailable ? claudeUsageClient : nil
-        async let claudeResult = claudeClient?.load()
-        async let goResult = loadGoUsage(enabled: providers)
         // Accounts are independent; their network waits overlap while every state change stays on the main actor.
         await withTaskGroup(of: Void.self) { group in
             for account in accounts {
@@ -159,13 +165,20 @@ final class AccountStore {
         updateRouter()
         if routingActive { _ = router.resolve() }
         selectedExhausted = router.isCurrentExhausted()
-        let claude = await claudeResult
-        if providers {
-            switch claude {
-            case .success(let usage): claudeUsage = usage; claudeUsageError = nil
-            case .failure(let error): claudeUsage = nil; claudeUsageError = error.localizedDescription
-            case nil: claudeUsage = nil; claudeUsageError = nil
-            }
+    }
+
+    /// The Claude Code account is independent of the ChatGPT accounts; it and Go are read alongside them.
+    private func refreshProviderUsage() async {
+        guard !loadingProviders else { return }
+        loadingProviders = true
+        defer { loadingProviders = false }
+        let claudeClient = claudeAvailable ? claudeUsageClient : nil
+        async let claudeResult = claudeClient?.load()
+        async let goResult = loadGoUsage()
+        switch await claudeResult {
+        case .success(let usage): claudeUsage = usage; claudeUsageError = nil
+        case .failure(let error): claudeUsage = nil; claudeUsageError = error.localizedDescription
+        case nil: claudeUsage = nil; claudeUsageError = nil
         }
         if let result = await goResult {
             switch result {
@@ -211,8 +224,8 @@ final class AccountStore {
         }
     }
 
-    private func loadGoUsage(enabled: Bool) async -> Result<OpenCodeUsage, Error>? {
-        guard enabled, openCodeConfigured else { return nil }
+    private func loadGoUsage() async -> Result<OpenCodeUsage, Error>? {
+        guard openCodeConfigured else { return nil }
         let key = openCode.apiKey
         let result: Result<OpenCodeUsage, Error>
         do { result = .success(try await openCode.fetchUsage()) }
