@@ -40,21 +40,21 @@ struct UsageClient: Sendable {
             struct Profile: Decodable { let profile_picture_url: String? }
             let profile: Profile
         }
-        let profile = try await JSONDecoder().decode(ProfileResponse.self, from: request(credential, path: "profiles/me"))
+        let profile = try await JSONDecoder().decode(ProfileResponse.self, from: request(credential, path: "profiles/me", cachePolicy: .reloadIgnoringLocalCacheData))
         guard let value = profile.profile.profile_picture_url,
               let url = URL(string: value), Self.isTrustedImageURL(url) else { return nil }
-        return try await request(credential, url: url)
+        return try await request(credential, url: url, cachePolicy: .reloadIgnoringLocalCacheData)
     }
     static func isTrustedImageURL(_ url: URL) -> Bool {
         url.scheme == "https" && url.host == "chatgpt.com" && (url.port == nil || url.port == 443)
             && url.user == nil && url.password == nil
     }
-    private func request(_ credential: Credential, path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
-        try await request(credential, url: URL(string: "https://chatgpt.com/backend-api/wham/" + path)!, method: method, body: body)
+    private func request(_ credential: Credential, path: String, method: String = "GET", body: Data? = nil, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Data {
+        try await request(credential, url: URL(string: "https://chatgpt.com/backend-api/wham/" + path)!, method: method, body: body, cachePolicy: cachePolicy)
     }
-    private func request(_ credential: Credential, url: URL, method: String = "GET", body: Data? = nil) async throws -> Data {
+    private func request(_ credential: Credential, url: URL, method: String = "GET", body: Data? = nil, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Data {
         let credentials = try RelayCredentials(credential)
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, cachePolicy: cachePolicy)
         request.httpMethod = method
         request.httpBody = body
         if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }

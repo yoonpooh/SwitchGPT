@@ -145,7 +145,7 @@ final class AccountStore {
         do { try persist(); return true }
         catch { accounts[position].nickname = previous; message = L10n.text("rename_failed"); return false }
     }
-    func refreshUsage() async {
+    func refreshUsage(refreshProfiles: Bool = false) async {
         guard !loadingUsage, !busy else { return }
         loadingUsage = true
         defer { loadingUsage = false }
@@ -172,8 +172,8 @@ final class AccountStore {
                 usages[account.id] = usage
                 try updateRoutingCredential(credential, account: account)
                 emails[account.id] = credential.email ?? L10n.text("email_missing")
-                // The photo rarely changes; load it once per launch or login, not twice a minute per account.
-                if !profileLoaded.contains(account.id) {
+                // Automatic refreshes reuse the photo; manual refreshes also reload the profile.
+                if refreshProfiles || !profileLoaded.contains(account.id) {
                     do {
                         profileImages[account.id] = try await usageClient.fetchProfileImage(credential).flatMap(NSImage.init(data:))
                         profileLoaded.insert(account.id)

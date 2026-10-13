@@ -87,7 +87,7 @@ struct AccountPanel: View {
                 .background(Color.primary.opacity(0.045), in: Capsule())
                 .fixedSize().help(L10n.text("routing_auto_help"))
             Spacer()
-            Button { Task { await store.refreshUsage() } } label: {
+            Button { Task { await store.refreshUsage(refreshProfiles: true) } } label: {
                 Group {
                     if store.loadingUsage { ProgressView().controlSize(.small) }
                     else { Image(systemName: "arrow.clockwise") }
