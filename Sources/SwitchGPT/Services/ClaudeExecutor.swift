@@ -31,6 +31,8 @@ final class ClaudeExecutor: @unchecked Sendable {
     static let idleProcesses = 4
     private var timer: DispatchSourceTimer?
     // Confined to queue.
+    /// The timer sleeps while there is no run or cached response to watch, so an idle app is not woken every two seconds.
+    private var sleeping = true
     private var runs: [String: ClaudeRun] = [:]
     private var runsByID: [String: ClaudeRun] = [:]
     /// Completed responses by request fingerprint. A paused one (a tool call) is valid only while its run lives.
@@ -54,7 +56,7 @@ final class ClaudeExecutor: @unchecked Sendable {
         // A Claude process that already exited must not terminate SwitchGPT on a pipe write.
         signal(SIGPIPE, SIG_IGN)
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 2, repeating: 2)
+        timer.schedule(deadline: .distantFuture)
         timer.setEventHandler { [weak self] in self?.tick() }
         timer.resume()
         self.timer = timer
@@ -247,6 +249,11 @@ final class ClaudeExecutor: @unchecked Sendable {
     }
 
     private func attach(_ run: ClaudeRun, sink: ClaudeSink, fingerprint: String) {
+        if sleeping {
+            sleeping = false
+            // Every tick also sends the keepalive that reveals a Codex stream lost while Claude is quiet.
+            timer?.schedule(deadline: .now() + 2, repeating: 2, leeway: .milliseconds(500))
+        }
         let writer = ClaudeResponseWriter(sink: sink, fingerprint: fingerprint, model: run.model.slug)
         run.writer = writer
         run.touched = Date()
@@ -524,6 +531,12 @@ final class ClaudeExecutor: @unchecked Sendable {
     private func tick() {
         let now = Date()
         cache.removeAll { now.timeIntervalSince($0.date) >= 600 }
+        defer {
+            if runs.isEmpty && runsByID.isEmpty && cache.isEmpty {
+                sleeping = true
+                timer?.schedule(deadline: .distantFuture)
+            }
+        }
         for run in allRuns() {
             if let detached = run.detached, now.timeIntervalSince(detached) > reattachLimit {
                 cancel(run, "Codex cancelled or disconnected")

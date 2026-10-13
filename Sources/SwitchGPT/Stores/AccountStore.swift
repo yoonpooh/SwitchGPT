@@ -140,57 +140,32 @@ final class AccountStore {
         do { try persist(); return true }
         catch { accounts[position].nickname = previous; message = L10n.text("rename_failed"); return false }
     }
-    func refreshUsage(refreshProfiles: Bool = false) async {
+    /// providers: false skips the display-only Claude Code and Go readings; asking Claude Code starts a whole CLI.
+    func refreshUsage(refreshProfiles: Bool = false, providers: Bool = true) async {
         guard !loadingUsage, !busy else { return }
         loadingUsage = true
         defer { loadingUsage = false }
         refresh()
         // The Claude Code account is independent of the ChatGPT accounts; query it alongside them.
-        let claudeClient = claudeAvailable ? claudeUsageClient : nil
+        let claudeClient = providers && claudeAvailable ? claudeUsageClient : nil
         async let claudeResult = claudeClient?.load()
-        async let goResult = loadGoUsage()
-        for account in accounts {
-            do {
-                let initial = try credentialForUsage(account)
-                try updateRoutingCredential(initial, account: account)
-                // Codex owns the active desktop refresh token; never rotate it independently.
-                let isDesktop = (try? session.read().id) == account.id
-                let queriedAt = Date.now
-                let (credential, usage) = try await usageClient.fetchWithRefresh(initial, proactively: !isDesktop) { [self] previous in
-                    let latest = try credentialForUsage(account)
-                    if latest.data != previous.data {
-                        try updateRoutingCredential(latest, account: account)
-                        return latest
-                    }
-                    guard !isDesktop else { throw UsageAuthenticationError() }
-                    return try await renewSavedCredential(previous, account: account)
-                }
-                usages[account.id] = usage
-                try updateRoutingCredential(credential, account: account)
-                emails[account.id] = credential.email ?? L10n.text("email_missing")
-                // Automatic refreshes reuse the photo; manual refreshes also reload the profile.
-                if refreshProfiles || !profileLoaded.contains(account.id) {
-                    do {
-                        profileImages[account.id] = try await usageClient.fetchProfileImage(credential).flatMap(NSImage.init(data:))
-                        if profileImages[account.id] != nil { profileLoaded.insert(account.id) }
-                    } catch { profileImages[account.id] = nil }
-                }
-                if (usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 {
-                    resetDetails[account.id] = try? await usageClient.fetchResetCredits(credential)
-                } else { resetDetails[account.id] = nil }
-                usageUpdatedAt[account.id] = queriedAt
-                usageErrors[account.id] = nil
-            } catch {
-                usageErrors[account.id] = L10n.text("unavailable_prefix") + error.localizedDescription
+        async let goResult = loadGoUsage(enabled: providers)
+        // Accounts are independent; their network waits overlap while every state change stays on the main actor.
+        await withTaskGroup(of: Void.self) { group in
+            for account in accounts {
+                group.addTask { await self.refreshUsage(of: account, refreshProfiles: refreshProfiles) }
             }
         }
         updateRouter()
         if routingActive { _ = router.resolve() }
         selectedExhausted = router.isCurrentExhausted()
-        switch await claudeResult {
-        case .success(let usage): claudeUsage = usage; claudeUsageError = nil
-        case .failure(let error): claudeUsage = nil; claudeUsageError = error.localizedDescription
-        case nil: claudeUsage = nil; claudeUsageError = nil
+        let claude = await claudeResult
+        if providers {
+            switch claude {
+            case .success(let usage): claudeUsage = usage; claudeUsageError = nil
+            case .failure(let error): claudeUsage = nil; claudeUsageError = error.localizedDescription
+            case nil: claudeUsage = nil; claudeUsageError = nil
+            }
         }
         if let result = await goResult {
             switch result {
@@ -200,8 +175,44 @@ final class AccountStore {
         }
     }
 
-    private func loadGoUsage() async -> Result<OpenCodeUsage, Error>? {
-        guard openCodeConfigured else { return nil }
+    private func refreshUsage(of account: Account, refreshProfiles: Bool) async {
+        do {
+            let initial = try credentialForUsage(account)
+            try updateRoutingCredential(initial, account: account)
+            // Codex owns the active desktop refresh token; never rotate it independently.
+            let isDesktop = (try? session.read().id) == account.id
+            let queriedAt = Date.now
+            let (credential, usage) = try await usageClient.fetchWithRefresh(initial, proactively: !isDesktop) { [self] previous in
+                let latest = try credentialForUsage(account)
+                if latest.data != previous.data {
+                    try updateRoutingCredential(latest, account: account)
+                    return latest
+                }
+                guard !isDesktop else { throw UsageAuthenticationError() }
+                return try await renewSavedCredential(previous, account: account)
+            }
+            usages[account.id] = usage
+            try updateRoutingCredential(credential, account: account)
+            emails[account.id] = credential.email ?? L10n.text("email_missing")
+            // Automatic refreshes reuse the photo; manual refreshes also reload the profile.
+            if refreshProfiles || !profileLoaded.contains(account.id) {
+                do {
+                    profileImages[account.id] = try await usageClient.fetchProfileImage(credential).flatMap(NSImage.init(data:))
+                    if profileImages[account.id] != nil { profileLoaded.insert(account.id) }
+                } catch { profileImages[account.id] = nil }
+            }
+            if (usages[account.id]?.rateLimitResetCredits?.availableCount ?? 0) > 0 {
+                resetDetails[account.id] = try? await usageClient.fetchResetCredits(credential)
+            } else { resetDetails[account.id] = nil }
+            usageUpdatedAt[account.id] = queriedAt
+            usageErrors[account.id] = nil
+        } catch {
+            usageErrors[account.id] = L10n.text("unavailable_prefix") + error.localizedDescription
+        }
+    }
+
+    private func loadGoUsage(enabled: Bool) async -> Result<OpenCodeUsage, Error>? {
+        guard enabled, openCodeConfigured else { return nil }
         let key = openCode.apiKey
         let result: Result<OpenCodeUsage, Error>
         do { result = .success(try await openCode.fetchUsage()) }

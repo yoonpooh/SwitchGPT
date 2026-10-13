@@ -12,7 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshTask = Task { [store] in
             await store.restoreRouting()
             while !Task.isCancelled {
-                await store.refreshUsage()
+                // Routing needs fresh ChatGPT quota; Claude and Go readings are only shown, so the open panel asks for them.
+                await store.refreshUsage(providers: false)
                 do { try await Task.sleep(for: .seconds(60)) }
                 catch { break }
             }

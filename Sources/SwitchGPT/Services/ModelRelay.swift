@@ -26,7 +26,9 @@ struct RelayEvent: Codable, Sendable {
 /// A loopback-only model relay. A request captures its account once; selecting another
 /// account affects the next request and never rewrites desktop authentication.
 final class ModelRelay: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "local.switchgpt.model-relay")
+    private let queue: DispatchQueue
+    /// One session for every upstream request, so they reuse connections instead of a new TLS handshake each.
+    private let session: URLSession
     let router: AccountRouter
     private var listener: NWListener?
     private var connections: [UUID: RelayConnection] = [:]
@@ -41,6 +43,18 @@ final class ModelRelay: @unchecked Sendable {
     init(desktopAuth: URL, upstreamBaseURL: URL = URL(string: "https://chatgpt.com")!, eventURL: URL? = nil,
          router: AccountRouter = AccountRouter(), claude: ClaudeExecutor = ClaudeExecutor(), openCode: OpenCodeGo = OpenCodeGo(),
          didRecord: @escaping @Sendable (RelayEvent) -> Void = { _ in }) {
+        let queue = DispatchQueue(label: "local.switchgpt.model-relay")
+        self.queue = queue
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCache = nil
+        configuration.timeoutIntervalForRequest = 300
+        configuration.timeoutIntervalForResource = 3600
+        let delegateQueue = OperationQueue()
+        delegateQueue.maxConcurrentOperationCount = 1
+        delegateQueue.underlyingQueue = queue
+        // Each task carries its connection as its own delegate.
+        session = URLSession(configuration: configuration, delegate: nil, delegateQueue: delegateQueue)
         self.desktopAuth = desktopAuth
         initialDesktopToken = Self.accessToken(at: desktopAuth)
         self.upstreamBaseURL = upstreamBaseURL
@@ -50,6 +64,8 @@ final class ModelRelay: @unchecked Sendable {
         self.openCode = openCode
         self.didRecord = didRecord
     }
+
+    deinit { session.finishTasksAndInvalidate() }
 
     func select(_ credentials: RelayCredentials) {
         router.select(credentials)
@@ -126,7 +142,8 @@ final class ModelRelay: @unchecked Sendable {
 
     private func accept(_ connection: NWConnection) {
         let id = UUID()
-        let client = RelayConnection(connection: connection, queue: queue, upstreamBaseURL: upstreamBaseURL, claude: claude, openCode: openCode,
+        let client = RelayConnection(connection: connection, queue: queue, session: session, upstreamBaseURL: upstreamBaseURL,
+                                     claude: claude, openCode: openCode,
                                      credentials: { [weak self] request in
                                          guard let self else { throw HTTPFailure(status: 503) }
                                          return try self.credentials(for: request)
@@ -183,6 +200,7 @@ private final class RelayStartup: @unchecked Sendable {
 private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSink, @unchecked Sendable {
     private let connection: NWConnection
     private let queue: DispatchQueue
+    private let session: URLSession
     private let upstreamBaseURL: URL
     private let claude: ClaudeExecutor
     private let openCode: OpenCodeGo
@@ -193,7 +211,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
     private let report: @Sendable (RelayEvent) -> Void
     private let onClose: @Sendable () -> Void
     private var buffer = Data()
-    private var session: URLSession?
     private var task: URLSessionDataTask?
     private var closed = false
     private var responseStarted = false
@@ -211,7 +228,7 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
     private var catalogBody = Data()
     private var closeHandlers: [@Sendable () -> Void] = []
 
-    init(connection: NWConnection, queue: DispatchQueue, upstreamBaseURL: URL, claude: ClaudeExecutor, openCode: OpenCodeGo,
+    init(connection: NWConnection, queue: DispatchQueue, session: URLSession, upstreamBaseURL: URL, claude: ClaudeExecutor, openCode: OpenCodeGo,
          credentials: @escaping @Sendable (RelayRequest) throws -> RelayCredentials,
          authorize: @escaping @Sendable (RelayRequest) throws -> Void,
          fallback: @escaping @Sendable (RelayCredentials, Set<String>) -> RelayCredentials?,
@@ -219,6 +236,7 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
          onClose: @escaping @Sendable () -> Void) {
         self.connection = connection
         self.queue = queue
+        self.session = session
         self.upstreamBaseURL = upstreamBaseURL
         self.claude = claude
         self.openCode = openCode
@@ -258,15 +276,27 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
     }
 
     private func forward(_ request: RelayRequest) {
-        do {
-            if request.path == ClaudeBridge.relayPath {
-                // Claude's private MCP relay authenticates with the executor's per-launch token.
-                guard request.method == "POST" else { throw HTTPFailure(status: 405) }
-                claude.relay(request, sink: self)
-                return
+        if request.path == ClaudeBridge.relayPath {
+            // Claude's private MCP relay authenticates with the executor's per-launch token.
+            guard request.method == "POST" else { fail(405); return }
+            claude.relay(request, sink: self)
+            return
+        }
+        let claudeEnabled = claude.enabled, openCodeEnabled = openCode.apiKey != nil
+        // Routing decodes the whole history; on the relay queue it would hold up every other stream meanwhile.
+        DispatchQueue.global(qos: .userInitiated).async { [self] in
+            let routed = Result { try ClaudeBridge.route(request, claudeEnabled: claudeEnabled, openCodeEnabled: openCodeEnabled) }
+            queue.async { [self] in
+                guard !closed else { return }
+                forward(request, routed: routed)
             }
+        }
+    }
+
+    private func forward(_ request: RelayRequest, routed: Result<ClaudeRoute, any Error>) {
+        do {
             var request = request
-            switch try ClaudeBridge.route(request, claudeEnabled: claude.enabled, openCodeEnabled: openCode.apiKey != nil) {
+            switch try routed.get() {
             case .claude(let decoded):
                 // Claude requests never select an account or reach OpenAI, even while Claude is turned off.
                 try authorize(request)
@@ -333,17 +363,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
     }
 
     private func start(_ upstream: URLRequest) {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.httpCookieStorage = nil
-        configuration.urlCache = nil
-        configuration.timeoutIntervalForRequest = 300
-        configuration.timeoutIntervalForResource = 3600
-        let delegateQueue = OperationQueue()
-        delegateQueue.maxConcurrentOperationCount = 1
-        delegateQueue.underlyingQueue = queue
-        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: delegateQueue)
-        self.session = session
         let task = session.dataTask(with: upstream)
+        task.delegate = self
         self.task = task
         task.resume()
     }
@@ -437,7 +458,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
                 if let event { report(event) }
                 event = nil
                 if let next = fallback(selected, attempted) {
-                    session.finishTasksAndInvalidate()
                     startAttempt(request, selected: next)
                     return
                 }
@@ -511,6 +531,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
             let line = Data(eventLine[..<end])
             eventLine.removeSubrange(...end)
             guard line.starts(with: Data("data: ".utf8)),
+                  // Only the last event matters; skip parsing every delta before it.
+                  line.range(of: Self.completedType) != nil,
                   let value = try? JSONSerialization.jsonObject(with: line.dropFirst(6)) as? [String: Any],
                   value["type"] as? String == "response.completed",
                   let response = value["response"] as? [String: Any] else { continue }
@@ -523,6 +545,8 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
         }
         if eventLine.count > 4 * 1024 * 1024 { eventLine.removeAll() }
     }
+
+    private static let completedType = Data("response.completed".utf8)
 
     private func fail(_ status: Int) {
         guard !closed else { return }
@@ -546,8 +570,6 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
         closed = true
         timeout?.cancel()
         task?.cancel()
-        session?.invalidateAndCancel()
-        session = nil
         connection.cancel()
         let handlers = closeHandlers
         closeHandlers.removeAll()

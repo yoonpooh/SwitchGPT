@@ -113,6 +113,27 @@ final class OpenCodeGoTests: XCTestCase {
         XCTAssertNotNil(store.openCodeUsageError)
     }
 
+    @MainActor func testBackgroundRefreshSkipsDisplayOnlyProviderUsage() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let calls = ProviderCalls()
+        let go = OpenCodeGo(send: { request in
+            calls.add()
+            return (Data(#"{"usage":{"rolling":{"percent":25}}}"#.utf8),
+                    HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        let store = AccountStore(index: root.appendingPathComponent("accounts.json"),
+            claudeUsageClient: ClaudeUsageClient(answers: { calls.add(); throw SwitchError(message: "synthetic") }),
+            session: CodexSession(home: root), vault: GoTestVault(), openCode: go)
+        XCTAssertTrue(store.saveOpenCodeKey("test-go"))
+        await store.refreshUsage(providers: false)
+        XCTAssertEqual(calls.count, 0)
+        XCTAssertNil(store.openCodeUsage)
+        await store.refreshUsage()
+        XCTAssertEqual(store.openCodeUsage?.usage.rolling?.remaining, 75)
+    }
+
     private func request(_ model: String = OpenCodeGo.model) -> RelayRequest {
         RelayRequest(method: "POST", target: "/backend-api/codex/responses", headers: [
             "authorization": "Bearer desktop-secret", "chatgpt-account-id": "private-account",
@@ -254,6 +275,13 @@ final class OpenCodeGoTests: XCTestCase {
         XCTAssertTrue(server.headers.allSatisfy { $0.hasPrefix("POST /v1/responses ") && !$0.contains("desktop-secret") })
         XCTAssertEqual(relay.router.selected?.accessToken, "desktop-secret")
     }
+}
+
+private final class ProviderCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.withLock { value } }
+    func add() { lock.withLock { value += 1 } }
 }
 
 @MainActor private final class GoTestVault: CredentialVault {
