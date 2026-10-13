@@ -116,7 +116,7 @@ final class OpenCodeGo: @unchecked Sendable {
         for (offset, model) in added.enumerated() {
             var item = ClaudeBridge.catalogTemplate()
             item["slug"] = model.slug
-            item["display_name"] = model.name + " · Go"
+            item["display_name"] = model.name
             item["visibility"] = model.isPickerModel && selected.contains(model.id) ? "list" : "hide"
             item["description"] = L10n.text("go_model_description")
             item["base_instructions"] = "You are a coding agent in Codex. Complete the user's task using the available tools, follow Codex permissions, and report verification and limitations honestly."

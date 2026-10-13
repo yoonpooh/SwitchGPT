@@ -221,6 +221,7 @@ final class OpenCodeGoTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: updated) as? [String: Any])
         let models = try XCTUnwrap(object["models"] as? [[String: Any]])
         XCTAssertEqual(models.compactMap { $0["slug"] as? String }, ["gpt-6.1-sol", ClaudeModel.fallback.slug, OpenCodeGo.model])
+        XCTAssertEqual(models.last?["display_name"] as? String, OpenCodeModel(id: OpenCodeGo.model).name)
         XCTAssertEqual((models.last?["supported_reasoning_levels"] as? [[String: Any]])?.compactMap { $0["effort"] as? String },
                        ["low", "high", "max"])
         XCTAssertEqual(models.last?["default_reasoning_level"] as? String, "high")
