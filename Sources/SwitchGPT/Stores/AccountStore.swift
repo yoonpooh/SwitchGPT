@@ -79,7 +79,7 @@ final class AccountStore {
                let cached = try? JSONDecoder().decode([OpenCodeModel].self, from: data) {
                 openCode.setModels(cached)
             }
-            goModels = openCode.models
+            goModels = openCode.models.filter(\.isPickerModel)
             availableClaudeModels = self.claudeModels.models
             if let data = try? Data(contentsOf: claudeAccountURL),
                let saved = try? JSONDecoder().decode(ClaudeAccountSettings.self, from: data) {
@@ -242,7 +242,7 @@ final class AccountStore {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try JSONEncoder().encode(models).write(to: file, options: .atomic)
             openCode.setModels(models)
-            goModels = models
+            goModels = openCode.models.filter(\.isPickerModel)
         }
     }
 
@@ -254,7 +254,7 @@ final class AccountStore {
         }
         var updated = routingPreferences
         updated.claudeModelSlugs = claude.sorted()
-        updated.goModelIDs = go.sorted()
+        updated.goModelIDs = go.filter { OpenCodeModel(id: $0).isPickerModel }.sorted()
         updated.claudeEnabled = !claude.isEmpty && claudeAvailable
         do {
             try savePreferences(updated)

@@ -20,8 +20,10 @@ final class OpenCodeGo: @unchecked Sendable {
     private static let session = URLSession(configuration: .ephemeral, delegate: NoRedirects(), delegateQueue: nil)
     var models: [OpenCodeModel] { lock.withLock { catalog } }
     var selectedModelIDs: Set<String> { lock.withLock { selection } }
-    func setModels(_ models: [OpenCodeModel]) { lock.withLock { catalog = models } }
-    func setSelection(_ ids: [String]?) { lock.withLock { selection = Set(ids ?? [Self.model]) } }
+    func setModels(_ models: [OpenCodeModel]) { lock.withLock { catalog = OpenCodeModel.newestFirst(models) } }
+    func setSelection(_ ids: [String]?) {
+        lock.withLock { selection = Set((ids ?? [Self.model]).filter { OpenCodeModel(id: $0).isPickerModel }) }
+    }
 
     func fetchUsage() async throws -> OpenCodeUsage {
         try JSONDecoder().decode(OpenCodeUsage.self, from: await get("usage"))
@@ -115,7 +117,7 @@ final class OpenCodeGo: @unchecked Sendable {
             var item = ClaudeBridge.catalogTemplate()
             item["slug"] = model.slug
             item["display_name"] = model.name + " · Go"
-            item["visibility"] = selected.contains(model.id) ? "list" : "hide"
+            item["visibility"] = model.isPickerModel && selected.contains(model.id) ? "list" : "hide"
             item["description"] = L10n.text("go_model_description")
             item["base_instructions"] = "You are a coding agent in Codex. Complete the user's task using the available tools, follow Codex permissions, and report verification and limitations honestly."
             item["priority"] = priority + offset

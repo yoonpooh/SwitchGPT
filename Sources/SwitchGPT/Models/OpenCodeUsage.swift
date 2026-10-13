@@ -2,6 +2,22 @@ import Foundation
 
 struct OpenCodeModel: Codable, Identifiable, Sendable {
     let id: String
+    var isPickerModel: Bool { !id.hasPrefix("gpt-") && !id.hasPrefix("claude-") }
+    // The Go API's created timestamp is catalog generation time, not a model release date.
+    // shortcut: models.dev release dates are bundled as of 2026-10-13; refresh the snapshot when new models appear.
+    private static let releaseDates: [String: String] = {
+        guard let file = Bundle.module.url(forResource: "GoModelReleaseDates", withExtension: "json"),
+              let data = try? Data(contentsOf: file) else { return [:] }
+        return (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+    }()
+    static func newestFirst(_ models: [OpenCodeModel]) -> [OpenCodeModel] {
+        models.sorted {
+            let first = releaseDates[$0.id] ?? ""
+            let second = releaseDates[$1.id] ?? ""
+            if first != second { return first > second }
+            return $0.id.compare($1.id, options: .numeric) == .orderedDescending
+        }
+    }
     var slug: String { id.hasPrefix("deepseek-") ? id : OpenCodeGo.prefix + id }
     var name: String {
         let brands = ["deepseek": "DeepSeek", "mimo": "MiMo", "glm": "GLM", "gpt": "GPT", "minimax": "MiniMax",

@@ -3,6 +3,15 @@ import Network
 @testable import SwitchGPT
 
 final class OpenCodeGoTests: XCTestCase {
+    func testGoPickerExcludesGPTAndClaudeAndSortsByReleaseDate() {
+        let models = ["kimi-k3", "gpt-6-luna", "deepseek-v4.1-flash", "claude-haiku-5-5",
+                      "mimo-v2.6-flash", "longcat-2.5-preview-free", "unknown-model"].map(OpenCodeModel.init(id:))
+        let ordered = OpenCodeModel.newestFirst(models.filter(\.isPickerModel))
+        XCTAssertEqual(ordered.map(\.id), ["longcat-2.5-preview-free", "mimo-v2.6-flash", "deepseek-v4.1-flash", "kimi-k3", "unknown-model"])
+        let go = OpenCodeGo()
+        go.setSelection(["gpt-6-luna", "claude-haiku-5-5", OpenCodeGo.model])
+        XCTAssertEqual(go.selectedModelIDs, [OpenCodeGo.model])
+    }
     func testGoModelDisplayNamesKeepProviderIDsIntact() {
         for (id, name) in [("deepseek-v4.1-flash", "DeepSeek V4.1 Flash"), ("mimo-v2.6-flash", "MiMo V2.6 Flash"),
                            ("glm-5.3", "GLM 5.3"), ("gpt-6-luna", "GPT 6 Luna"), ("kimi-k3", "Kimi K3"),
@@ -55,7 +64,7 @@ final class OpenCodeGoTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: catalog) as? [String: Any])
         let items = try XCTUnwrap(object["models"] as? [[String: Any]])
         XCTAssertNil(items[0]["visibility"])
-        XCTAssertEqual(items[1]["visibility"] as? String, "list")
+        XCTAssertEqual(items[1]["visibility"] as? String, "hide")
         XCTAssertEqual(items[2]["visibility"] as? String, "hide")
     }
 
