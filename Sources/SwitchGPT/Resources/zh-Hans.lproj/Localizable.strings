@@ -160,9 +160,16 @@
 "go_change_key" = "更改 API 密钥…";
 "go_remove_key" = "删除 API 密钥…";
 "go_console" = "打开控制台";
-"go_key_hint" = "请输入已订阅 Go 的工作区 API 密钥。密钥保存在 macOS 钥匙串中，DeepSeek 请求使用 Go 额度。";
-"go_saved" = "Go 密钥已保存。重启 Codex 后可在模型列表中选择 DeepSeek。";
+"go_key_hint" = "粘贴Go工作区的API密钥。密钥保存于macOS钥匙串，Go模型请求会使用Go额度。";
+"go_saved" = "Go密钥已保存。在设置中选择Go模型，然后重启Codex。";
 "go_removed" = "Go 密钥已删除。请重启 Codex 更新模型列表。";
-"go_remove_hint" = "删除已保存的密钥并停用 DeepSeek 连接，不会取消 Go 订阅。";
-"go_restart" = "更新 DeepSeek 模型列表";
-"go_catalog_override" = "自定义模型列表正在覆盖 SwitchGPT 列表。请移除该设置以显示 DeepSeek。";
+"go_remove_hint" = "删除已保存的密钥并禁用OpenCode Go连接，不会取消订阅。";
+"go_restart" = "刷新Go模型列表";
+"go_catalog_override" = "自定义模型列表覆盖了SwitchGPT列表。删除该设置以显示Go模型。";
+
+// Provider model selection
+"models_manage" = "选择模型…";
+"models_hint" = "Codex模型保持默认列表。勾选要显示的Claude和Go模型，保存后重启Codex。";
+"models_saved" = "模型选择已保存。重启Codex以更新模型列表。";
+"models_invalid" = "请刷新模型列表后再保存。";
+"models_refresh" = "刷新模型列表";

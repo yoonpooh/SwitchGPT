@@ -170,6 +170,7 @@ final class ClaudeModelCatalog: @unchecked Sendable {
     private let executable: @Sendable () -> URL?
     private let discover: (@Sendable (URL) throws -> [ClaudeModel])?
     private var snapshot: Snapshot?
+    private var selection: Set<String>?
     private var refreshing = false
     private var waiters: [@Sendable () -> Void] = []
 
@@ -186,6 +187,8 @@ final class ClaudeModelCatalog: @unchecked Sendable {
     }
 
     var models: [ClaudeModel] { lock.withLock { snapshot?.models } ?? [.fallback] }
+    var listedSlugs: Set<String> { lock.withLock { selection } ?? Set(ClaudeModel.newest(models).map(\.slug)) }
+    func setSelection(_ slugs: [String]?) { lock.withLock { selection = slugs.map(Set.init) } }
 
     func model(for slug: String) -> ClaudeModel? {
         models.first { $0.slug == slug } ?? (slug == ClaudeModel.fallback.slug ? .fallback : nil)

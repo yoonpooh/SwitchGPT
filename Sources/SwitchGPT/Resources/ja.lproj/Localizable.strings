@@ -160,9 +160,16 @@
 "go_change_key" = "APIキーを変更…";
 "go_remove_key" = "APIキーを削除…";
 "go_console" = "コンソールを開く";
-"go_key_hint" = "Go契約済みワークスペースのAPIキーを入力してください。macOSキーチェーンに保存され、DeepSeekはGoの利用枠を使います。";
-"go_saved" = "Goキーを保存しました。Codexを再起動するとDeepSeekが表示されます。";
+"go_key_hint" = "GoワークスペースのAPIキーを貼り付けてください。macOSキーチェーンに保存され、GoモデルのリクエストはGo使用量から差し引かれます。";
+"go_saved" = "Goキーを保存しました。設定でGoモデルを選び、Codexを再起動してください。";
 "go_removed" = "Goキーを削除しました。Codexを再起動してモデル一覧を更新してください。";
-"go_remove_hint" = "保存したキーを削除しDeepSeek接続を無効にします。Go契約は解約されません。";
-"go_restart" = "DeepSeekモデル一覧を更新";
-"go_catalog_override" = "カスタムモデル一覧がSwitchGPTの一覧を上書きしています。DeepSeekを表示するには解除してください。";
+"go_remove_hint" = "保存済みキーを削除し、OpenCode Go接続を無効にします。サブスクリプションは解約されません。";
+"go_restart" = "Goモデル一覧を更新";
+"go_catalog_override" = "カスタムモデル一覧がSwitchGPTの一覧を上書きしています。Goモデルを表示するには設定を削除してください。";
+
+// Provider model selection
+"models_manage" = "モデルを選択…";
+"models_hint" = "Codexのモデルはそのままです。表示するClaude・Goモデルを選び、保存後にCodexを再起動してください。";
+"models_saved" = "モデル選択を保存しました。Codexを再起動して反映してください。";
+"models_invalid" = "モデル一覧を更新してから保存してください。";
+"models_refresh" = "モデル一覧を更新";

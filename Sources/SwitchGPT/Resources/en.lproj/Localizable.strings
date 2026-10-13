@@ -160,9 +160,16 @@
 "go_change_key" = "Change API key…";
 "go_remove_key" = "Remove API key…";
 "go_console" = "Open Console";
-"go_key_hint" = "Paste the API key from the workspace with your Go subscription. It is saved in macOS Keychain. DeepSeek requests use your Go allowance.";
-"go_saved" = "Go key saved. Restart Codex to show DeepSeek in the model picker.";
+"go_key_hint" = "Paste the API key from your Go workspace. It is saved in macOS Keychain. Go model requests use your Go allowance.";
+"go_saved" = "Go key saved. Choose Go models in settings, then restart Codex.";
 "go_removed" = "Go key removed. Restart Codex to refresh the model picker.";
-"go_remove_hint" = "This removes the saved key and disables DeepSeek routing. It does not cancel your Go subscription.";
-"go_restart" = "Refresh the DeepSeek model list";
-"go_catalog_override" = "A custom model catalog is overriding the SwitchGPT model list. Remove that override to show DeepSeek.";
+"go_remove_hint" = "This removes the saved key and disables OpenCode Go routing. It does not cancel your subscription.";
+"go_restart" = "Refresh the Go model list";
+"go_catalog_override" = "A custom model catalog is overriding the SwitchGPT model list. Remove that override to show Go models.";
+
+// Provider model selection
+"models_manage" = "Choose provider models…";
+"models_hint" = "Codex models stay unchanged. Check the Claude and Go models to show in the picker. Restart Codex after saving.";
+"models_saved" = "Model selection saved. Restart Codex to refresh the picker.";
+"models_invalid" = "Refresh the model list before saving.";
+"models_refresh" = "Refresh model list";

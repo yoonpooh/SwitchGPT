@@ -45,8 +45,7 @@ struct AccountPanel: View {
             }
             if store.openCodeConfigured {
                 Divider()
-                Label("DeepSeek V4.1 Flash · OpenCode Go", systemImage: "key.fill")
-                    .font(.caption).help(L10n.text("go_saved"))
+                OpenCodeUsageCard(store: store)
             }
             if !store.message.isEmpty {
                 Label(store.message, systemImage: store.addingAccount ? "person.crop.circle" : "exclamationmark.circle")
@@ -109,6 +108,7 @@ struct AccountPanel: View {
                         Button(L10n.text("go_remove_key"), role: .destructive) { removeOpenCodeKey() }
                     }
                 }
+                SettingsLink { Text(L10n.text("models_manage")) }
                 Divider()
                 ForEach(store.accounts) { account in
                     Menu(store.displayName(account)) { accountActions(account) }
@@ -126,7 +126,7 @@ struct AccountPanel: View {
     }
 
     private var maximumListHeight: CGFloat {
-        let reserved: CGFloat = (store.needsRestart ? 360 : 290) + (store.claudeAvailable ? 90 : 0)
+        let reserved: CGFloat = (store.needsRestart ? 360 : 290) + (store.claudeAvailable ? 90 : 0) + (store.openCodeConfigured ? 110 : 0)
         return min(460, max(130, (NSScreen.main?.visibleFrame.height ?? 800) - reserved))
     }
 

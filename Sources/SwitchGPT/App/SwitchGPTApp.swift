@@ -52,5 +52,8 @@ struct SwitchGPTApp: App {
                 .accessibilityLabel("SwitchGPT")
         }.menuBarExtraStyle(.window)
             .windowResizability(.contentSize)
+        Settings {
+            ProviderModelsView(store: delegate.store)
+        }.defaultSize(width: 460, height: 560)
     }
 }

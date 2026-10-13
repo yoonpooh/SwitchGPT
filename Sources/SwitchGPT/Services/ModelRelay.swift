@@ -420,14 +420,12 @@ private final class RelayConnection: NSObject, URLSessionDataDelegate, ClaudeSin
         if let response = catalogResponse {
             catalogResponse = nil
             let models = claude.enabled ? claude.models.models : []
-            var updated = error == nil ? ClaudeBridge.addingCatalogItems(to: catalogBody, models: models) : nil
+            var updated = error == nil ? ClaudeBridge.addingCatalogItems(to: catalogBody, models: models, listedSlugs: claude.models.listedSlugs) : nil
             if error == nil, openCode.apiKey != nil {
-                updated = OpenCodeGo.addingCatalogItem(to: updated ?? catalogBody) ?? updated
+                updated = OpenCodeGo.addingCatalogItems(to: updated ?? catalogBody, models: openCode.models, selected: openCode.selectedModelIDs) ?? updated
             }
             let etag = updated.flatMap { body -> String? in
-                openCode.apiKey != nil
-                    ? "\"switchgpt-" + ClaudeBridge.digest(String(decoding: body, as: UTF8.self)) + "\""
-                    : response.value(forHTTPHeaderField: "ETag").map { ClaudeBridge.catalogETag($0, models: models) }
+                "\"switchgpt-" + ClaudeBridge.digest(String(decoding: body, as: UTF8.self)) + "\""
             }
             sendHead(response, etag: etag)
             sendChunk(updated ?? catalogBody)

@@ -3,6 +3,92 @@ import Network
 @testable import SwitchGPT
 
 final class OpenCodeGoTests: XCTestCase {
+    func testUsageAndModelDiscoveryUseOnlyGoCredentials() async throws {
+        let go = OpenCodeGo(send: { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-go")
+            XCTAssertNil(request.value(forHTTPHeaderField: "ChatGPT-Account-Id"))
+            XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+            XCTAssertEqual(request.httpMethod, "GET")
+            let body = request.url!.path.hasSuffix("usage")
+                ? #"{"usage":{"rolling":{"percent":25,"resetsAt":"2026-10-13T08:44:17.110Z"},"weekly":{"percent":101,"resetsAt":"2026-10-19T00:00:00Z"},"monthly":{"percent":1}}}"#
+                : #"{"data":[{"id":"gpt-6-luna"},{"id":"claude-haiku-5-5"}]}"#
+            return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        })
+        go.setKey("test-go")
+        let usage = try await go.fetchUsage()
+        XCTAssertEqual(usage.usage.rolling?.remaining, 75)
+        XCTAssertNotNil(usage.usage.rolling?.resetDate)
+        XCTAssertEqual(usage.usage.weekly?.remaining, 0)
+        XCTAssertNotNil(usage.usage.weekly?.resetDate)
+        XCTAssertNil(usage.usage.monthly?.resetDate)
+        let models = try await go.fetchModels()
+        XCTAssertEqual(models.map(\.slug), ["opencode-go/gpt-6-luna", "opencode-go/claude-haiku-5-5"])
+        XCTAssertThrowsError(try JSONDecoder().decode(OpenCodeModel.self, from: Data(#"{"id":"../responses"}"#.utf8)))
+    }
+
+    func testGoNamespacedModelsCannotCrossIntoGPTOrClaudeAndKeepHiddenThreadsUsable() throws {
+        let go = OpenCodeGo()
+        go.setKey("test-go")
+        go.setModels([OpenCodeModel(id: "gpt-6-luna"), OpenCodeModel(id: "claude-haiku-5-5")])
+        go.setSelection([])
+        for id in ["gpt-6-luna", "claude-haiku-5-5"] {
+            let incoming = request(OpenCodeGo.prefix + id)
+            guard case .openCode = try ClaudeBridge.route(incoming, claudeEnabled: true, openCodeEnabled: true) else {
+                return XCTFail("Wrong provider")
+            }
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(go.request(incoming).httpBody)) as? [String: Any])
+            XCTAssertEqual(body["model"] as? String, id)
+            XCTAssertNil(body["reasoning"])
+        }
+        let catalog = try XCTUnwrap(OpenCodeGo.addingCatalogItems(to: ClaudeBridge.encode(["models": [["slug": "gpt-6.1-sol"]]]),
+            models: go.models, selected: ["gpt-6-luna"]))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: catalog) as? [String: Any])
+        let items = try XCTUnwrap(object["models"] as? [[String: Any]])
+        XCTAssertNil(items[0]["visibility"])
+        XCTAssertEqual(items[1]["visibility"] as? String, "list")
+        XCTAssertEqual(items[2]["visibility"] as? String, "hide")
+    }
+
+    @MainActor func testProviderModelChoicesPersistWithoutChangingCodexAndStorageFailureKeepsChoices() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = ClaudeModelCatalog(models: [.fallback])
+        let go = OpenCodeGo()
+        let index = root.appendingPathComponent("accounts.json")
+        let store = AccountStore(index: index, session: CodexSession(home: root), vault: GoTestVault(), openCode: go, claudeModels: catalog)
+        XCTAssertTrue(store.saveModelSelection(claude: [ClaudeModel.fallback.slug], go: [OpenCodeGo.model]))
+        if store.claudeAvailable { XCTAssertTrue(store.routingPreferences.claudeEnabled) }
+        XCTAssertTrue(store.saveModelSelection(claude: [], go: [OpenCodeGo.model]))
+        XCTAssertTrue(catalog.listedSlugs.isEmpty)
+        XCTAssertNotNil(catalog.model(for: ClaudeModel.fallback.slug))
+        let preferences = try JSONDecoder().decode(RoutingPreferences.self, from: Data(contentsOf: root.appendingPathComponent("routing-preferences.json")))
+        XCTAssertEqual(preferences.claudeModelSlugs, [])
+        XCTAssertEqual(preferences.goModelIDs, [OpenCodeGo.model])
+        try FileManager.default.removeItem(at: root.appendingPathComponent("routing-preferences.json"))
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("routing-preferences.json"), withIntermediateDirectories: false)
+        XCTAssertFalse(store.saveModelSelection(claude: [ClaudeModel.fallback.slug], go: []))
+        XCTAssertTrue(catalog.listedSlugs.isEmpty)
+        XCTAssertEqual(go.selectedModelIDs, [OpenCodeGo.model])
+    }
+
+    @MainActor func testGoUsageFailureKeepsLastReadingAndShowsError() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let go = OpenCodeGo(send: { request in
+            (Data("{}".utf8), HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!)
+        })
+        let store = AccountStore(index: root.appendingPathComponent("accounts.json"),
+            claudeUsageClient: ClaudeUsageClient(answers: { throw SwitchError(message: "synthetic") }),
+            session: CodexSession(home: root), vault: GoTestVault(), openCode: go)
+        XCTAssertTrue(store.saveOpenCodeKey("test-go"))
+        store.openCodeUsage = try JSONDecoder().decode(OpenCodeUsage.self, from: Data(#"{"usage":{"rolling":{"percent":25}}}"#.utf8))
+        await store.refreshUsage()
+        XCTAssertEqual(store.openCodeUsage?.usage.rolling?.remaining, 75)
+        XCTAssertNotNil(store.openCodeUsageError)
+    }
+
     private func request(_ model: String = OpenCodeGo.model) -> RelayRequest {
         RelayRequest(method: "POST", target: "/backend-api/codex/responses", headers: [
             "authorization": "Bearer desktop-secret", "chatgpt-account-id": "private-account",

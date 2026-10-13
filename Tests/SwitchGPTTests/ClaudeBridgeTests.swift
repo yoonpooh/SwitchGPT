@@ -1177,10 +1177,18 @@ final class ClaudeBridgeTests: XCTestCase {
             let (body, response) = try await URLSession(configuration: .ephemeral).data(for: request)
             XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
             let etag = try XCTUnwrap((response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag"))
-            XCTAssertEqual(etag, enabled ? ClaudeBridge.catalogETag("W/\"catalog\"", models: [.fallback]) : "W/\"catalog\"")
+            XCTAssertEqual(etag, enabled ? "\"switchgpt-" + ClaudeBridge.digest(String(decoding: body, as: UTF8.self)) + "\"" : "W/\"catalog\"")
             let models = try XCTUnwrap((JSONSerialization.jsonObject(with: body) as? [String: Any])?["models"] as? [[String: Any]])
             XCTAssertEqual(models.contains { $0["slug"] as? String == ClaudeModel.fallback.slug }, enabled)
             XCTAssertEqual(harness.upstream.requests.first?.headers["if-none-match"] == nil, enabled)
+            if enabled {
+                harness.relay.claude.models.setSelection([])
+                let (hiddenBody, hiddenResponse) = try await URLSession(configuration: .ephemeral).data(for: request)
+                XCTAssertNotEqual((hiddenResponse as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag"), etag)
+                let hidden = try XCTUnwrap((JSONSerialization.jsonObject(with: hiddenBody) as? [String: Any])?["models"] as? [[String: Any]])
+                XCTAssertEqual(hidden.first { $0["slug"] as? String == ClaudeModel.fallback.slug }?["visibility"] as? String, "hide")
+                XCTAssertEqual(hidden.first?["slug"] as? String, models.first?["slug"] as? String)
+            }
             harness.stop()
         }
     }

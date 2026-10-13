@@ -5,12 +5,15 @@ struct RoutingPreferences: Codable {
     var configuredAt: Date?
     var desktopVerified = false
     var claudeEnabled = false
+    var claudeModelSlugs: [String]?
+    var goModelIDs: [String]?
 
     private enum CodingKeys: String, CodingKey {
         case automatic
         case configuredAt
         case desktopVerified
         case claudeEnabled
+        case claudeModelSlugs, goModelIDs
     }
 
     init(automatic: Bool = true, configuredAt: Date? = nil, desktopVerified: Bool = false, claudeEnabled: Bool = false) {
@@ -28,6 +31,8 @@ struct RoutingPreferences: Codable {
         configuredAt = try values.decodeIfPresent(Date.self, forKey: .configuredAt)
         desktopVerified = try values.decodeIfPresent(Bool.self, forKey: .desktopVerified) ?? false
         claudeEnabled = try values.decodeIfPresent(Bool.self, forKey: .claudeEnabled) ?? false
+        claudeModelSlugs = try values.decodeIfPresent([String].self, forKey: .claudeModelSlugs)
+        goModelIDs = try values.decodeIfPresent([String].self, forKey: .goModelIDs)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -36,6 +41,8 @@ struct RoutingPreferences: Codable {
         try values.encodeIfPresent(configuredAt, forKey: .configuredAt)
         try values.encode(desktopVerified, forKey: .desktopVerified)
         try values.encode(claudeEnabled, forKey: .claudeEnabled)
+        try values.encodeIfPresent(claudeModelSlugs, forKey: .claudeModelSlugs)
+        try values.encodeIfPresent(goModelIDs, forKey: .goModelIDs)
     }
 
     func needsRestart(desktopLaunchedAt: Date?) -> Bool {

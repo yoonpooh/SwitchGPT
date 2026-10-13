@@ -28,7 +28,12 @@ final class AccountStore {
     var claudeUsageError: String?
     var claudeNickname: String?
     private(set) var openCodeConfigured = false
-    @ObservationIgnored private let openCode = OpenCodeGo()
+    var openCodeUsage: OpenCodeUsage?
+    var openCodeUsageError: String?
+    var goModels: [OpenCodeModel] = []
+    var availableClaudeModels: [ClaudeModel] = []
+    @ObservationIgnored private let openCode: OpenCodeGo
+    @ObservationIgnored private let claudeModels: ClaudeModelCatalog
     private let vault: any CredentialVault
     private let session: CodexSession
     private let usageClient: UsageClient
@@ -47,10 +52,12 @@ final class AccountStore {
     private var preferencesURL: URL { index.deletingLastPathComponent().appendingPathComponent("routing-preferences.json") }
     private var claudeAccountURL: URL { index.deletingLastPathComponent().appendingPathComponent("claude-account.json") }
 
-    init(index: URL? = nil, usageClient: UsageClient = UsageClient(), claudeUsageClient: ClaudeUsageClient = ClaudeUsageClient(), session: CodexSession = CodexSession(), vault: any CredentialVault = Vault(), tokenRefreshClient: TokenRefreshClient = TokenRefreshClient()) {
+    init(index: URL? = nil, usageClient: UsageClient = UsageClient(), claudeUsageClient: ClaudeUsageClient = ClaudeUsageClient(), session: CodexSession = CodexSession(), vault: any CredentialVault = Vault(), tokenRefreshClient: TokenRefreshClient = TokenRefreshClient(), openCode: OpenCodeGo = OpenCodeGo(), claudeModels: ClaudeModelCatalog? = nil) {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         self.index = index ?? support.appendingPathComponent("SwitchGPT/accounts.json")
         self.session = session
+        self.openCode = openCode
+        self.claudeModels = claudeModels ?? ClaudeModelCatalog(file: self.index.deletingLastPathComponent().appendingPathComponent("claude-models.json"), discover: ClaudeModelDiscovery.run)
         self.vault = vault
         self.credentialRefresher = CredentialRefresher(client: tokenRefreshClient)
         self.usageClient = usageClient
@@ -66,6 +73,14 @@ final class AccountStore {
                let saved = try? JSONDecoder().decode(RoutingPreferences.self, from: data) {
                 routingPreferences = saved
             }
+            self.claudeModels.setSelection(routingPreferences.claudeModelSlugs)
+            openCode.setSelection(routingPreferences.goModelIDs)
+            if let data = try? Data(contentsOf: self.index.deletingLastPathComponent().appendingPathComponent("go-models.json")),
+               let cached = try? JSONDecoder().decode([OpenCodeModel].self, from: data) {
+                openCode.setModels(cached)
+            }
+            goModels = openCode.models
+            availableClaudeModels = self.claudeModels.models
             if let data = try? Data(contentsOf: claudeAccountURL),
                let saved = try? JSONDecoder().decode(ClaudeAccountSettings.self, from: data) {
                 claudeNickname = saved.nickname
@@ -153,6 +168,7 @@ final class AccountStore {
         // The Claude Code account is independent of the ChatGPT accounts; query it alongside them.
         let claudeClient = claudeAvailable ? claudeUsageClient : nil
         async let claudeResult = claudeClient?.load()
+        async let goResult = loadGoUsage()
         for account in accounts {
             do {
                 let initial = try credentialForUsage(account)
@@ -196,6 +212,59 @@ final class AccountStore {
         case .failure(let error): claudeUsage = nil; claudeUsageError = error.localizedDescription
         case nil: claudeUsage = nil; claudeUsageError = nil
         }
+        if let result = await goResult {
+            switch result {
+            case .success(let usage): openCodeUsage = usage; openCodeUsageError = nil
+            case .failure(let error): openCodeUsageError = error.localizedDescription
+            }
+        }
+    }
+
+    private func loadGoUsage() async -> Result<OpenCodeUsage, Error>? {
+        guard openCodeConfigured else { return nil }
+        let key = openCode.apiKey
+        let result: Result<OpenCodeUsage, Error>
+        do { result = .success(try await openCode.fetchUsage()) }
+        catch { result = .failure(error) }
+        return key == openCode.apiKey ? result : nil
+    }
+
+    func loadProviderModels() async throws {
+        if claudeAvailable {
+            await claudeModels.refreshed()
+            availableClaudeModels = claudeModels.models
+        }
+        if openCodeConfigured {
+            let key = openCode.apiKey
+            let models = try await openCode.fetchModels()
+            guard key == openCode.apiKey else { throw SwitchError(message: L10n.text("go_missing_key")) }
+            let file = index.deletingLastPathComponent().appendingPathComponent("go-models.json")
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(models).write(to: file, options: .atomic)
+            openCode.setModels(models)
+            goModels = models
+        }
+    }
+
+    @discardableResult func saveModelSelection(claude: Set<String>, go: Set<String>) -> Bool {
+        guard claude.isSubset(of: Set(availableClaudeModels.map(\.slug) + (routingPreferences.claudeModelSlugs ?? []))),
+              go.isSubset(of: Set(goModels.map(\.id) + (routingPreferences.goModelIDs ?? []))) else {
+            message = L10n.text("models_invalid")
+            return false
+        }
+        var updated = routingPreferences
+        updated.claudeModelSlugs = claude.sorted()
+        updated.goModelIDs = go.sorted()
+        if !claude.isEmpty && claudeAvailable { updated.claudeEnabled = true }
+        do {
+            try savePreferences(updated)
+            claudeModels.setSelection(updated.claudeModelSlugs)
+            relay?.claude.setEnabled(updated.claudeEnabled)
+            openCode.setSelection(updated.goModelIDs)
+            session.clearModelCache()
+            message = L10n.text("models_saved")
+            return true
+        } catch { message = error.localizedDescription; return false }
     }
 
     private func updateRoutingCredential(_ credential: Credential, account: Account) throws {
@@ -337,6 +406,8 @@ final class AccountStore {
             try vault.save(Data(key.utf8), id: OpenCodeGo.vaultID)
             openCode.setKey(key)
             openCodeConfigured = true
+            openCodeUsage = nil
+            openCodeUsageError = nil
             session.clearModelCache()
             message = L10n.text(RoutingConfiguration(home: session.home).overridesCatalog ? "go_catalog_override" : "go_saved")
             return true
@@ -349,6 +420,8 @@ final class AccountStore {
             try vault.remove(OpenCodeGo.vaultID)
             openCode.setKey(nil)
             openCodeConfigured = false
+            openCodeUsage = nil
+            openCodeUsageError = nil
             session.clearModelCache()
             message = L10n.text("go_removed")
             return true
@@ -511,10 +584,9 @@ final class AccountStore {
             routingCredentials[account.id] = credentials
             let support = index.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            let models = support.appendingPathComponent("claude-models.json")
             let activeRelay = relay ?? ModelRelay(desktopAuth: session.auth, eventURL: support.appendingPathComponent("relay-events.jsonl"),
                                                  router: router,
-                                                 claude: ClaudeExecutor(models: ClaudeModelCatalog(file: models, discover: ClaudeModelDiscovery.run)),
+                                                 claude: ClaudeExecutor(models: claudeModels),
                                                  openCode: openCode,
                                                  didRecord: { [weak self] event in
                 Task { @MainActor [weak self] in self?.received(event) }

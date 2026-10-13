@@ -452,7 +452,7 @@ enum ClaudeBridge {
 
     /// Adds the Claude models after the account's own models, listing only the newest of each family in the picker.
     /// Returns nil when the body is left unchanged.
-    static func addingCatalogItems(to body: Data, models claude: [ClaudeModel]) -> Data? {
+    static func addingCatalogItems(to body: Data, models claude: [ClaudeModel], listedSlugs: Set<String>? = nil) -> Data? {
         guard var object = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
               var models = object["models"] as? [Any] else { return nil }
         let existing = models.compactMap { $0 as? [String: Any] }
@@ -460,7 +460,7 @@ enum ClaudeBridge {
         let added = claude.filter { !listed.contains($0.slug) }
         guard !added.isEmpty else { return nil }
         let priority = (existing.compactMap { ($0["priority"] as? NSNumber)?.intValue }.max() ?? 0) + 1
-        let newest = Set(ClaudeModel.newest(claude).map(\.slug))
+        let newest = listedSlugs ?? Set(ClaudeModel.newest(claude).map(\.slug))
         for (offset, model) in added.enumerated() {
             models.append(catalogItem(model, priority: priority + offset, listed: newest.contains(model.slug)))
         }
