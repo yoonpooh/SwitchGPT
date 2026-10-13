@@ -31,8 +31,9 @@ final class ClaudeUsageTests: XCTestCase {
 
     func testPlanBadgeNamesClaudeAndChatGPTPlans() {
         XCTAssertEqual(PlanBadge.title("Max 20x"), "Max 20x")
-        XCTAssertEqual(PlanBadge.title("prolite"), "Pro")
-        XCTAssertEqual(PlanBadge.title("pro"), "Pro")
+        XCTAssertEqual(PlanBadge.title("prolite"), "Pro 100")
+        XCTAssertEqual(PlanBadge.title("pro"), "Pro 200")
+        XCTAssertEqual(PlanBadge.title("promax"), "Pro 500")
         XCTAssertEqual(PlanBadge.title("plus"), "Plus")
         XCTAssertEqual(PlanBadge.title("max"), "Max")
     }

@@ -16,7 +16,6 @@ struct ClaudeUsageCard: View {
                     Text("Claude").font(.caption.weight(.semibold))
                         .lineLimit(1).truncationMode(.middle)
                         .help(L10n.text("claude_usage_help"))
-                    if let plan = store.claudeUsage?.plan { PlanBadge(plan: plan) }
                     Spacer(minLength: 0)
                 }
                 if let usage = store.claudeUsage {
