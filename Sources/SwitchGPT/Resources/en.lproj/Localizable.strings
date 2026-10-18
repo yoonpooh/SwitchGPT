@@ -173,3 +173,8 @@
 "models_refresh" = "Refresh model list";
 "models_restart" = "Restart Codex to apply the model selection?";
 "models_restart_action" = "Restart Codex";
+
+"credits_balance" = "Credit balance";
+"credits_balance_unlimited" = "Unlimited";
+"credits_balance_unavailable" = "Not provided";
+"credits_balance_failed" = "Query failed";

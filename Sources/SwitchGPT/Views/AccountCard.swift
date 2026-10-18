@@ -58,6 +58,9 @@ struct AccountCard: View {
                     Text(L10n.text(store.loadingUsage ? "loading" : "refresh_hint"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
+                CreditBalanceRow(state: .resolve(
+                    usage: store.usages[account.id], queryFailed: store.usageErrors[account.id] != nil
+                ))
                 if let notice = store.usageErrors[account.id] {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(notice).foregroundStyle(.orange)
@@ -140,6 +143,22 @@ struct AccountCard: View {
         formatter.unitsStyle = .short
         formatter.allowedUnits = remaining < 3600 ? [.minute] : [.hour]
         return L10n.format("reset_time_left", formatter.string(from: max(60, remaining)) ?? "")
+    }
+}
+
+struct CreditBalanceRow: View {
+    let state: CreditBalanceState
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(L10n.text("credits_balance"))
+            Spacer(minLength: 0)
+            Text(state.text).monospacedDigit()
+                .foregroundStyle(state == .failed ? Color.orange : Color.secondary)
+        }
+        .font(.system(size: 9))
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
     }
 }
 

@@ -173,3 +173,8 @@
 "models_refresh" = "刷新模型列表";
 "models_restart" = "重启Codex以应用模型选择？";
 "models_restart_action" = "重启Codex";
+
+"credits_balance" = "积分余额";
+"credits_balance_unlimited" = "无限";
+"credits_balance_unavailable" = "未提供";
+"credits_balance_failed" = "查询失败";

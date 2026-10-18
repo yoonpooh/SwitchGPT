@@ -173,3 +173,8 @@
 "models_refresh" = "목록 새로고침";
 "models_restart" = "모델 선택을 반영하려면 Codex를 재시작할까요?";
 "models_restart_action" = "Codex 재시작";
+
+"credits_balance" = "크레딧 잔액";
+"credits_balance_unlimited" = "무제한";
+"credits_balance_unavailable" = "미제공";
+"credits_balance_failed" = "조회 실패";

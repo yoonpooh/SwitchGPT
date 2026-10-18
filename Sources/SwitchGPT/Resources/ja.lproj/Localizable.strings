@@ -173,3 +173,8 @@
 "models_refresh" = "モデル一覧を更新";
 "models_restart" = "モデル選択を反映するためにCodexを再起動しますか？";
 "models_restart_action" = "Codexを再起動";
+
+"credits_balance" = "クレジット残高";
+"credits_balance_unlimited" = "無制限";
+"credits_balance_unavailable" = "未提供";
+"credits_balance_failed" = "取得失敗";

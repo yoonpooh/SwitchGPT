@@ -4,6 +4,12 @@ struct AccountUsage: Decodable {
     let planType: String?
     let rateLimit: Limit?
     let rateLimitResetCredits: ResetCredits?
+    let credits: Credits?
+    struct Credits: Decodable {
+        let hasCredits: Bool?
+        let unlimited: Bool?
+        let balance: String?
+    }
     struct ResetCredits: Decodable {
         let availableCount: Int
         let applicableAvailableCount: Int?
@@ -41,6 +47,60 @@ struct AccountUsage: Decodable {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(Self.self, from: data)
+    }
+}
+
+enum CreditBalanceState: Equatable {
+    case balance(String)
+    case unlimited
+    case unavailable
+    case failed
+
+    static func resolve(usage: AccountUsage?, queryFailed: Bool) -> Self {
+        guard !queryFailed else { return .failed }
+        guard let credits = usage?.credits else { return .unavailable }
+        if credits.unlimited == true { return .unlimited }
+        guard let balance = credits.balance?.trimmingCharacters(in: .whitespacesAndNewlines),
+              balance.range(of: #"^[0-9]+(?:\.[0-9]+)?$"#, options: .regularExpression) != nil
+        else { return .unavailable }
+        return .balance(balance)
+    }
+
+    var text: String {
+        switch self {
+        case .balance(let value): return Self.formattedBalance(value)
+        case .unlimited: return L10n.text("credits_balance_unlimited")
+        case .unavailable: return L10n.text("credits_balance_unavailable")
+        case .failed: return L10n.text("credits_balance_failed")
+        }
+    }
+
+    private static func formattedBalance(_ value: String) -> String {
+        let parts = value.split(separator: ".")
+        let fraction = parts.count > 1 ? String(parts[1]) : ""
+        let whole = parts[0].drop(while: { $0 == "0" })
+        var digits = Array((whole.isEmpty ? "0" : String(whole)).utf8)
+
+        // Round decimal digits directly to avoid binary floating-point and precision limits.
+        if let firstFractionDigit = fraction.first, firstFractionDigit >= "5" {
+            var carry = true
+            for index in digits.indices.reversed() {
+                if digits[index] < 57 {
+                    digits[index] += 1
+                    carry = false
+                    break
+                }
+                digits[index] = 48
+            }
+            if carry { digits.insert(49, at: 0) }
+        }
+
+        var grouped: [UInt8] = []
+        for (index, digit) in digits.enumerated() {
+            if index > 0 && (digits.count - index).isMultiple(of: 3) { grouped.append(44) }
+            grouped.append(digit)
+        }
+        return String(decoding: grouped, as: UTF8.self)
     }
 }
 
